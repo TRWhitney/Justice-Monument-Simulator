@@ -95,6 +95,9 @@ JusticeMonumentSimulator/
 ├─ uv.lock
 ├─ README.md
 ├─ Spec.md
+├─ scripts/
+│  ├─ validate_repo.sh
+│  └─ validate_schema.py
 ├─ src/
 │  └─ justice_sim/
 │     ├─ __init__.py
@@ -112,7 +115,6 @@ JusticeMonumentSimulator/
 │     │  │  └─ images/
 │     │  │     └─ (pngs for npcs and icons...)
 │     │  └─ schema/
-│     │     ├─ validate_schema.py
 │     │     └─ justice_data.schema.json
 │     ├─ engine/
 │     │  ├─ __init__.py

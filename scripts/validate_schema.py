@@ -1,9 +1,9 @@
 """
-validate_json.py — Validate a JSON instance against a JSON Schema.
+validate_schema.py — Validate a JSON instance against a JSON Schema.
 
 Usage:
-  python validate_json.py --schema path/to/schema.json --instance path/to/data.json
-  python validate_json.py --schema schema.json --instance data.json --schema-dir ./schemas --format
+  python scripts/validate_schema.py --schema path/to/schema.json --instance path/to/data.json
+  python scripts/validate_schema.py --schema schema.json --instance data.json --schema-dir ./schemas --format
 
 Exit codes:
   0 = valid

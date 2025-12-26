@@ -438,7 +438,7 @@
         },
         "allow_insufficient_funds": {
           "type": "boolean",
-          "description": "If true, action may be taken even if coins < required cost (engine applies debt_mode behavior)."
+          "description": "If true, action may be taken even if a resource cost would drop below 0 (engine applies debt_mode behavior)."
         },
         "conditions": {
           "type": "array",

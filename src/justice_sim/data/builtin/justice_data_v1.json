@@ -3235,6 +3235,7 @@
     {
       "id": "the_harbinger_blocked_artery_your_spouse_rushed_you_to_fc0916af",
       "npc_id": "the_harbinger",
+      "allow_insufficient_funds": true,
       "title": "Blocked artery. Your spouse rushed you to the hospital at qu",
       "text": "Blocked artery. Your spouse rushed you to the hospital at quite the pace, you should say thanks if you ever see them again! The bill is looking to be about X coins, are you ready to pay up?",
       "actions_available": [

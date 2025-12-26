@@ -37,7 +37,9 @@ def load_json(path: Path) -> Any:
         return json.load(f)
 
 
-def build_registry(schema_path: Path, schema: Dict[str, Any], schema_dir: Optional[Path]) -> Optional["Registry"]:
+def build_registry(
+    schema_path: Path, schema: Dict[str, Any], schema_dir: Optional[Path]
+) -> Optional["Registry"]:
     """
     Best-effort $ref support:
       - Registers the root schema
@@ -50,7 +52,9 @@ def build_registry(schema_path: Path, schema: Dict[str, Any], schema_dir: Option
     reg = Registry()
 
     # Helper: add a schema to the registry if it has an identifiable ID.
-    def add_schema_to_registry(schema_obj: Dict[str, Any], default_uri: Optional[str] = None) -> None:
+    def add_schema_to_registry(
+        schema_obj: Dict[str, Any], default_uri: Optional[str] = None
+    ) -> None:
         # jsonschema's internal id_of depends on draft; use Draft2020-12's id_of for robustness
         # (works fine even if schema declares an earlier draft in practice).
         id_of = referencing.jsonschema.DRAFT202012.id_of
@@ -80,9 +84,15 @@ def build_registry(schema_path: Path, schema: Dict[str, Any], schema_dir: Option
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Validate JSON instance against JSON Schema.")
-    ap.add_argument("--schema", required=True, type=Path, help="Path to JSON Schema file")
-    ap.add_argument("--instance", required=True, type=Path, help="Path to JSON instance file")
+    ap = argparse.ArgumentParser(
+        description="Validate JSON instance against JSON Schema."
+    )
+    ap.add_argument(
+        "--schema", required=True, type=Path, help="Path to JSON Schema file"
+    )
+    ap.add_argument(
+        "--instance", required=True, type=Path, help="Path to JSON instance file"
+    )
     ap.add_argument(
         "--schema-dir",
         type=Path,
@@ -128,7 +138,10 @@ def main() -> int:
 
         validator = ValidatorCls(schema, **kwargs)
 
-        errors = sorted(validator.iter_errors(instance), key=lambda e: (list(e.absolute_path), e.message))
+        errors = sorted(
+            validator.iter_errors(instance),
+            key=lambda e: (list(e.absolute_path), e.message),
+        )
 
         if not errors:
             print("✅ VALID: instance conforms to schema")

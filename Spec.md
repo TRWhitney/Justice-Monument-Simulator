@@ -33,7 +33,7 @@
 - `coins` (Court Coins)
 - `pop` (Popularity)
 - `mh` (Mental Health)
-- `dismissals`
+- `dismissals` (consumed by Dismiss action; not affected by allow_insufficient_funds)
 - `retirement_chests` (count)
 - `active_effects` (timed buffs/debuffs; durations measured in cases)
 - `scheduled_events` (trigger at a future case index)
@@ -61,7 +61,9 @@
 - If the run ends before an event triggers, it never triggers.
 
 ### Insufficient funds policy (global + per-offer)
-- Default behavior: costs clamp at 0.
+- Default behavior: block actions that would reduce non-negative resources
+  (coins, pop, retirement_chests, dismissals) below 0 unless
+  `allow_insufficient_funds` is true; when allowed, costs clamp at 0.
 - Implement a global `debt_mode`:
   - `clamp_to_zero` (default)
   - `allow_negative`
@@ -338,10 +340,12 @@ Left column: State & Controls
 - Encounter model selector + settings button
 - Risk slider + planner settings (horizon, rollouts, adaptive)
 - Import/export run buttons
+- Toast notifications appear beneath import/export buttons
 
 Center: Offer selection
 - Search bar:
   - If input starts with `#`, treat remainder as NPC-name filter
+  - On harbinger cases (every 5th), search input is locked/greyed to `#binger`
   - Otherwise substring search over:
     - NPC name
     - offer title/text
@@ -364,6 +368,7 @@ Right column: Recommendation + actions + log
 - Action buttons:
   - “Apply Approve/Reject/Dismiss” (records in log)
   - “Apply Recommended”
+  - If no valid action remains or all actions would drop MH to 0, replace buttons with a red “Game Over” label
 - Log panel:
   - list of steps with brief summary
   - Undo button (undo last step)
@@ -452,61 +457,62 @@ CLI must reuse the same `OfferSearch` code and `Planner` engine as GUI.
 ## ✅ Implementation Checklist (Codex must follow)
 
 ### Phase 0 — scaffolding
-- [ ] Create repo structure exactly as specified
-- [ ] Set up `pyproject.toml` for uv with scripts
-- [ ] Add basic README with run commands
+- [x] Create repo structure exactly as specified
+- [x] Set up `pyproject.toml` for uv with scripts
+- [x] Add basic README with run commands
 
 ### Phase 1 — core models & validation
-- [ ] Implement dataclasses/pydantic models for NPC, Offer, Outcome, Effect, GameState
-- [ ] Implement JSON loader + schema validation + good error messages
+- [x] Implement dataclasses/pydantic models for NPC, Offer, Outcome, Effect, GameState
+- [x] Implement JSON loader + schema validation + good error messages
 - [ ] Add builtin `justice_data_v1.json` with a minimal viable subset (at least: one normal NPC offer, Harbinger, Gratefulbinger)
 
 ### Phase 2 — engine
-- [ ] Implement reducer: apply action -> new state
-- [ ] Implement effect engine with scheduling + timed statuses
-- [ ] Implement insufficient-funds behavior: per-offer + global debt_mode
-- [ ] Implement harbinger injection + gratefulbinger replacement
-- [ ] Implement deterministic RNG wrapper with seed logging
+- [x] Implement reducer: apply action -> new state
+- [x] Implement effect engine with scheduling + timed statuses
+- [x] Implement insufficient-funds behavior: per-offer + global debt_mode
+- [x] Implement harbinger injection + gratefulbinger replacement
+- [x] Implement deterministic RNG wrapper with seed logging
 
 ### Phase 3 — encounter models
-- [ ] Uniform encounter model
-- [ ] Weighted encounter model
-- [ ] Learned encounter model (Dirichlet counts) + training-from-log
-- [ ] Import/export learned priors; ensure not auto-applied unless enabled
+- [x] Uniform encounter model
+- [x] Weighted encounter model
+- [x] Learned encounter model (Dirichlet counts) + training-from-log
+- [x] Import/export learned priors; ensure not auto-applied unless enabled
 
 ### Phase 4 — planner
-- [ ] Implement rollout planner with configurable horizon/rollouts
-- [ ] Implement utility scoring + risk slider mapping
-- [ ] Implement adaptive rollouts when close calls
-- [ ] Add caching/memoization for performance
+- [x] Implement rollout planner with configurable horizon/rollouts
+- [x] Implement utility scoring + risk slider mapping
+- [x] Implement adaptive rollouts when close calls
+- [x] Add caching/memoization for performance
 
 ### Phase 5 — search & offer rendering
-- [ ] Implement shared offer search:
-  - [ ] `#npc` prefix filtering
-  - [ ] substring across npc/title/text/outcome summaries
-- [ ] Implement “offer card summary” renderer for GUI + CLI
+- [x] Implement shared offer search:
+  - [x] `#npc` prefix filtering
+  - [x] `$term` effect-only filtering (approve/reject summaries)
+  - [x] substring across npc/title/text/outcome summaries
+- [x] Implement “offer card summary” renderer for GUI + CLI
 
 ### Phase 6 — CLI (Rich)
-- [ ] Implement interactive loop with search, recommendation, apply action
-- [ ] Implement undo, import/export, profile load/save
-- [ ] Ensure CLI uses core engine/planner/search modules only
+- [x] Implement interactive loop with search, recommendation, apply action
+- [x] Implement undo, import/export, profile load/save
+- [x] Ensure CLI uses core engine/planner/search modules only
 
 ### Phase 7 — GUI (Qt)
-- [ ] Implement main window layout with panels described
-- [ ] Implement offer search widget + card list with NPC images
-- [ ] Implement suggestion panel with metrics + apply buttons
-- [ ] Implement session log panel + undo
-- [ ] Run planner in worker thread with cancellation
+- [x] Implement main window layout with panels described
+- [x] Implement offer search widget + card list with NPC images
+- [x] Implement suggestion panel with metrics + apply buttons
+- [x] Implement session log panel + undo
+- [x] Run planner in worker thread with cancellation
 
 ### Phase 8 — persistence
-- [ ] Implement profile save/load (progression + settings)
-- [ ] Implement run state save/load (full state + log + RNG seed)
-- [ ] Ensure backwards-compatible version fields
+- [x] Implement profile save/load (progression + settings)
+- [x] Implement run state save/load (full state + log + RNG seed)
+- [x] Ensure backwards-compatible version fields
 
 ### Phase 9 — tests
-- [ ] Add unit tests for formulas, effect timing, harbinger injection
-- [ ] Add planner smoke tests with tiny fixture data
-- [ ] Add data validation tests
+- [x] Add unit tests for formulas, effect timing, harbinger injection
+- [x] Add planner smoke tests with tiny fixture data
+- [x] Add data validation tests
 
 ### Phase 10 — data completion workflow
 - [ ] Document how to expand `justice_data_v1.json` from the user’s info dump

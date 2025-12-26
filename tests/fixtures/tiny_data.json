@@ -1,0 +1,139 @@
+{
+  "version": "justice_data_v1",
+  "defaults": {
+    "debt_mode": "clamp_to_zero",
+    "default_probability_format": "unit",
+    "encounter_model_default": "uniform",
+    "planner_defaults": {
+      "horizon_cases": 5,
+      "rollouts_per_action": 50,
+      "adaptive_rollouts": false,
+      "adaptive_rollouts_max": 100,
+      "risk_preset": "balanced"
+    }
+  },
+  "assets": {
+    "npc_image_base_path": "builtin/images"
+  },
+  "npcs": [
+    {
+      "id": "npc_1",
+      "name": "Test NPC"
+    },
+    {
+      "id": "the_harbinger",
+      "name": "The Harbinger"
+    },
+    {
+      "id": "the_gratefulbinger",
+      "name": "The Gratefulbinger"
+    }
+  ],
+  "offers": [
+    {
+      "id": "offer_1",
+      "npc_id": "npc_1",
+      "title": "Simple Offer",
+      "text": "Approve for chest.",
+      "actions_available": [
+        "approve",
+        "reject"
+      ],
+      "approve": {
+        "effects": [
+          {
+            "type": "add_resource",
+            "params": {
+              "resource": "retirement_chests",
+              "amount": 1
+            }
+          }
+        ]
+      },
+      "reject": {
+        "effects": [
+          {
+            "type": "add_resource",
+            "params": {
+              "resource": "pop",
+              "amount": -1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "harbinger_offer",
+      "npc_id": "the_harbinger",
+      "title": "Harbinger",
+      "text": "Pay up",
+      "actions_available": [
+        "approve",
+        "reject"
+      ],
+      "approve": {
+        "effects": [
+          {
+            "type": "add_resource",
+            "params": {
+              "resource": "coins",
+              "amount": -1
+            }
+          }
+        ]
+      },
+      "reject": {
+        "effects": [
+          {
+            "type": "add_resource",
+            "params": {
+              "resource": "mh",
+              "amount": -1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "grateful_offer",
+      "npc_id": "the_gratefulbinger",
+      "title": "Grateful",
+      "text": "Thanks",
+      "actions_available": [
+        "approve",
+        "reject"
+      ],
+      "approve": {
+        "effects": [
+          {
+            "type": "add_resource",
+            "params": {
+              "resource": "coins",
+              "amount": 1
+            }
+          }
+        ]
+      },
+      "reject": {
+        "effects": []
+      }
+    }
+  ],
+  "special_rules": {
+    "case_scale": {
+      "mode": "expr",
+      "expr": "ceil(case_index/5)"
+    },
+    "harbinger": {
+      "offer_id": "harbinger_offer",
+      "cadence_modulus": 5,
+      "cost_expr": "ceil(case_index/5)",
+      "on_unpaid_effects": []
+    },
+    "gratefulbinger": {
+      "offer_id": "grateful_offer",
+      "replace_harbinger_probability_expr": "(40*pop)/(pop+20)",
+      "format": "percent"
+    }
+  }
+}

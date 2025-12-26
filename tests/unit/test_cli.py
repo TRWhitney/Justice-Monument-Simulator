@@ -73,6 +73,10 @@ def test_cli_screens_wrappers():
 def test_run_session_apply_and_undo(data_factory):
     data = data_factory()
     session = cli_module.RunSession(data)
+    assert session.state.coins == 5
+    assert session.state.pop == 3
+    assert session.state.mh == 1
+    assert session.state.dismissals == 0
     offer = data.offers_by_id["offer1"]
     session.apply(offer, "approve")
     assert session.state.case_index == 2

@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from PySide6 import QtWidgets
 
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
@@ -130,6 +131,65 @@ def test_game_over_when_no_valid_actions(data_dict_factory):
     window._update_action_controls()
 
     assert not window.game_over_label.isHidden()
+
+    window.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_state_panel_adjust_updates_state(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    window = MainWindow(data)
+
+    assert window.session.state.coins == 5
+    assert window.session.state.pop == 3
+    assert window.session.state.mh == 1
+    assert window.session.state.dismissals == 0
+
+    increase = window.state_panel.findChild(
+        QtWidgets.QPushButton, "resource_coins_increase"
+    )
+    assert increase is not None
+    increase.click()
+    assert window.session.state.coins == 6
+
+    window.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_action_buttons_dimmed_without_offer(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    window = MainWindow(data)
+    window.current_offer = None
+    window._update_action_controls()
+
+    assert window.approve_button.styleSheet() == "color: #8a8a8a;"
+    assert window.reject_button.styleSheet() == "color: #8a8a8a;"
+    assert window.dismiss_button.styleSheet() == "color: #8a8a8a;"
+    assert window.best_button.styleSheet() == "color: #8a8a8a;"
+
+    window.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_action_buttons_toast_without_offer(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    window = MainWindow(data)
+    window.current_offer = None
+
+    initial = window.toast_area.toast_count()
+    window.approve_button.click()
+    window.best_button.click()
+
+    assert window.toast_area.toast_count() == initial + 2
 
     window.close()
     app.quit()

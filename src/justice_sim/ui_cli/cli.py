@@ -29,9 +29,9 @@ class RunSession:
         self.data = data
         self.state = GameState(
             case_index=1,
-            coins=0,
-            pop=0,
-            mh=3,
+            coins=5,
+            pop=3,
+            mh=1,
             dismissals=0,
             retirement_chests=0,
         )

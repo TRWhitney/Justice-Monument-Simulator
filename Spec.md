@@ -335,7 +335,9 @@ Export formats
 
 ### Main layout (single window)
 Left column: State & Controls
-- Current state panel: case, coins, pop, mh, dismissals, chests
+- Current state panel: case, coins, pop, health, dismissals, chests
+  - `[-]` icon value `[+]` controls adjust initial conditions (except case and chests)
+  - Default starting state: coins 5, pop 3, health 1, dismissals 0
 - Progression/profile selector + load/save buttons
 - Encounter model selector + settings button
 - Risk slider + planner settings (horizon, rollouts, adaptive)
@@ -345,6 +347,7 @@ Left column: State & Controls
 Center: Offer selection
 - Search bar:
   - If input starts with `#`, treat remainder as NPC-name filter
+  - Empty input shows all offers
   - On harbinger cases (every 5th), search input is locked/greyed to `#binger`
   - Otherwise substring search over:
     - NPC name
@@ -378,6 +381,7 @@ Right column: Recommendation + actions + log
 - Planner runs when offer is selected or settings change.
 - Planner should cancel previous run if a new selection occurs (threaded).
 - Use a worker thread for planning; never block UI thread.
+- If no offer is selected, action buttons appear dimmed and clicking them prompts to select an offer first.
 
 ---
 

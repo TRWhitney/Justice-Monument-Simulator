@@ -33,6 +33,7 @@ class OfferCard(QtWidgets.QFrame):
         highlight_terms: Sequence[str] | None = None,
         effect_highlight_terms: Sequence[str] | None = None,
         npc_highlight: str | None = None,
+        action_filter: str | None = None,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -41,6 +42,7 @@ class OfferCard(QtWidgets.QFrame):
         self._highlight_terms = list(highlight_terms or [])
         self._effect_highlight_terms = list(effect_highlight_terms or [])
         self._npc_highlight = npc_highlight
+        self._action_filter = action_filter
         self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         self.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
         self.setSizePolicy(
@@ -138,24 +140,26 @@ class OfferCard(QtWidgets.QFrame):
         return widget
 
     def _build_effects_panel(self, result: OfferSearchResult) -> QtWidgets.QWidget:
-        approve_icon = _build_action_icon_label(
-            _resolve_icon_path("approve.png"), "approve"
-        )
-        approve_effects = _build_effects_widget(
-            result.approve_summary,
-            _extract_effect_tokens(result.offer.approve, self._data, self._state),
-            "approve",
-            _merge_terms(self._highlight_terms, self._effect_highlight_terms),
-        )
-        reject_icon = _build_action_icon_label(
-            _resolve_icon_path("reject.png"), "reject"
-        )
-        reject_effects = _build_effects_widget(
-            result.reject_summary,
-            _extract_effect_tokens(result.offer.reject, self._data, self._state),
-            "reject",
-            _merge_terms(self._highlight_terms, self._effect_highlight_terms),
-        )
+        sections: list[tuple[str, OutcomeSpec, str]] = []
+        if self._action_filter:
+            summary = ""
+            if self._action_filter == "approve":
+                outcome = result.offer.approve
+                summary = result.approve_summary
+            elif self._action_filter == "reject":
+                outcome = result.offer.reject
+                summary = result.reject_summary
+            elif self._action_filter == "dismiss":
+                outcome = result.offer.dismiss or result.offer.reject
+                summary = result.dismiss_summary or result.reject_summary
+            else:
+                outcome = result.offer.reject
+            sections.append((self._action_filter, outcome, summary))
+        else:
+            sections = [
+                ("approve", result.offer.approve, result.approve_summary),
+                ("reject", result.offer.reject, result.reject_summary),
+            ]
 
         stack = QtWidgets.QVBoxLayout()
         stack.setContentsMargins(
@@ -166,10 +170,16 @@ class OfferCard(QtWidgets.QFrame):
         )
         stack.setSpacing(_EFFECTS_PANEL_SPACING)
         stack.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-        stack.addWidget(approve_icon, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
-        stack.addWidget(approve_effects)
-        stack.addWidget(reject_icon, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
-        stack.addWidget(reject_effects)
+        for action, outcome, summary in sections:
+            icon = _build_action_icon_label(_resolve_icon_path(f"{action}.png"), action)
+            effects = _build_effects_widget(
+                summary,
+                _extract_effect_tokens(outcome, self._data, self._state),
+                action,
+                _merge_terms(self._highlight_terms, self._effect_highlight_terms),
+            )
+            stack.addWidget(icon, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
+            stack.addWidget(effects)
         stack.addStretch(1)
 
         widget = QtWidgets.QWidget()

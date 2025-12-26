@@ -23,6 +23,21 @@ def test_search_by_npc_prefix(data_factory):
 
 
 @pytest.mark.unit
+def test_search_empty_query_returns_all(data_factory):
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    results = search_offers("", data, state)
+    assert len(results) == len(data.offers)
+
+
+@pytest.mark.unit
 def test_search_full_text_matches_summary(data_factory):
     data = data_factory()
     state = GameState(

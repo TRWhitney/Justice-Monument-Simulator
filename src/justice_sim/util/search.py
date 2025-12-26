@@ -37,9 +37,9 @@ def search_offers(
     query: str, data: JusticeData, state: GameState
 ) -> list[OfferSearchResult]:
     query = query.strip()
-    if not query:
-        return []
-    npc_query, terms, effect_terms = parse_search_query(query)
+    npc_query, terms, effect_terms = (
+        parse_search_query(query) if query else (None, [], [])
+    )
     results = []
     for offer in data.offers:
         npc = data.npcs_by_id.get(offer.npc_id)

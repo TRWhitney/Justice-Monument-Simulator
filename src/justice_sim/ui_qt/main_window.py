@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
-import html
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -25,54 +25,7 @@ from justice_sim.ui_qt.widgets.offer_search import OfferSearchWidget
 from justice_sim.ui_qt.widgets.state_panel import StatePanel
 from justice_sim.ui_qt.widgets.suggestion_panel import SuggestionPanel
 from justice_sim.ui_qt.widgets.toast_area import ToastArea
-
-
-_RESOURCE_ICONS = {
-    "coins": "court_coin.png",
-    "pop": "pop.png",
-    "mh": "mental_health.png",
-    "dismissals": "dismissal.png",
-    "retirement_chests": "chest.png",
-}
-_TOAST_ICON_SIZE = 18
-
-
-def _resolve_icon_path(filename: str) -> Path | None:
-    repo_root = Path(__file__).resolve().parents[3]
-    path = repo_root / "src" / "justice_sim" / "data" / "builtin" / "images" / filename
-    return path if path.exists() else None
-
-
-def _format_resource_delta_toast(before: GameState, after: GameState) -> str:
-    deltas = {
-        "coins": after.coins - before.coins,
-        "pop": after.pop - before.pop,
-        "mh": after.mh - before.mh,
-        "dismissals": after.dismissals - before.dismissals,
-        "retirement_chests": after.retirement_chests - before.retirement_chests,
-    }
-    parts: list[str] = []
-    for resource, delta in deltas.items():
-        if abs(delta) <= 1e-9:
-            continue
-        delta_text = _format_delta(delta)
-        icon_name = _RESOURCE_ICONS.get(resource)
-        icon_path = _resolve_icon_path(icon_name) if icon_name else None
-        if icon_path:
-            icon_html = (
-                f'<img src="{html.escape(str(icon_path))}" '
-                f'width="{_TOAST_ICON_SIZE}" height="{_TOAST_ICON_SIZE}">'
-            )
-            parts.append(f"{icon_html} {html.escape(delta_text)}")
-        else:
-            parts.append(f"{html.escape(resource)} {html.escape(delta_text)}")
-    return "  ".join(parts) if parts else "No effect"
-
-
-def _format_delta(value: float) -> str:
-    sign = "+" if value > 0 else "-" if value < 0 else ""
-    abs_value = abs(value)
-    return f"{sign}{abs_value:g}"
+from justice_sim.ui_qt.widgets.resource_delta import format_resource_delta_html
 
 
 class PlannerWorker(QtCore.QObject):
@@ -102,9 +55,9 @@ class GuiSession:
         self.data = data
         self.state = GameState(
             case_index=1,
-            coins=0,
-            pop=0,
-            mh=3,
+            coins=5,
+            pop=3,
+            mh=1,
             dismissals=0,
             retirement_chests=0,
         )
@@ -159,6 +112,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addLayout(right_column, 1)
 
         self.state_panel = StatePanel()
+        self.state_panel.resource_adjusted.connect(self._adjust_resource)
         left_column.addWidget(self.state_panel)
 
         self.risk_combo = QtWidgets.QComboBox()
@@ -223,7 +177,7 @@ class MainWindow(QtWidgets.QMainWindow):
         right_column.addWidget(self.best_button)
         right_column.addWidget(self.game_over_label)
 
-        self.log_panel = LogPanel()
+        self.log_panel = LogPanel(data)
         self.log_panel.undo_requested.connect(self._undo)
         right_column.addWidget(self.log_panel)
 
@@ -231,6 +185,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _refresh(self) -> None:
         self.state_panel.update_state(self.session.state)
+        self.state_panel.set_adjust_enabled(not self.session.log.entries)
         self.log_panel.update_log(self.session.log)
         self.offer_search.update_state(self.session.state, preserve_scroll=True)
         self._update_action_controls()
@@ -280,6 +235,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _apply_action(self, action: str) -> None:
         if not self.current_offer:
+            self.toast_area.show_toast("Select an offer first.")
             return
         pre_state = self.session.state
         try:
@@ -288,12 +244,15 @@ class MainWindow(QtWidgets.QMainWindow):
             self.toast_area.show_toast(f"{action.title()} failed: {exc}")
             return
         self.toast_area.show_toast(
-            _format_resource_delta_toast(pre_state, self.session.state)
+            format_resource_delta_html(pre_state, self.session.state)
         )
         self.current_recommendation = None
         self._refresh()
 
     def _apply_best(self) -> None:
+        if not self.current_offer:
+            self.toast_area.show_toast("Select an offer first.")
+            return
         if not self.current_recommendation:
             return
         self._apply_action(self.current_recommendation.best_action)
@@ -325,6 +284,10 @@ class MainWindow(QtWidgets.QMainWindow):
             button.setVisible(not game_over)
         self.game_over_label.setVisible(game_over)
         if not self.current_offer:
+            self._set_button_dimmed(self.approve_button, True)
+            self._set_button_dimmed(self.reject_button, True)
+            self._set_button_dimmed(self.dismiss_button, True)
+            self._set_button_dimmed(self.best_button, True)
             return
         self._set_button_dimmed(
             self.approve_button, self._action_unaffordable("approve")
@@ -340,6 +303,59 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         else:
             self._set_button_dimmed(self.best_button, False)
+
+    def _adjust_resource(self, resource: str, delta: int) -> None:
+        if self.session.log.entries:
+            return
+        state = self.session.state
+        ended = False
+        end_reason = None
+        if resource == "case_index":
+            new_value = max(1, state.case_index + delta)
+            self.session.state = replace(
+                state, case_index=new_value, ended=ended, end_reason=end_reason
+            )
+        elif resource == "coins":
+            self.session.state = replace(
+                state,
+                coins=max(0.0, state.coins + delta),
+                ended=ended,
+                end_reason=end_reason,
+            )
+        elif resource == "pop":
+            self.session.state = replace(
+                state,
+                pop=max(0.0, state.pop + delta),
+                ended=ended,
+                end_reason=end_reason,
+            )
+        elif resource == "mh":
+            self.session.state = replace(
+                state,
+                mh=max(0.0, state.mh + delta),
+                ended=ended,
+                end_reason=end_reason,
+            )
+        elif resource == "dismissals":
+            self.session.state = replace(
+                state,
+                dismissals=max(0.0, state.dismissals + delta),
+                ended=ended,
+                end_reason=end_reason,
+            )
+        elif resource == "retirement_chests":
+            self.session.state = replace(
+                state,
+                retirement_chests=max(0.0, state.retirement_chests + delta),
+                ended=ended,
+                end_reason=end_reason,
+            )
+        else:
+            return
+        self.current_recommendation = None
+        if self.current_offer:
+            self._start_planner(self.current_offer)
+        self._refresh()
 
     def _action_unaffordable(self, action: str) -> bool:
         if not self.current_offer:

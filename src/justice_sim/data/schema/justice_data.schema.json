@@ -1,0 +1,1033 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Idleon Justice data schema (engine-driven offers/effects). Patched to avoid oneOf overlap for Expr/Probability.",
+  "title": "Idleon Justice Data",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "npcs",
+    "offers",
+    "special_rules"
+  ],
+  "properties": {
+    "version": {
+      "$ref": "#/$defs/NonEmptyString"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "game_version": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "notes": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "created_at": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "debt_mode": {
+          "type": "string",
+          "enum": [
+            "clamp_to_zero",
+            "allow_negative"
+          ]
+        },
+        "default_probability_format": {
+          "type": "string",
+          "enum": [
+            "unit",
+            "percent"
+          ]
+        },
+        "encounter_model_default": {
+          "type": "string",
+          "enum": [
+            "uniform",
+            "weighted",
+            "learned"
+          ]
+        },
+        "planner_defaults": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "horizon_cases": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "rollouts_per_action": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "adaptive_rollouts": {
+              "type": "boolean"
+            },
+            "adaptive_rollouts_max": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "risk_preset": {
+              "type": "string",
+              "enum": [
+                "safe",
+                "balanced",
+                "greedy"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "npc_image_base_path": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
+      }
+    },
+    "npcs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/Npc"
+      }
+    },
+    "offers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/Offer"
+      }
+    },
+    "special_rules": {
+      "$ref": "#/$defs/SpecialRules"
+    }
+  },
+  "$defs": {
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_\\-\\.]+$"
+    },
+    "Tags": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NonEmptyString"
+      },
+      "default": []
+    },
+    "ImagePath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "Npc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "name": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "image": {
+          "$ref": "#/$defs/ImagePath"
+        },
+        "tags": {
+          "$ref": "#/$defs/Tags"
+        }
+      }
+    },
+    "Action": {
+      "type": "string",
+      "enum": [
+        "approve",
+        "reject",
+        "dismiss"
+      ]
+    },
+    "ResourceName": {
+      "type": "string",
+      "enum": [
+        "coins",
+        "pop",
+        "mh",
+        "dismissals",
+        "retirement_chests"
+      ]
+    },
+    "Predicate": {
+      "description": "A boolean condition. Prefer a string mini-language parsed by the app. Optionally allow a structured form.",
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "op": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "Expr": {
+      "description": "Numeric literal or expression object.",
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expr"
+          ],
+          "properties": {
+            "expr": {
+              "type": "string",
+              "minLength": 1
+            },
+            "scaled_by_case": {
+              "type": "boolean",
+              "default": false
+            },
+            "units": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "Probability": {
+      "description": "Probability as unit number 0..1 OR expression object with explicit format.",
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expr"
+          ],
+          "properties": {
+            "expr": {
+              "type": "string",
+              "minLength": 1
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "unit",
+                "percent"
+              ],
+              "default": "unit"
+            }
+          }
+        }
+      ]
+    },
+    "Outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effects"
+      ],
+      "properties": {
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Effect"
+          },
+          "default": []
+        },
+        "random": {
+          "$ref": "#/$defs/RandomSpec"
+        },
+        "notes": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
+      }
+    },
+    "RandomSpec": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RandomBernoulli"
+        },
+        {
+          "$ref": "#/$defs/RandomCategorical"
+        }
+      ]
+    },
+    "RandomBernoulli": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "p",
+        "then",
+        "else"
+      ],
+      "properties": {
+        "type": {
+          "const": "bernoulli"
+        },
+        "p": {
+          "$ref": "#/$defs/Probability"
+        },
+        "then": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Effect"
+          },
+          "default": []
+        },
+        "else": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Effect"
+          },
+          "default": []
+        }
+      }
+    },
+    "RandomCategorical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "choices"
+      ],
+      "properties": {
+        "type": {
+          "const": "categorical"
+        },
+        "choices": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "weight",
+              "effects"
+            ],
+            "properties": {
+              "weight": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "effects": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/Effect"
+                }
+              },
+              "label": {
+                "$ref": "#/$defs/NonEmptyString"
+              }
+            }
+          }
+        }
+      }
+    },
+    "ChainSpec": {
+      "description": "Optional chain behavior (schedule specific offers, force future encounters, etc.). Keep generic and engine-extensible.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChainStep"
+          },
+          "default": []
+        }
+      }
+    },
+    "ChainStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trigger",
+        "after_cases",
+        "offer_id"
+      ],
+      "properties": {
+        "trigger": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after_cases": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "offer_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "probability": {
+          "$ref": "#/$defs/Probability"
+        },
+        "once": {
+          "type": "boolean",
+          "default": true
+        },
+        "notes": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
+      }
+    },
+    "Offer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "npc_id",
+        "title",
+        "text",
+        "actions_available",
+        "approve",
+        "reject"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Id"
+        },
+        "npc_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "title": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "text": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "tags": {
+          "$ref": "#/$defs/Tags"
+        },
+        "actions_available": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Action"
+          }
+        },
+        "allow_insufficient_funds": {
+          "type": "boolean",
+          "description": "If true, action may be taken even if coins < required cost (engine applies debt_mode behavior)."
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Predicate"
+          },
+          "default": []
+        },
+        "approve": {
+          "$ref": "#/$defs/Outcome"
+        },
+        "reject": {
+          "$ref": "#/$defs/Outcome"
+        },
+        "dismiss": {
+          "$ref": "#/$defs/Outcome"
+        },
+        "chain": {
+          "$ref": "#/$defs/ChainSpec"
+        },
+        "notes": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
+      }
+    },
+    "EffectBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "when": {
+          "$ref": "#/$defs/Predicate"
+        },
+        "duration_cases": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "schedule_after_cases": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
+      }
+    },
+    "EffectAddResource": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "add_resource"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resource",
+            "amount"
+          ],
+          "properties": {
+            "resource": {
+              "$ref": "#/$defs/ResourceName"
+            },
+            "amount": {
+              "$ref": "#/$defs/Expr"
+            }
+          }
+        }
+      }
+    },
+    "EffectSetResource": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "set_resource"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resource",
+            "value"
+          ],
+          "properties": {
+            "resource": {
+              "$ref": "#/$defs/ResourceName"
+            },
+            "value": {
+              "$ref": "#/$defs/Expr"
+            }
+          }
+        }
+      }
+    },
+    "EffectClampResource": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "clamp_resource"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resource"
+          ],
+          "properties": {
+            "resource": {
+              "$ref": "#/$defs/ResourceName"
+            },
+            "min": {
+              "$ref": "#/$defs/Expr"
+            },
+            "max": {
+              "$ref": "#/$defs/Expr"
+            }
+          }
+        }
+      }
+    },
+    "EffectMultiplyResource": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "multiply_resource"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resource",
+            "factor"
+          ],
+          "properties": {
+            "resource": {
+              "$ref": "#/$defs/ResourceName"
+            },
+            "factor": {
+              "$ref": "#/$defs/Expr"
+            }
+          }
+        }
+      }
+    },
+    "EffectAddFlag": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "add_flag"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "flag"
+          ],
+          "properties": {
+            "flag": {
+              "$ref": "#/$defs/Id"
+            }
+          }
+        }
+      }
+    },
+    "EffectRemoveFlag": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "remove_flag"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "flag"
+          ],
+          "properties": {
+            "flag": {
+              "$ref": "#/$defs/Id"
+            }
+          }
+        }
+      }
+    },
+    "EffectAddStatus": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "add_status"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "#/$defs/Id"
+            },
+            "data": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      }
+    },
+    "EffectRemoveStatus": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "remove_status"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "#/$defs/Id"
+            }
+          }
+        }
+      }
+    },
+    "EffectScheduleEffects": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "schedule_effects"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "after_cases",
+            "effects"
+          ],
+          "properties": {
+            "after_cases": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "effects": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Effect"
+              }
+            }
+          }
+        }
+      }
+    },
+    "EffectRequireNextAction": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "require_next_action"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "action"
+          ],
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/Action"
+            },
+            "penalty_effects": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Effect"
+              },
+              "default": []
+            }
+          }
+        }
+      }
+    },
+    "EffectModifyEncounterWeights": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "modify_encounter_weights"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "npc_weights": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            },
+            "offer_weights": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "multiply",
+                "set"
+              ],
+              "default": "multiply"
+            }
+          }
+        }
+      }
+    },
+    "EffectEndRun": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "end_run"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reason": {
+              "$ref": "#/$defs/NonEmptyString"
+            }
+          }
+        }
+      }
+    },
+    "EffectNoop": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "noop"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "EffectUnknown": {
+      "description": "Fallback to allow forward-compatible effect types. Engine decides how to handle unknown types.",
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "not": {
+            "enum": [
+              "add_resource",
+              "set_resource",
+              "clamp_resource",
+              "multiply_resource",
+              "add_flag",
+              "remove_flag",
+              "add_status",
+              "remove_status",
+              "schedule_effects",
+              "require_next_action",
+              "modify_encounter_weights",
+              "end_run",
+              "noop"
+            ]
+          }
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "Effect": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/EffectBase"
+        },
+        {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/EffectAddResource"
+            },
+            {
+              "$ref": "#/$defs/EffectSetResource"
+            },
+            {
+              "$ref": "#/$defs/EffectClampResource"
+            },
+            {
+              "$ref": "#/$defs/EffectMultiplyResource"
+            },
+            {
+              "$ref": "#/$defs/EffectAddFlag"
+            },
+            {
+              "$ref": "#/$defs/EffectRemoveFlag"
+            },
+            {
+              "$ref": "#/$defs/EffectAddStatus"
+            },
+            {
+              "$ref": "#/$defs/EffectRemoveStatus"
+            },
+            {
+              "$ref": "#/$defs/EffectScheduleEffects"
+            },
+            {
+              "$ref": "#/$defs/EffectRequireNextAction"
+            },
+            {
+              "$ref": "#/$defs/EffectModifyEncounterWeights"
+            },
+            {
+              "$ref": "#/$defs/EffectEndRun"
+            },
+            {
+              "$ref": "#/$defs/EffectNoop"
+            },
+            {
+              "$ref": "#/$defs/EffectUnknown"
+            }
+          ]
+        }
+      ]
+    },
+    "SpecialRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_scale",
+        "harbinger"
+      ],
+      "properties": {
+        "case_scale": {
+          "$ref": "#/$defs/CaseScaleRule"
+        },
+        "harbinger": {
+          "$ref": "#/$defs/HarbingerRule"
+        },
+        "gratefulbinger": {
+          "$ref": "#/$defs/GratefulbingerRule"
+        }
+      }
+    },
+    "CaseScaleRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "expr"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "expr"
+          ]
+        },
+        "expr": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "HarbingerRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offer_id",
+        "cadence_modulus",
+        "cost_expr"
+      ],
+      "properties": {
+        "offer_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "cadence_modulus": {
+          "type": "integer",
+          "const": 5
+        },
+        "cost_expr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "on_unpaid_effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Effect"
+          },
+          "default": []
+        }
+      }
+    },
+    "GratefulbingerRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offer_id",
+        "replace_harbinger_probability_expr"
+      ],
+      "properties": {
+        "offer_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "replace_harbinger_probability_expr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "unit",
+            "percent"
+          ],
+          "default": "percent"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,531 @@
+# Idleon Justice Simulator/Advisor — Codex Implementation Spec (Python + Qt + Rich + uv)
+
+> Goal: A desktop Linux Python application that simulates the Idleon “Justice Monument” minigame.
+> Users set their progression + starting state, then repeatedly input the current NPC/offer they see in-game.
+> The app uses a JSON-driven rules database + a configurable lookahead simulator to recommend the best action (Approve/Reject/Dismiss) to maximize expected Retirement Chests, with configurable risk tolerance.
+> Provide BOTH a Qt GUI and an interactive Rich CLI that share the same core engine.
+
+---
+
+## ✅ Core Objectives
+
+- Maximize **expected number of Retirement Chests** over a run.
+- Provide **lookahead-based** suggestions (simulation mode, not greedy-only).
+- Risk is **user-configurable** (safety-first ⇄ greedy).
+- Encounter distribution is configurable:
+  - Default: uniform
+  - Optional: user-defined weights
+  - Optional: learned-from-logs estimator (does not apply unless enabled)
+- Random outcomes use default probabilities and are easily overridden.
+- Runs are fully replayable via session log; support undo.
+- Import/export:
+  - Player progression profiles
+  - Active run state
+  - Encounter model (weights + learned priors)
+- JSON is the source of truth for NPCs/offers/effects. User can supply override JSON.
+
+---
+
+## ✅ Confirmed Mechanics (encode directly)
+
+### Resources / State variables
+- `case_index` (1-based)
+- `coins` (Court Coins)
+- `pop` (Popularity)
+- `mh` (Mental Health)
+- `dismissals`
+- `retirement_chests` (count)
+- `active_effects` (timed buffs/debuffs; durations measured in cases)
+- `scheduled_events` (trigger at a future case index)
+- `constraints` / `promises` (e.g., “must approve next”, “cannot approve for N cases”)
+
+### Scaling formulas
+- For any numeric field marked as “scaled_by_case”: multiply by:
+  - `case_scale = ceil(case_index / 5)`
+- Harbinger coin cost:
+  - `harbinger_cost = ceil(case_index / 5) * (1 + 0.25 * floor((case_index - 1) / 13))`
+
+### Harbinger cadence
+- Harbinger encounter happens on every case where `case_index % 5 == 0`
+- Only override is **replacement chance** by Gratefulbinger.
+
+### Gratefulbinger replacement chance
+- When Harbinger is scheduled, replace with Gratefulbinger with probability:
+  - `p_replace_percent = (40 * pop) / (pop + 20)`
+  - Convert to probability in [0, 1] as needed.
+
+### “Days”
+- Any “days” duration is interpreted as **cases**.
+
+### Scheduled events if run ends
+- If the run ends before an event triggers, it never triggers.
+
+### Insufficient funds policy (global + per-offer)
+- Default behavior: costs clamp at 0.
+- Implement a global `debt_mode`:
+  - `clamp_to_zero` (default)
+  - `allow_negative`
+
+---
+
+## ✅ Unknown / Modelled Items (must be configurable)
+
+- NPC/offer encounter distribution
+- Many random outcomes (coin flips, “random gift”, etc.)
+- Any “inconsistency/bug” behaviors: encode as defaults in JSON, allow override
+
+---
+
+## 📦 Tech Stack & Constraints
+
+- Language: Python 3.12+
+- Package manager: `uv` (NOT pip)
+- GUI: Qt via `PySide6`
+- CLI: `rich` + `prompt_toolkit` (or `textual` if preferred, but keep it simple)
+- Data: JSON (built-in) + optional user override JSON
+- No network features in runtime (offline-only)
+- No automation/OCR required (user selects NPC/offer via search/dropdowns)
+
+---
+
+## 🗂️ Project Structure (required)
+
+JusticeMonumentSimulator/
+├─ pyproject.toml
+├─ uv.lock
+├─ README.md
+├─ Spec.md
+├─ src/
+│  └─ justice_sim/
+│     ├─ __init__.py
+│     ├─ main.py
+│     ├─ config.py
+│     ├─ models/
+│     │  ├─ __init__.py
+│     │  ├─ state.py
+│     │  ├─ offer.py
+│     │  ├─ actions.py
+│     │  └─ outcomes.py
+│     ├─ data/
+│     │  ├─ builtin/
+│     │  │  ├─ justice_data_v1.json
+│     │  │  └─ images/
+│     │  │     └─ (pngs for npcs and icons...)
+│     │  └─ schema/
+│     │     ├─ validate_schema.py
+│     │     └─ justice_data.schema.json
+│     ├─ engine/
+│     │  ├─ __init__.py
+│     │  ├─ reducer.py
+│     │  ├─ effects.py
+│     │  ├─ encounter.py
+│     │  ├─ harbinger.py
+│     │  ├─ rng.py
+│     │  └─ scoring.py
+│     ├─ planner/
+│     │  ├─ __init__.py
+│     │  ├─ rollout.py
+│     │  ├─ mcts.py
+│     │  └─ cache.py
+│     ├─ persistence/
+│     │  ├─ __init__.py
+│     │  ├─ profiles.py
+│     │  ├─ runs.py
+│     │  └─ logs.py
+│     ├─ ui_qt/
+│     │  ├─ __init__.py
+│     │  ├─ app.py
+│     │  ├─ main_window.py
+│     │  └─ widgets/
+│     │     ├─ __init__.py
+│     │     ├─ offer_search.py
+│     │     ├─ offer_card.py
+│     │     ├─ state_panel.py
+│     │     ├─ suggestion_panel.py
+│     │     └─ log_panel.py
+│     ├─ ui_cli/
+│     │  ├─ __init__.py
+│     │  ├─ cli.py
+│     │  ├─ screens.py
+│     │  ├─ search.py
+│     │  └─ render.py
+│     └─ util/
+│        ├─ __init__.py
+│        ├─ expr.py
+│        ├─ validation.py
+│        └─ assets.py
+└─ tests/
+   ├─ (test files as necessary...)
+   └─ fixtures/
+      └─ tiny_data.json
+
+
+---
+
+## 🧠 Data Model (JSON Source of Truth)
+
+### Top-level JSON
+- `version`: string (e.g., "justice_data_v1")
+- `npcs`: list of NPC entries
+- `offers`: list of offer entries
+- `special_rules`: includes harbinger/gratefulbinger definitions
+- `defaults`: global defaults (probabilities, clamp settings, etc.)
+
+### NPC entry
+- `id`: stable string
+- `name`: display name
+- `image`: relative path to packaged image (or optional user override path)
+- `tags`: list of strings (search keywords)
+
+### Offer entry
+- `id`: stable string
+- `npc_id`: foreign key
+- `title`: short name
+- `text`: in-game offer text
+- `actions_available`: subset of ["approve", "reject", "dismiss"]
+- `approve`: outcome spec
+- `reject`: outcome spec
+- `dismiss`: outcome spec (optional)
+- `conditions`: list of predicates that must be true for the offer to be eligible (for chain events)
+- `chain`: optional chain metadata (e.g., “if approved, schedule offer X in N cases”)
+- `notes`: optional free text
+- `allow_insufficient_funds`: optional override for this offer
+
+### Outcome spec (generic)
+An outcome is a list of `effects` applied in order. It may also contain random branching.
+
+Outcome fields:
+- `effects`: list of effect objects
+- `random`: optional random spec:
+  - `type`: "bernoulli" | "categorical"
+  - `p`: probability (for bernoulli)
+  - `choices`: list of { `weight`, `effects` } (for categorical)
+
+### Effect object (must be extensible)
+Each effect is a dict:
+- `type`: string enum
+- `params`: dict
+- optional `when`: predicate
+- optional `duration_cases`: int (for buffs/debuffs)
+- optional `schedule_after_cases`: int (to create scheduled events)
+
+Minimum built-in effect types (v1):
+- `add_resource` (coins/pop/mh/dismissals/retirement_chests)
+- `set_resource`
+- `clamp_resource` (min/max)
+- `multiply_resource` (rare; keep)
+- `add_flag` / `remove_flag`
+- `add_status` (timed status, e.g., cannot_approve)
+- `schedule_effects` (trigger later)
+- `require_next_action` (e.g., must_approve_next)
+- `modify_encounter_weights` (temporary weight change)
+- `end_run` (game over)
+- `noop`
+
+### Predicates
+Use a safe mini-language (NOT eval):
+- comparison ops: == != < <= > >=
+- boolean ops: and/or/not
+- state fields: case_index, coins, pop, mh, dismissals, flags, statuses
+- helper funcs: `has_flag("x")`, `has_status("y")`
+
+Implement in `util/expr.py` with a small parser or `ast`-based whitelist.
+
+---
+
+## 🎯 Simulation & Planning
+
+### Utility function (maximize chests + risk config)
+Define utility for a terminal state `S`:
+- `U(S) = w_chests * retirement_chests
+         - w_death * I(mh <= 0)
+         - w_low_mh * max(0, mh_threshold - mh)
+         - w_insolvency * I(next_harbinger_unpayable_without_dismissal)
+         + w_resources * (coins_scaled + pop_scaled + dismissals_scaled)`
+
+Where:
+- defaults emphasize chests but strongly penalize death.
+- risk slider modifies weights:
+  - “Safe”: high w_death, high w_insolvency
+  - “Greedy”: lower penalties, higher w_resources
+
+### Planner default: hybrid rollout
+- For the currently observed offer, evaluate each available action:
+  - Apply action deterministically; where outcome has random branching, compute expected by sampling OR exact expansion for small branch sets.
+- From the resulting state, run Monte Carlo rollouts for H future cases:
+  - Each rollout selects future encounters from the configured EncounterModel
+  - At each simulated encounter, choose action using:
+    - either a fast heuristic policy, or
+    - a smaller nested rollout (optional), or
+    - “1-step greedy” with safety constraints
+- Aggregate expected utility and expected chests; recommend action with highest expected utility (or highest expected chests if configured).
+
+### Defaults (reasonable)
+- Horizon H = 20 cases
+- Rollouts per action = 5000
+- RNG seed configurable; default random seed each session, but log it for reproducibility
+- Adaptive option:
+  - if top two actions within epsilon, increase rollouts to 20000
+
+### Performance requirements
+- Recommendation should complete in < 1 second on a typical desktop for default settings (best-effort)
+- Implement caching:
+  - hash GameState to memoize value estimates
+  - cache encounter expansions for the same case_index/pop bucket if needed
+
+---
+
+## 🎲 Encounter Models
+
+### Interface: EncounterModel
+- `sample_encounter(state, rng) -> offer_id`
+- `eligible_offers(state) -> list[offer_id]` (respects conditions and chain restrictions)
+- `update_from_log(event)` (optional; used by learned model)
+
+### Implementations
+1) `UniformEncounterModel` (default)
+- uniform over eligible offers except forced specials (Harbinger logic injected separately)
+
+2) `WeightedEncounterModel`
+- user supplies weights by npc_id and/or offer_id
+- final weight = npc_weight * offer_weight
+
+3) `LearnedEncounterModel`
+- maintains Dirichlet counts (priors configurable)
+- updates counts from session logs
+- can export/import priors
+- NOT used unless explicitly enabled; otherwise only logs training.
+
+### Harbinger injection
+- In the encounter selection pipeline:
+  - If `case_index % 5 == 0`: return Harbinger-like encounter
+  - With Gratefulbinger replacement probability, return Gratefulbinger instead
+- These specials live in JSON `special_rules` but are implemented by engine, not the generic encounter model.
+
+---
+
+## 🧾 Logging, Undo, Import/Export
+
+### Session log requirements
+Each step records:
+- timestamp
+- pre_state snapshot (or hash + delta)
+- encountered offer_id
+- action taken
+- RNG seed or RNG advancement info (for reproducibility)
+- post_state snapshot (or delta)
+- any random branch chosen
+
+Undo:
+- revert to previous pre_state snapshot
+- planner should re-run from restored state
+
+Export formats
+- `profile.json`: progression + preferences + encounter model config
+- `run_state.json`: full current state + log + RNG seed
+- `learned_model.json`: Dirichlet counts/priors
+
+---
+
+## 🖥️ Qt GUI Requirements (PySide6)
+
+### Main layout (single window)
+Left column: State & Controls
+- Current state panel: case, coins, pop, mh, dismissals, chests
+- Progression/profile selector + load/save buttons
+- Encounter model selector + settings button
+- Risk slider + planner settings (horizon, rollouts, adaptive)
+- Import/export run buttons
+
+Center: Offer selection
+- Search bar:
+  - If input starts with `#`, treat remainder as NPC-name filter
+  - Otherwise substring search over:
+    - NPC name
+    - offer title/text
+    - approve/reject summary text (rendered from effects)
+- Results list:
+  - each row displays “card”:
+    - NPC image
+    - NPC name
+    - Offer title + offer text
+    - Approve summary line + Reject summary line (icons ok but optional)
+- Select result sets “current observed offer”
+
+Right column: Recommendation + actions + log
+- Recommendation panel:
+  - Top recommended action with:
+    - estimated expected chests (rollout mean)
+    - estimated death probability (from rollouts)
+    - confidence/variance display
+  - Show top 3 actions
+- Action buttons:
+  - “Apply Approve/Reject/Dismiss” (records in log)
+  - “Apply Recommended”
+- Log panel:
+  - list of steps with brief summary
+  - Undo button (undo last step)
+  - Jump-to-step (optional)
+
+### GUI behavior
+- Planner runs when offer is selected or settings change.
+- Planner should cancel previous run if a new selection occurs (threaded).
+- Use a worker thread for planning; never block UI thread.
+
+---
+
+## 💻 Rich CLI Requirements
+
+Command: `justice-sim`
+
+Interactive loop:
+- Render current state
+- Prompt user to select offer:
+  - `#npc` filtering
+  - free-text substring search
+  - show numbered list of matching cards (condensed but readable)
+- After user selects offer, compute recommendation and show:
+  - best action + metrics
+  - alternatives
+- User inputs:
+  - `a/r/d` to apply approve/reject/dismiss
+  - `best` to apply recommendation
+  - `undo` to undo
+  - `export run_state.json`
+  - `import run_state.json`
+  - `save-profile profile.json`, `load-profile profile.json`
+  - `quit`
+
+CLI must reuse the same `OfferSearch` code and `Planner` engine as GUI.
+
+---
+
+## 🧪 Testing & Validation
+
+### Unit tests (required)
+- Scaling factor: `ceil(case/5)` correct for cases 1..30
+- Harbinger cost formula spot checks
+- Gratefulbinger probability formula spot checks
+- Effect application:
+  - add/set/clamp
+  - timed statuses decrement each case
+  - scheduled events trigger correctly
+- Encounter injection:
+  - harbinger on multiples of 5, gratefulbinger replacement probability path (use deterministic RNG seeds)
+- Planner smoke test:
+  - using tiny_data fixture, ensures returns a recommendation without errors
+
+### Data validation
+- Validate builtin JSON at startup.
+- Validate user override JSON and show helpful error messages:
+  - unknown effect type
+  - missing npc_id
+  - malformed predicate
+  - duplicate IDs
+
+---
+
+## 🔧 uv + packaging requirements
+
+### pyproject.toml
+- Define console scripts:
+  - `justice-sim = justice_sim.ui_cli.cli:main`
+  - `justice-sim-gui = justice_sim.ui_qt.app:main`
+- Dependencies (minimum):
+  - PySide6
+  - rich
+  - prompt_toolkit
+  - pydantic (optional but recommended for validation)
+  - numpy (optional; only if planner needs it)
+- No pip instructions; all commands use `uv`.
+
+### Developer commands (document in README)
+- `uv sync`
+- `uv run justice-sim`
+- `uv run justice-sim-gui`
+- `uv run pytest`
+
+---
+
+## ✅ Implementation Checklist (Codex must follow)
+
+### Phase 0 — scaffolding
+- [ ] Create repo structure exactly as specified
+- [ ] Set up `pyproject.toml` for uv with scripts
+- [ ] Add basic README with run commands
+
+### Phase 1 — core models & validation
+- [ ] Implement dataclasses/pydantic models for NPC, Offer, Outcome, Effect, GameState
+- [ ] Implement JSON loader + schema validation + good error messages
+- [ ] Add builtin `justice_data_v1.json` with a minimal viable subset (at least: one normal NPC offer, Harbinger, Gratefulbinger)
+
+### Phase 2 — engine
+- [ ] Implement reducer: apply action -> new state
+- [ ] Implement effect engine with scheduling + timed statuses
+- [ ] Implement insufficient-funds behavior: per-offer + global debt_mode
+- [ ] Implement harbinger injection + gratefulbinger replacement
+- [ ] Implement deterministic RNG wrapper with seed logging
+
+### Phase 3 — encounter models
+- [ ] Uniform encounter model
+- [ ] Weighted encounter model
+- [ ] Learned encounter model (Dirichlet counts) + training-from-log
+- [ ] Import/export learned priors; ensure not auto-applied unless enabled
+
+### Phase 4 — planner
+- [ ] Implement rollout planner with configurable horizon/rollouts
+- [ ] Implement utility scoring + risk slider mapping
+- [ ] Implement adaptive rollouts when close calls
+- [ ] Add caching/memoization for performance
+
+### Phase 5 — search & offer rendering
+- [ ] Implement shared offer search:
+  - [ ] `#npc` prefix filtering
+  - [ ] substring across npc/title/text/outcome summaries
+- [ ] Implement “offer card summary” renderer for GUI + CLI
+
+### Phase 6 — CLI (Rich)
+- [ ] Implement interactive loop with search, recommendation, apply action
+- [ ] Implement undo, import/export, profile load/save
+- [ ] Ensure CLI uses core engine/planner/search modules only
+
+### Phase 7 — GUI (Qt)
+- [ ] Implement main window layout with panels described
+- [ ] Implement offer search widget + card list with NPC images
+- [ ] Implement suggestion panel with metrics + apply buttons
+- [ ] Implement session log panel + undo
+- [ ] Run planner in worker thread with cancellation
+
+### Phase 8 — persistence
+- [ ] Implement profile save/load (progression + settings)
+- [ ] Implement run state save/load (full state + log + RNG seed)
+- [ ] Ensure backwards-compatible version fields
+
+### Phase 9 — tests
+- [ ] Add unit tests for formulas, effect timing, harbinger injection
+- [ ] Add planner smoke tests with tiny fixture data
+- [ ] Add data validation tests
+
+### Phase 10 — data completion workflow
+- [ ] Document how to expand `justice_data_v1.json` from the user’s info dump
+- [ ] Ensure adding offers requires no code changes (JSON-only)
+
+---
+
+## ✅ Acceptance Criteria (Definition of Done)
+
+- GUI and CLI both run on Linux via `uv run ...`
+- User can configure progression/start state, select offer, and get recommendation
+- Lookahead simulation works and is configurable (horizon/rollouts/risk/encounter model)
+- Session log records every step; undo works reliably
+- Import/export for profiles and run states works
+- JSON-driven effects cover all mechanics without adding new code for each offer
+- Tests pass with `uv run pytest`
+
+---
+
+## Notes to Codex (implementation style)
+- Prefer pure functions for reducer/effect application.
+- Keep engine deterministic under a fixed RNG seed.
+- Avoid tight coupling between UI and engine.
+- Design effect system to be future-proof: new effects should be addable without rewriting planner/UI.

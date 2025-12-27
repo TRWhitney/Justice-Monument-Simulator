@@ -10,7 +10,10 @@ from typing import Any, Mapping
 from justice_sim.engine.rng import RngState
 from justice_sim.models.offer import EffectSpec
 from justice_sim.models.state import (
+    ActionTrigger,
     EncounterModifier,
+    EncounterOverride,
+    EncounterTrigger,
     ForcedEncounter,
     GameState,
     ScheduledEvent,
@@ -97,6 +100,42 @@ def serialize_state(state: GameState) -> dict[str, Any]:
             for effect in state.required_action_penalty_effects
         ],
         "counters": dict(state.counters),
+        "resource_floors": dict(state.resource_floors),
+        "action_triggers": [
+            {
+                "label": trigger.label,
+                "action": trigger.action,
+                "npc_id": trigger.npc_id,
+                "offer_id": trigger.offer_id,
+                "remaining_uses": trigger.remaining_uses,
+                "when": trigger.when,
+                "effects": [_serialize_effect(effect) for effect in trigger.effects],
+            }
+            for trigger in state.action_triggers
+        ],
+        "encounter_triggers": [
+            {
+                "label": trigger.label,
+                "npc_id": trigger.npc_id,
+                "offer_id": trigger.offer_id,
+                "remaining_uses": trigger.remaining_uses,
+                "when": trigger.when,
+                "effects": [_serialize_effect(effect) for effect in trigger.effects],
+            }
+            for trigger in state.encounter_triggers
+        ],
+        "encounter_overrides": [
+            {
+                "label": override.label,
+                "npc_id": override.npc_id,
+                "offer_id": override.offer_id,
+                "remaining_uses": override.remaining_uses,
+                "probability": override.probability,
+                "priority": override.priority,
+                "allow_harbinger": override.allow_harbinger,
+            }
+            for override in state.encounter_overrides
+        ],
         "ended": state.ended,
         "end_reason": state.end_reason,
     }
@@ -142,6 +181,45 @@ def deserialize_state(payload: Mapping[str, Any]) -> GameState:
         _deserialize_effect(effect)
         for effect in payload.get("required_action_penalty_effects", [])
     )
+    action_triggers = tuple(
+        ActionTrigger(
+            label=item.get("label"),
+            action=str(item.get("action", "")),
+            npc_id=item.get("npc_id"),
+            offer_id=item.get("offer_id"),
+            remaining_uses=item.get("remaining_uses"),
+            when=item.get("when"),
+            effects=tuple(
+                _deserialize_effect(effect) for effect in item.get("effects", [])
+            ),
+        )
+        for item in payload.get("action_triggers", [])
+    )
+    encounter_triggers = tuple(
+        EncounterTrigger(
+            label=item.get("label"),
+            npc_id=item.get("npc_id"),
+            offer_id=item.get("offer_id"),
+            remaining_uses=item.get("remaining_uses"),
+            when=item.get("when"),
+            effects=tuple(
+                _deserialize_effect(effect) for effect in item.get("effects", [])
+            ),
+        )
+        for item in payload.get("encounter_triggers", [])
+    )
+    encounter_overrides = tuple(
+        EncounterOverride(
+            label=item.get("label"),
+            npc_id=item.get("npc_id"),
+            offer_id=item.get("offer_id"),
+            remaining_uses=item.get("remaining_uses"),
+            probability=item.get("probability"),
+            priority=int(item.get("priority", 0) or 0),
+            allow_harbinger=bool(item.get("allow_harbinger", False)),
+        )
+        for item in payload.get("encounter_overrides", [])
+    )
     return GameState(
         case_index=int(payload.get("case_index", 1)),
         coins=float(payload.get("coins", 0)),
@@ -157,6 +235,10 @@ def deserialize_state(payload: Mapping[str, Any]) -> GameState:
         required_action=payload.get("required_action"),
         required_action_penalty_effects=required_penalties,
         counters=payload.get("counters", {}),
+        resource_floors=payload.get("resource_floors", {}),
+        action_triggers=action_triggers,
+        encounter_triggers=encounter_triggers,
+        encounter_overrides=encounter_overrides,
         ended=bool(payload.get("ended", False)),
         end_reason=payload.get("end_reason"),
     )

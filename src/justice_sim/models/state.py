@@ -31,6 +31,38 @@ class EncounterModifier:
 
 
 @dataclass(frozen=True)
+class ActionTrigger:
+    action: str
+    effects: tuple[EffectSpec, ...]
+    npc_id: str | None = None
+    offer_id: str | None = None
+    remaining_uses: int | None = None
+    when: str | None = None
+    label: str | None = None
+
+
+@dataclass(frozen=True)
+class EncounterTrigger:
+    effects: tuple[EffectSpec, ...]
+    npc_id: str | None = None
+    offer_id: str | None = None
+    remaining_uses: int | None = None
+    when: str | None = None
+    label: str | None = None
+
+
+@dataclass(frozen=True)
+class EncounterOverride:
+    npc_id: str | None = None
+    offer_id: str | None = None
+    remaining_uses: int | None = None
+    probability: object | None = None
+    priority: int = 0
+    allow_harbinger: bool = False
+    label: str | None = None
+
+
+@dataclass(frozen=True)
 class ForcedEncounter:
     trigger_case_index: int
     offer_id: str
@@ -52,12 +84,26 @@ class GameState:
     forced_encounters: tuple[ForcedEncounter, ...] = ()
     required_action: str | None = None
     required_action_penalty_effects: tuple[EffectSpec, ...] = ()
-    counters: Mapping[str, int] = field(default_factory=dict)
+    counters: Mapping[str, float] = field(default_factory=dict)
+    resource_floors: Mapping[str, float] = field(default_factory=dict)
+    action_triggers: tuple[ActionTrigger, ...] = ()
+    encounter_triggers: tuple[EncounterTrigger, ...] = ()
+    encounter_overrides: tuple[EncounterOverride, ...] = ()
     ended: bool = False
     end_reason: str | None = None
 
     def to_cache_key(self) -> tuple[Any, ...]:
         """Return a hashable key for planner caches."""
+
+        def freeze(value: Any) -> Any:
+            if isinstance(value, dict):
+                return tuple(sorted((k, freeze(v)) for k, v in value.items()))
+            if isinstance(value, (list, tuple)):
+                return tuple(freeze(v) for v in value)
+            if isinstance(value, set):
+                return tuple(sorted(freeze(v) for v in value))
+            return value
+
         statuses_key = tuple(
             sorted(
                 (name, status.remaining_cases, tuple(sorted(status.data.items())))
@@ -69,8 +115,7 @@ class GameState:
                 (
                     event.trigger_case_index,
                     tuple(
-                        (effect.type, tuple(sorted(effect.params.items())))
-                        for effect in event.effects
+                        (effect.type, freeze(effect.params)) for effect in event.effects
                     ),
                 )
                 for event in self.scheduled_events
@@ -89,7 +134,47 @@ class GameState:
             (forced.trigger_case_index, forced.offer_id, forced.once)
             for forced in self.forced_encounters
         )
+        action_triggers_key = tuple(
+            (
+                trigger.label,
+                trigger.action,
+                trigger.npc_id,
+                trigger.offer_id,
+                trigger.remaining_uses,
+                trigger.when,
+                tuple(
+                    (effect.type, freeze(effect.params)) for effect in trigger.effects
+                ),
+            )
+            for trigger in self.action_triggers
+        )
+        encounter_triggers_key = tuple(
+            (
+                trigger.label,
+                trigger.npc_id,
+                trigger.offer_id,
+                trigger.remaining_uses,
+                trigger.when,
+                tuple(
+                    (effect.type, freeze(effect.params)) for effect in trigger.effects
+                ),
+            )
+            for trigger in self.encounter_triggers
+        )
+        encounter_overrides_key = tuple(
+            (
+                override.label,
+                override.npc_id,
+                override.offer_id,
+                override.remaining_uses,
+                freeze(override.probability),
+                override.priority,
+                override.allow_harbinger,
+            )
+            for override in self.encounter_overrides
+        )
         counters_key = tuple(sorted(self.counters.items()))
+        resource_floors_key = tuple(sorted(self.resource_floors.items()))
         return (
             self.case_index,
             self.coins,
@@ -104,10 +189,14 @@ class GameState:
             forced_key,
             self.required_action,
             tuple(
-                (effect.type, tuple(sorted(effect.params.items())))
+                (effect.type, freeze(effect.params))
                 for effect in self.required_action_penalty_effects
             ),
             counters_key,
+            resource_floors_key,
+            action_triggers_key,
+            encounter_triggers_key,
+            encounter_overrides_key,
             self.ended,
             self.end_reason,
         )

@@ -24,7 +24,7 @@ def test_harbinger_forces_search_bar(data_factory):
     widget.search_input.setText("hello")
     widget.update_state(state)
 
-    assert widget.search_input.isEnabled()
+    assert not widget.search_input.isReadOnly()
     assert widget.search_input.text() == "hello"
 
     forced_state = GameState(
@@ -37,12 +37,19 @@ def test_harbinger_forces_search_bar(data_factory):
     )
     widget.update_state(forced_state)
 
-    assert not widget.search_input.isEnabled()
+    assert widget.search_input.isReadOnly()
     assert widget.search_input.text() == "#binger"
+    assert widget.results_list.count() == 2
+
+    widget.show_all_toggle.setChecked(True)
+
+    assert widget.search_input.isReadOnly()
+    assert widget.search_input.text() == "#binger"
+    assert widget.show_all_toggle.isChecked()
 
     widget.update_state(state)
 
-    assert widget.search_input.isEnabled()
+    assert not widget.search_input.isReadOnly()
     assert widget.search_input.text() == "hello"
 
     app.quit()

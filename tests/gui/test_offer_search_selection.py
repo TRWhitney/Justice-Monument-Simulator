@@ -105,3 +105,38 @@ def test_offer_search_preserves_selection_without_spurious_emit(data_dict_factor
 
     widget.close()
     app.quit()
+
+
+@pytest.mark.gui
+def test_offer_search_clears_selection_when_filter_changes(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    widget = OfferSearchWidget(data, state)
+    widget.resize(400, 300)
+    widget.show()
+    widget.update_state(state)
+    app.processEvents()
+
+    widget.results_list.setCurrentRow(0)
+    app.processEvents()
+
+    emitted: list[object | None] = []
+    widget.offer_selected.connect(lambda offer: emitted.append(offer))
+
+    widget.search_input.setText("two")
+    app.processEvents()
+
+    assert widget.results_list.currentRow() == -1
+    assert emitted == [None]
+
+    widget.close()
+    app.quit()

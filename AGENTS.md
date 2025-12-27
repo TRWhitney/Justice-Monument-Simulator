@@ -10,7 +10,7 @@
 ## Build, Test, and Development Commands
 - `uv sync` installs Python dependencies from `uv.lock`.
 - `./scripts/validate_repo.sh` runs the required gate: ruff format check, unit + GUI tests, and a smoke launch.
-- `uv run python scripts/validate_schema.py --schema src/justice_sim/data/schema/justice_data.schema.json --instance src/justice_sim/data/builtin/justice_data_v1.json` validates the builtin data (add `--format` for format checks).
+- `uv run python scripts/validate_schema.py --schema src/justice_sim/data/schema/justice_data.schema.json --instance src/justice_sim/data/builtin/justice_data.json` validates the builtin data (add `--format` for format checks).
 
 ## Validation & Definition of Done
 - Every task must end with `./scripts/validate_repo.sh` passing locally; all checks green is required to complete work.
@@ -38,8 +38,8 @@
 
 ## Commit & Pull Request Guidelines
 - Git history currently uses short, imperative messages (example: "Initialize repo"); no formal convention enforced.
-- PRs should include a concise summary, call out changes to `justice_data_v1.json` or schema files, and note `./scripts/validate_repo.sh` results.
+- PRs should include a concise summary, call out changes to `justice_data.json` or schema files, and note `./scripts/validate_repo.sh` results.
 
 ## Data & Schema Notes
-- `justice_data_v1.json` is the source-of-truth dataset; keep it in sync with `justice_data.schema.json`.
+- `justice_data.json` is the source-of-truth dataset; keep it in sync with `justice_data.schema.json`.
 - If you add new schema files, pass `--schema-dir` to the validator to resolve `$ref` targets.

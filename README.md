@@ -33,5 +33,5 @@ uv run pytest -m "gui"
 ```bash
 uv run python scripts/validate_schema.py \
   --schema src/justice_sim/data/schema/justice_data.schema.json \
-  --instance src/justice_sim/data/builtin/justice_data_v1.json
+  --instance src/justice_sim/data/builtin/justice_data.json
 ```

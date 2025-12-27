@@ -139,6 +139,9 @@ class LogPanel(QtWidgets.QWidget):
         if self._popover.parentWidget() is not window:
             self._popover.setParent(window)
 
+    def set_theme(self, dark: bool) -> None:
+        self._popover.set_theme(dark)
+
 
 class _LogEntryWidget(QtWidgets.QWidget):
     def __init__(self, entry, parent: QtWidgets.QWidget | None = None) -> None:
@@ -162,16 +165,34 @@ class _LogPopover(QtWidgets.QFrame):
         super().__init__(parent)
         self.apply_window_attributes()
         self._data = data
+        self._shadow = QtWidgets.QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(26)
+        self._shadow.setOffset(0, 6)
+        self.setGraphicsEffect(self._shadow)
         self._layout = QtWidgets.QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
-        self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-        self.setStyleSheet(
-            "background-color: #f4f1e8; border: 1px solid #d0c9b3; border-radius: 6px;"
-        )
+        self.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.set_theme(False)
 
     def apply_window_attributes(self) -> None:
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+
+    def set_theme(self, dark: bool) -> None:
+        if dark:
+            self.setStyleSheet(
+                "background-color: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+                " stop:0 #2e2e2e, stop:1 #1f1f1f);"
+                "border-radius: 10px;"
+            )
+            self._shadow.setColor(QtGui.QColor(0, 0, 0, 200))
+        else:
+            self.setStyleSheet(
+                "background-color: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+                " stop:0 #fff8ee, stop:1 #efe1cc);"
+                "border-radius: 10px;"
+            )
+            self._shadow.setColor(QtGui.QColor(0, 0, 0, 130))
 
     def update_card(
         self,
@@ -192,6 +213,7 @@ class _LogPopover(QtWidgets.QFrame):
             action_filter=action,
         )
         card.setFixedWidth(_LOG_POPOVER_WIDTH)
+        card.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
         card.layout().activate()
         card.adjustSize()
         self._layout.addWidget(card)

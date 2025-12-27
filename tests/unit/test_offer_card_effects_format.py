@@ -17,3 +17,11 @@ def test_effects_html_capitalizes_and_separates():
 def test_effects_html_no_effect_capitalized():
     html_text = offer_card._format_effects_html([], "no effect")
     assert html_text == "No effect"
+
+
+@pytest.mark.unit
+def test_effects_html_custom_separator_respected():
+    tokens = [("coins", "+ 1", ""), ("pop", "+ 2", " OR ")]
+    html_text = offer_card._format_effects_html(tokens, "no effect")
+    assert "OR" in html_text
+    assert html_text.count("<img") == 2

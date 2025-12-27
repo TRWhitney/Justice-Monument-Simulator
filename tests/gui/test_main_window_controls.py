@@ -122,6 +122,7 @@ def test_game_over_when_no_valid_actions(data_dict_factory):
     data_dict = data_dict_factory()
     data_dict["offers"][0]["approve"]["effects"][0]["params"]["amount"] = -1
     data_dict["offers"][0]["reject"]["effects"][0]["params"]["amount"] = -1
+    data_dict["offers"][0]["reject"]["effects"][0]["params"]["resource"] = "coins"
     data = JusticeData.from_dict(data_dict)
     window = MainWindow(data)
     window.session.state = GameState(

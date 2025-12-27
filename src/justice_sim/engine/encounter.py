@@ -116,13 +116,19 @@ def select_encounter(
         return forced_offer
 
     harbinger_rule = data.special_rules.harbinger
-    if state.case_index % harbinger_rule.cadence_modulus == 0:
+    harbinger_case = state.case_index % harbinger_rule.cadence_modulus == 0
+
+    override_offer = _override_encounter_for_case(state, data, rng, harbinger_case)
+    if override_offer:
+        return override_offer
+
+    if harbinger_case:
         grateful_rule = data.special_rules.gratefulbinger
         if grateful_rule:
             probability = _evaluate_gratefulbinger_probability(state, data)
             if rng.random() <= probability:
                 return grateful_rule.offer_id
-        return harbinger_rule.offer_id
+        return _select_harbinger_offer(state, data, rng)
 
     return encounter_model.sample_encounter(state, data, rng)
 
@@ -151,6 +157,40 @@ def _forced_encounter_for_case(state: GameState) -> str | None:
     for forced in state.forced_encounters:
         if forced.trigger_case_index == state.case_index:
             return forced.offer_id
+    return None
+
+
+def _override_encounter_for_case(
+    state: GameState,
+    data: JusticeData,
+    rng: Rng,
+    harbinger_case: bool,
+) -> str | None:
+    ordered = sorted(
+        enumerate(state.encounter_overrides),
+        key=lambda item: (-item[1].priority, item[0]),
+    )
+    for _, override in ordered:
+        if harbinger_case and not override.allow_harbinger:
+            continue
+        if override.probability is not None:
+            probability = resolve_probability(override.probability, state, data)
+            if rng.random() > probability:
+                continue
+        if override.offer_id:
+            offer = data.offers_by_id.get(override.offer_id)
+            if offer and _is_offer_eligible(offer, state, data):
+                return override.offer_id
+            continue
+        if override.npc_id:
+            offers = [
+                offer.id
+                for offer in data.offers
+                if offer.npc_id == override.npc_id
+                and _is_offer_eligible(offer, state, data)
+            ]
+            if offers:
+                return rng.choice(offers)
     return None
 
 
@@ -186,13 +226,24 @@ def _apply_modifiers(
 
 
 def _is_offer_eligible(offer: OfferSpec, state: GameState, data: JusticeData) -> bool:
-    if offer.id == data.special_rules.harbinger.offer_id:
-        return False
-    if (
-        data.special_rules.gratefulbinger
-        and offer.id == data.special_rules.gratefulbinger.offer_id
-    ):
-        return False
+    return _is_offer_eligible_internal(offer, state, data, allow_harbinger=False)
+
+
+def _is_offer_eligible_internal(
+    offer: OfferSpec,
+    state: GameState,
+    data: JusticeData,
+    *,
+    allow_harbinger: bool,
+) -> bool:
+    if not allow_harbinger:
+        if offer.id in _harbinger_offer_ids(data):
+            return False
+        if (
+            data.special_rules.gratefulbinger
+            and offer.id == data.special_rules.gratefulbinger.offer_id
+        ):
+            return False
     if not offer.conditions:
         return True
     for predicate in offer.conditions:
@@ -211,3 +262,46 @@ def _is_offer_eligible(offer: OfferSpec, state: GameState, data: JusticeData) ->
             if not expr_util.evaluate_predicate(predicate, ctx):
                 return False
     return True
+
+
+def _harbinger_offer_ids(data: JusticeData) -> set[str]:
+    rule = data.special_rules.harbinger
+    ids = set(rule.offer_pool)
+    if rule.offer_id:
+        ids.add(rule.offer_id)
+    return ids
+
+
+def _harbinger_offer_pool(data: JusticeData) -> list[str]:
+    rule = data.special_rules.harbinger
+    if rule.offer_pool:
+        return list(rule.offer_pool)
+    return [rule.offer_id]
+
+
+def _select_harbinger_offer(state: GameState, data: JusticeData, rng: Rng) -> str:
+    pool = _harbinger_offer_pool(data)
+    eligible: list[str] = []
+    for offer_id in pool:
+        offer = data.offers_by_id.get(offer_id)
+        if offer and _is_offer_eligible_internal(
+            offer, state, data, allow_harbinger=True
+        ):
+            eligible.append(offer_id)
+    if not eligible:
+        return data.special_rules.harbinger.offer_id
+    return rng.choice(eligible)
+
+
+def eligible_harbinger_offers(state: GameState, data: JusticeData) -> list[str]:
+    pool = _harbinger_offer_pool(data)
+    eligible: list[str] = []
+    for offer_id in pool:
+        offer = data.offers_by_id.get(offer_id)
+        if offer and _is_offer_eligible_internal(
+            offer, state, data, allow_harbinger=True
+        ):
+            eligible.append(offer_id)
+    if not eligible and data.special_rules.harbinger.offer_id:
+        return [data.special_rules.harbinger.offer_id]
+    return eligible

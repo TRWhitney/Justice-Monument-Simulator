@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import secrets
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -16,7 +17,7 @@ class RngState:
 class Rng:
     def __init__(self, seed: int | None = None) -> None:
         if seed is None:
-            seed = random.randrange(1, 2**31)
+            seed = secrets.randbelow(2**31 - 1) + 1
         self._seed = int(seed)
         self._random = random.Random(self._seed)
         self._draws = 0

@@ -1,5 +1,5 @@
 {
-  "version": "justice_data_v1",
+  "version": "justice_data",
   "defaults": {
     "debt_mode": "clamp_to_zero",
     "default_probability_format": "unit",

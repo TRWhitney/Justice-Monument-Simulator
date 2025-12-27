@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$comment": "Idleon Justice data schema (engine-driven offers/effects). Patched to avoid oneOf overlap for Expr/Probability.",
+  "$comment": "Idleon Justice data schema (engine-driven offers/effects). Includes triggers, counters, recurring schedules, swaps, and resource floors.",
   "title": "Idleon Justice Data",
   "type": "object",
   "additionalProperties": false,
@@ -164,6 +164,15 @@
         "dismiss"
       ]
     },
+    "TriggerAction": {
+      "type": "string",
+      "enum": [
+        "approve",
+        "reject",
+        "dismiss",
+        "any"
+      ]
+    },
     "ResourceName": {
       "type": "string",
       "enum": [
@@ -210,6 +219,10 @@
               "minLength": 1
             },
             "scaled_by_case": {
+              "type": "boolean",
+              "default": false
+            },
+            "snapshot": {
               "type": "boolean",
               "default": false
             },
@@ -496,6 +509,114 @@
         }
       }
     },
+    "ActionTriggerSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "effects"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/TriggerAction"
+        },
+        "npc_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "offer_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "remaining_uses": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "when": {
+          "$ref": "#/$defs/Predicate"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Effect"
+          }
+        }
+      }
+    },
+    "EncounterTriggerSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effects"
+      ],
+      "properties": {
+        "npc_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "offer_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "remaining_uses": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "when": {
+          "$ref": "#/$defs/Predicate"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Effect"
+          }
+        }
+      }
+    },
+    "EncounterOverrideSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "npc_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "offer_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "remaining_uses": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "probability": {
+          "$ref": "#/$defs/Probability"
+        },
+        "priority": {
+          "type": "integer",
+          "default": 0
+        },
+        "allow_harbinger": {
+          "type": "boolean",
+          "default": false
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "npc_id"
+          ]
+        },
+        {
+          "required": [
+            "offer_id"
+          ]
+        }
+      ]
+    },
     "EffectAddResource": {
       "type": "object",
       "required": [
@@ -610,6 +731,34 @@
         }
       }
     },
+    "EffectSwapResources": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "swap_resources"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resource_a",
+            "resource_b"
+          ],
+          "properties": {
+            "resource_a": {
+              "$ref": "#/$defs/ResourceName"
+            },
+            "resource_b": {
+              "$ref": "#/$defs/ResourceName"
+            }
+          }
+        }
+      }
+    },
     "EffectAddFlag": {
       "type": "object",
       "required": [
@@ -710,6 +859,58 @@
         }
       }
     },
+    "EffectSetResourceFloor": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "set_resource_floor"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resource",
+            "min"
+          ],
+          "properties": {
+            "resource": {
+              "$ref": "#/$defs/ResourceName"
+            },
+            "min": {
+              "$ref": "#/$defs/Expr"
+            }
+          }
+        }
+      }
+    },
+    "EffectClearResourceFloor": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "clear_resource_floor"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resource"
+          ],
+          "properties": {
+            "resource": {
+              "$ref": "#/$defs/ResourceName"
+            }
+          }
+        }
+      }
+    },
     "EffectScheduleEffects": {
       "type": "object",
       "required": [
@@ -731,6 +932,48 @@
             "after_cases": {
               "type": "integer",
               "minimum": 0
+            },
+            "effects": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Effect"
+              }
+            }
+          }
+        }
+      }
+    },
+    "EffectScheduleRecurringEffects": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "schedule_recurring_effects"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "after_cases",
+            "every_cases",
+            "repeat",
+            "effects"
+          ],
+          "properties": {
+            "after_cases": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "every_cases": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "repeat": {
+              "type": "integer",
+              "minimum": 1
             },
             "effects": {
               "type": "array",
@@ -773,6 +1016,123 @@
         }
       }
     },
+    "EffectAddActionTrigger": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "add_action_trigger"
+        },
+        "params": {
+          "$ref": "#/$defs/ActionTriggerSpec"
+        }
+      }
+    },
+    "EffectRemoveActionTrigger": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "remove_action_trigger"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "label"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/NonEmptyString"
+            }
+          }
+        }
+      }
+    },
+    "EffectAddEncounterTrigger": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "add_encounter_trigger"
+        },
+        "params": {
+          "$ref": "#/$defs/EncounterTriggerSpec"
+        }
+      }
+    },
+    "EffectRemoveEncounterTrigger": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "remove_encounter_trigger"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "label"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/NonEmptyString"
+            }
+          }
+        }
+      }
+    },
+    "EffectAddEncounterOverride": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "add_encounter_override"
+        },
+        "params": {
+          "$ref": "#/$defs/EncounterOverrideSpec"
+        }
+      }
+    },
+    "EffectRemoveEncounterOverride": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "remove_encounter_override"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "label"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/NonEmptyString"
+            }
+          }
+        }
+      }
+    },
     "EffectModifyEncounterWeights": {
       "type": "object",
       "required": [
@@ -808,6 +1168,175 @@
                 "set"
               ],
               "default": "multiply"
+            }
+          }
+        }
+      }
+    },
+    "EffectSetCounter": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "set_counter"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "counter",
+            "value"
+          ],
+          "properties": {
+            "counter": {
+              "$ref": "#/$defs/Id"
+            },
+            "value": {
+              "$ref": "#/$defs/Expr"
+            }
+          }
+        }
+      }
+    },
+    "EffectAddCounter": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "add_counter"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "counter",
+            "amount"
+          ],
+          "properties": {
+            "counter": {
+              "$ref": "#/$defs/Id"
+            },
+            "amount": {
+              "$ref": "#/$defs/Expr"
+            }
+          }
+        }
+      }
+    },
+    "EffectClearCounter": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "clear_counter"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "counter"
+          ],
+          "properties": {
+            "counter": {
+              "$ref": "#/$defs/Id"
+            }
+          }
+        }
+      }
+    },
+    "EffectRandomRangeResource": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "random_range_resource"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resource",
+            "min",
+            "max"
+          ],
+          "properties": {
+            "resource": {
+              "$ref": "#/$defs/ResourceName"
+            },
+            "min": {
+              "type": "integer"
+            },
+            "max": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "EffectRandomExchange": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "random_exchange"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "take_resource",
+            "give_resource",
+            "min",
+            "max"
+          ],
+          "properties": {
+            "take_resource": {
+              "$ref": "#/$defs/ResourceName"
+            },
+            "give_resource": {
+              "$ref": "#/$defs/ResourceName"
+            },
+            "min": {
+              "$ref": "#/$defs/Expr"
+            },
+            "max": {
+              "$ref": "#/$defs/Expr"
+            }
+          }
+        }
+      }
+    },
+    "EffectRawEffect": {
+      "type": "object",
+      "required": [
+        "type",
+        "params"
+      ],
+      "properties": {
+        "type": {
+          "const": "raw_effect"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "raw": {
+              "$ref": "#/$defs/NonEmptyString"
             }
           }
         }
@@ -865,15 +1394,32 @@
               "set_resource",
               "clamp_resource",
               "multiply_resource",
+              "swap_resources",
               "add_flag",
               "remove_flag",
               "add_status",
               "remove_status",
+              "set_resource_floor",
+              "clear_resource_floor",
               "schedule_effects",
+              "schedule_recurring_effects",
               "require_next_action",
+              "add_action_trigger",
+              "remove_action_trigger",
+              "add_encounter_trigger",
+              "remove_encounter_trigger",
+              "add_encounter_override",
+              "remove_encounter_override",
               "modify_encounter_weights",
+              "set_counter",
+              "add_counter",
+              "clear_counter",
               "end_run",
               "noop"
+              ,
+              "raw_effect",
+              "random_range_resource",
+              "random_exchange"
             ]
           }
         },
@@ -903,6 +1449,9 @@
               "$ref": "#/$defs/EffectMultiplyResource"
             },
             {
+              "$ref": "#/$defs/EffectSwapResources"
+            },
+            {
               "$ref": "#/$defs/EffectAddFlag"
             },
             {
@@ -915,19 +1464,64 @@
               "$ref": "#/$defs/EffectRemoveStatus"
             },
             {
+              "$ref": "#/$defs/EffectSetResourceFloor"
+            },
+            {
+              "$ref": "#/$defs/EffectClearResourceFloor"
+            },
+            {
               "$ref": "#/$defs/EffectScheduleEffects"
+            },
+            {
+              "$ref": "#/$defs/EffectScheduleRecurringEffects"
             },
             {
               "$ref": "#/$defs/EffectRequireNextAction"
             },
             {
+              "$ref": "#/$defs/EffectAddActionTrigger"
+            },
+            {
+              "$ref": "#/$defs/EffectRemoveActionTrigger"
+            },
+            {
+              "$ref": "#/$defs/EffectAddEncounterTrigger"
+            },
+            {
+              "$ref": "#/$defs/EffectRemoveEncounterTrigger"
+            },
+            {
+              "$ref": "#/$defs/EffectAddEncounterOverride"
+            },
+            {
+              "$ref": "#/$defs/EffectRemoveEncounterOverride"
+            },
+            {
               "$ref": "#/$defs/EffectModifyEncounterWeights"
+            },
+            {
+              "$ref": "#/$defs/EffectSetCounter"
+            },
+            {
+              "$ref": "#/$defs/EffectAddCounter"
+            },
+            {
+              "$ref": "#/$defs/EffectClearCounter"
             },
             {
               "$ref": "#/$defs/EffectEndRun"
             },
             {
               "$ref": "#/$defs/EffectNoop"
+            },
+            {
+              "$ref": "#/$defs/EffectRandomRangeResource"
+            },
+            {
+              "$ref": "#/$defs/EffectRandomExchange"
+            },
+            {
+              "$ref": "#/$defs/EffectRawEffect"
             },
             {
               "$ref": "#/$defs/EffectUnknown"
@@ -986,6 +1580,13 @@
       "properties": {
         "offer_id": {
           "$ref": "#/$defs/Id"
+        },
+        "offer_pool": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Id"
+          }
         },
         "cadence_modulus": {
           "type": "integer",

@@ -14,7 +14,7 @@ from justice_sim.util.validation import ValidationError, validate_data
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUILTIN_DATA_PATH = (
-    REPO_ROOT / "src" / "justice_sim" / "data" / "builtin" / "justice_data_v1.json"
+    REPO_ROOT / "src" / "justice_sim" / "data" / "builtin" / "justice_data.json"
 )
 SCHEMA_PATH = (
     REPO_ROOT / "src" / "justice_sim" / "data" / "schema" / "justice_data.schema.json"

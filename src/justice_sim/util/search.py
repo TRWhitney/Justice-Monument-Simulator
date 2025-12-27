@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from justice_sim.models.offer import JusticeData, OfferSpec
 from justice_sim.models.state import GameState
@@ -33,8 +34,35 @@ def parse_search_query(query: str) -> tuple[str | None, list[str], list[str]]:
     return npc_query, terms, effect_terms
 
 
+def normalize_npc_query(text: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", text.lower())
+    return normalized.strip("_")
+
+
+def npc_matches_query(npc_name: str, npc_id: str, npc_query: str) -> bool:
+    if not npc_query:
+        return True
+    query_raw = npc_query.lower().strip()
+    query_norm = normalize_npc_query(query_raw)
+    npc_name_raw = npc_name.lower()
+    npc_id_raw = npc_id.lower()
+    npc_name_norm = normalize_npc_query(npc_name_raw)
+    npc_id_norm = normalize_npc_query(npc_id_raw)
+    if query_norm and (query_norm == npc_name_norm or query_norm == npc_id_norm):
+        return True
+    if query_raw and (query_raw in npc_name_raw or query_raw in npc_id_raw):
+        return True
+    if query_norm and (query_norm in npc_name_norm or query_norm in npc_id_norm):
+        return True
+    return False
+
+
 def search_offers(
-    query: str, data: JusticeData, state: GameState
+    query: str,
+    data: JusticeData,
+    state: GameState,
+    *,
+    eligible_offer_ids: set[str] | None = None,
 ) -> list[OfferSearchResult]:
     query = query.strip()
     npc_query, terms, effect_terms = (
@@ -42,9 +70,11 @@ def search_offers(
     )
     results = []
     for offer in data.offers:
+        if eligible_offer_ids is not None and offer.id not in eligible_offer_ids:
+            continue
         npc = data.npcs_by_id.get(offer.npc_id)
         npc_name = npc.name if npc else offer.npc_id
-        if npc_query and npc_query not in npc_name.lower():
+        if npc_query and not npc_matches_query(npc_name, offer.npc_id, npc_query):
             continue
         approve_summary, reject_summary, dismiss_summary = summarize_offer(
             offer, state, data

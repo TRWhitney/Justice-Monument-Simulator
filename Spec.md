@@ -113,7 +113,7 @@ JusticeMonumentSimulator/
 │     │  └─ outcomes.py
 │     ├─ data/
 │     │  ├─ builtin/
-│     │  │  ├─ justice_data_v1.json
+│     │  │  ├─ justice_data.json
 │     │  │  └─ images/
 │     │  │     └─ (pngs for npcs and icons...)
 │     │  └─ schema/
@@ -169,7 +169,7 @@ JusticeMonumentSimulator/
 ## 🧠 Data Model (JSON Source of Truth)
 
 ### Top-level JSON
-- `version`: string (e.g., "justice_data_v1")
+- `version`: string (e.g., "justice_data")
 - `npcs`: list of NPC entries
 - `offers`: list of offer entries
 - `special_rules`: includes harbinger/gratefulbinger definitions
@@ -213,7 +213,7 @@ Each effect is a dict:
 - optional `duration_cases`: int (for buffs/debuffs)
 - optional `schedule_after_cases`: int (to create scheduled events)
 
-Minimum built-in effect types (v1):
+Minimum built-in effect types:
 - `add_resource` (coins/pop/mh/dismissals/retirement_chests)
 - `set_resource`
 - `clamp_resource` (min/max)
@@ -304,6 +304,7 @@ Where:
 - In the encounter selection pipeline:
   - If `case_index % 5 == 0`: return Harbinger-like encounter
   - With Gratefulbinger replacement probability, return Gratefulbinger instead
+  - If `special_rules.harbinger.offer_pool` is defined, select a random eligible offer from that pool; otherwise use `offer_id`
 - These specials live in JSON `special_rules` but are implemented by engine, not the generic encounter model.
 
 ---
@@ -341,18 +342,21 @@ Left column: State & Controls
 - Progression/profile selector + load/save buttons
 - Encounter model selector + settings button
 - Risk slider + planner settings (horizon, rollouts, adaptive)
+  - Full simulate toggle picks a random encounter each case
+- Planner settings include a “Full simulate” toggle (when off, user selects random outcomes)
 - Import/export run buttons
 - Toast notifications appear beneath import/export buttons
 
 Center: Offer selection
 - Search bar:
   - If input starts with `#`, treat remainder as NPC-name filter
-  - Empty input shows all offers
+  - Empty input shows all offers currently eligible in the pool
   - On harbinger cases (every 5th), search input is locked/greyed to `#binger`
   - Otherwise substring search over:
     - NPC name
     - offer title/text
     - approve/reject summary text (rendered from effects)
+  - Optional “Show all offers” toggle inside the search bar ignores conditions
 - Results list:
   - each row displays “card”:
     - NPC image
@@ -468,7 +472,7 @@ CLI must reuse the same `OfferSearch` code and `Planner` engine as GUI.
 ### Phase 1 — core models & validation
 - [x] Implement dataclasses/pydantic models for NPC, Offer, Outcome, Effect, GameState
 - [x] Implement JSON loader + schema validation + good error messages
-- [ ] Add builtin `justice_data_v1.json` with a minimal viable subset (at least: one normal NPC offer, Harbinger, Gratefulbinger)
+- [x] Add builtin `justice_data.json` with a minimal viable subset (at least: one normal NPC offer, Harbinger, Gratefulbinger)
 
 ### Phase 2 — engine
 - [x] Implement reducer: apply action -> new state
@@ -519,7 +523,7 @@ CLI must reuse the same `OfferSearch` code and `Planner` engine as GUI.
 - [x] Add data validation tests
 
 ### Phase 10 — data completion workflow
-- [ ] Document how to expand `justice_data_v1.json` from the user’s info dump
+- [ ] Document how to expand `justice_data.json` from the user’s info dump
 - [ ] Ensure adding offers requires no code changes (JSON-only)
 
 ---

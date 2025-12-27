@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
+import math
+from types import SimpleNamespace
 from typing import Any, Iterable, Mapping
 
 from justice_sim.engine import harbinger as harbinger_rules
@@ -16,7 +18,10 @@ from justice_sim.models.offer import (
     OutcomeSpec,
 )
 from justice_sim.models.state import (
+    ActionTrigger,
     EncounterModifier,
+    EncounterOverride,
+    EncounterTrigger,
     GameState,
     ScheduledEvent,
     StatusEffect,
@@ -24,6 +29,13 @@ from justice_sim.models.state import (
 from justice_sim.util import expr as expr_util
 
 NON_NEGATIVE_RESOURCES = {"coins", "pop", "dismissals", "retirement_chests"}
+MAIN_RESOURCES = {
+    "coins",
+    "pop",
+    "dismissals",
+    "retirement_chests",
+    "mh",
+}
 
 
 def apply_outcome(
@@ -70,6 +82,11 @@ def advance_case(
         if status.remaining_cases < 0:
             statuses[name] = status
             continue
+        if status.data.get("starts_next_case"):
+            applied_case = status.data.get("applied_case_index")
+            if applied_case == state.case_index:
+                statuses[name] = status
+                continue
         remaining = status.remaining_cases - 1
         if remaining > 0:
             statuses[name] = replace(status, remaining_cases=remaining)
@@ -147,7 +164,7 @@ def _schedule_single_effect(
     trigger_case = state.case_index + int(effect.schedule_after_cases or 0)
     stripped = EffectSpec(
         type=effect.type,
-        params=effect.params,
+        params=_snapshot_params(effect, state, data),
         when=effect.when,
         duration_cases=effect.duration_cases,
         schedule_after_cases=None,
@@ -191,6 +208,17 @@ def _apply_effect(
         factor = resolve_expr(params.get("factor"), state, data)
         return _set_resource(state, resource, getattr(state, resource) * factor, data)
 
+    if effect_type == "swap_resources":
+        resource_a = params.get("resource_a")
+        resource_b = params.get("resource_b")
+        if not resource_a or not resource_b:
+            return state
+        value_a = getattr(state, resource_a)
+        value_b = getattr(state, resource_b)
+        updated = replace(state, **{resource_a: value_b, resource_b: value_a})
+        updated = _set_resource(updated, resource_a, getattr(updated, resource_a), data)
+        return _set_resource(updated, resource_b, getattr(updated, resource_b), data)
+
     if effect_type == "add_flag":
         flag = str(params.get("flag"))
         flags = set(state.flags)
@@ -206,11 +234,13 @@ def _apply_effect(
     if effect_type == "add_status":
         status_name = str(params.get("status"))
         duration = effect.duration_cases if effect.duration_cases is not None else -1
+        data = dict(params.get("data") or {})
+        data.setdefault("applied_case_index", state.case_index)
         statuses = dict(state.statuses)
         statuses[status_name] = StatusEffect(
             name=status_name,
             remaining_cases=int(duration),
-            data=params.get("data", {}),
+            data=data,
         )
         return replace(state, statuses=statuses)
 
@@ -220,15 +250,50 @@ def _apply_effect(
         statuses.pop(status_name, None)
         return replace(state, statuses=statuses)
 
+    if effect_type == "set_resource_floor":
+        resource = params.get("resource")
+        minimum = resolve_expr(params.get("min"), state, data)
+        floors = dict(state.resource_floors)
+        floors[resource] = float(minimum)
+        return replace(state, resource_floors=floors)
+
+    if effect_type == "clear_resource_floor":
+        resource = params.get("resource")
+        floors = dict(state.resource_floors)
+        floors.pop(resource, None)
+        return replace(state, resource_floors=floors)
+
     if effect_type == "schedule_effects":
         after_cases = int(params.get("after_cases", 0))
         raw_effects = params.get("effects", [])
-        effects = tuple(_coerce_effect_spec(effect) for effect in raw_effects)
+        effects = tuple(
+            _snapshot_effect(_coerce_effect_spec(effect), state, data)
+            for effect in raw_effects
+        )
         event = ScheduledEvent(
             trigger_case_index=state.case_index + after_cases,
             effects=effects,
         )
         return replace(state, scheduled_events=state.scheduled_events + (event,))
+
+    if effect_type == "schedule_recurring_effects":
+        after_cases = int(params.get("after_cases", 0))
+        every_cases = int(params.get("every_cases", 1))
+        repeat = int(params.get("repeat", 1))
+        raw_effects = params.get("effects", [])
+        effects = tuple(
+            _snapshot_effect(_coerce_effect_spec(effect), state, data)
+            for effect in raw_effects
+        )
+        events = []
+        for index in range(max(repeat, 0)):
+            trigger_case = state.case_index + after_cases + (index * every_cases)
+            events.append(
+                ScheduledEvent(trigger_case_index=trigger_case, effects=effects)
+            )
+        if not events:
+            return state
+        return replace(state, scheduled_events=state.scheduled_events + tuple(events))
 
     if effect_type == "require_next_action":
         action = str(params.get("action"))
@@ -240,6 +305,49 @@ def _apply_effect(
             required_action=action,
             required_action_penalty_effects=penalty_effects,
         )
+
+    if effect_type == "add_action_trigger":
+        trigger = _coerce_action_trigger(params, state, data)
+        return replace(state, action_triggers=state.action_triggers + (trigger,))
+
+    if effect_type == "remove_action_trigger":
+        label = params.get("label")
+        if not label:
+            return state
+        remaining = tuple(
+            trigger for trigger in state.action_triggers if trigger.label != label
+        )
+        return replace(state, action_triggers=remaining)
+
+    if effect_type == "add_encounter_trigger":
+        trigger = _coerce_encounter_trigger(params, state, data)
+        return replace(state, encounter_triggers=state.encounter_triggers + (trigger,))
+
+    if effect_type == "remove_encounter_trigger":
+        label = params.get("label")
+        if not label:
+            return state
+        remaining = tuple(
+            trigger for trigger in state.encounter_triggers if trigger.label != label
+        )
+        return replace(state, encounter_triggers=remaining)
+
+    if effect_type == "add_encounter_override":
+        override = _coerce_encounter_override(params)
+        return replace(
+            state, encounter_overrides=state.encounter_overrides + (override,)
+        )
+
+    if effect_type == "remove_encounter_override":
+        label = params.get("label")
+        if not label:
+            return state
+        remaining = tuple(
+            override
+            for override in state.encounter_overrides
+            if override.label != label
+        )
+        return replace(state, encounter_overrides=remaining)
 
     if effect_type == "modify_encounter_weights":
         modifier = EncounterModifier(
@@ -263,6 +371,45 @@ def _apply_effect(
         amount = rng.randint(min_value, max_value)
         return _update_resource(state, resource, state_delta=amount, data=data)
 
+    if effect_type == "random_exchange":
+        take_resource = params.get("take_resource")
+        give_resource = params.get("give_resource")
+        if not take_resource or not give_resource:
+            return state
+        min_value = int(resolve_expr(params.get("min"), state, data))
+        max_value = int(resolve_expr(params.get("max"), state, data))
+        if (
+            data.defaults.debt_mode == "clamp_to_zero"
+            and take_resource in NON_NEGATIVE_RESOURCES
+        ):
+            current_value = getattr(state, take_resource)
+            max_value = min(max_value, int(current_value))
+        if max_value < min_value:
+            min_value = max_value
+        amount = rng.randint(min_value, max_value)
+        updated = _update_resource(state, take_resource, state_delta=-amount, data=data)
+        return _update_resource(updated, give_resource, state_delta=amount, data=data)
+
+    if effect_type == "set_counter":
+        name = str(params.get("counter"))
+        value = resolve_expr(params.get("value"), state, data)
+        counters = dict(state.counters)
+        counters[name] = float(value)
+        return replace(state, counters=counters)
+
+    if effect_type == "add_counter":
+        name = str(params.get("counter"))
+        value = resolve_expr(params.get("amount"), state, data)
+        counters = dict(state.counters)
+        counters[name] = float(counters.get(name, 0.0) + float(value))
+        return replace(state, counters=counters)
+
+    if effect_type == "clear_counter":
+        name = str(params.get("counter"))
+        counters = dict(state.counters)
+        counters.pop(name, None)
+        return replace(state, counters=counters)
+
     if effect_type in {"noop", "raw_effect"}:
         return state
 
@@ -282,23 +429,104 @@ def _coerce_effect_spec(effect: EffectSpec | Mapping[str, Any]) -> EffectSpec:
     )
 
 
-def _update_resource(
-    state: GameState, resource: str, state_delta: float, data: JusticeData
-) -> GameState:
-    value = getattr(state, resource)
-    new_value = value + state_delta
-    if (
-        resource in NON_NEGATIVE_RESOURCES
-        and data.defaults.debt_mode == "clamp_to_zero"
-        and new_value < 0
-    ):
-        new_value = 0
-    return replace(state, **{resource: new_value})
+def _snapshot_effect(
+    effect: EffectSpec, state: GameState, data: JusticeData
+) -> EffectSpec:
+    params = _snapshot_params(effect, state, data)
+    if params is effect.params:
+        return effect
+    return replace(effect, params=params)
 
 
-def _set_resource(
+def _snapshot_params(
+    effect: EffectSpec, state: GameState, data: JusticeData
+) -> Mapping[str, Any]:
+    params = dict(effect.params)
+    if effect.type in {"add_resource", "set_resource", "multiply_resource"}:
+        key = {
+            "add_resource": "amount",
+            "set_resource": "value",
+            "multiply_resource": "factor",
+        }[effect.type]
+        params[key] = _snapshot_expr(params.get(key), state, data)
+        return params
+    if effect.type == "clamp_resource":
+        if "min" in params:
+            params["min"] = _snapshot_expr(params.get("min"), state, data)
+        if "max" in params:
+            params["max"] = _snapshot_expr(params.get("max"), state, data)
+        return params
+    if effect.type == "set_resource_floor":
+        params["min"] = _snapshot_expr(params.get("min"), state, data)
+        return params
+    if effect.type == "set_counter":
+        params["value"] = _snapshot_expr(params.get("value"), state, data)
+        return params
+    if effect.type == "add_counter":
+        params["amount"] = _snapshot_expr(params.get("amount"), state, data)
+        return params
+    return effect.params
+
+
+def _snapshot_expr(expr: Any, state: GameState, data: JusticeData) -> Any:
+    if isinstance(expr, dict) and expr.get("snapshot"):
+        return resolve_expr(expr, state, data)
+    return expr
+
+
+def _coerce_action_trigger(
+    params: Mapping[str, Any], state: GameState, data: JusticeData
+) -> ActionTrigger:
+    effects = tuple(
+        _snapshot_effect(_coerce_effect_spec(effect), state, data)
+        for effect in params.get("effects", [])
+    )
+    return ActionTrigger(
+        action=str(params.get("action", "any")),
+        npc_id=params.get("npc_id"),
+        offer_id=params.get("offer_id"),
+        remaining_uses=params.get("remaining_uses"),
+        when=params.get("when"),
+        label=params.get("label"),
+        effects=effects,
+    )
+
+
+def _coerce_encounter_trigger(
+    params: Mapping[str, Any], state: GameState, data: JusticeData
+) -> EncounterTrigger:
+    effects = tuple(
+        _snapshot_effect(_coerce_effect_spec(effect), state, data)
+        for effect in params.get("effects", [])
+    )
+    return EncounterTrigger(
+        npc_id=params.get("npc_id"),
+        offer_id=params.get("offer_id"),
+        remaining_uses=params.get("remaining_uses"),
+        when=params.get("when"),
+        label=params.get("label"),
+        effects=effects,
+    )
+
+
+def _coerce_encounter_override(params: Mapping[str, Any]) -> EncounterOverride:
+    priority = params.get("priority", 0)
+    if priority is None:
+        priority = 0
+    return EncounterOverride(
+        npc_id=params.get("npc_id"),
+        offer_id=params.get("offer_id"),
+        remaining_uses=params.get("remaining_uses"),
+        probability=params.get("probability"),
+        priority=int(priority),
+        allow_harbinger=bool(params.get("allow_harbinger", False)),
+        label=params.get("label"),
+    )
+
+
+def coerce_resource_value(
     state: GameState, resource: str, value: float, data: JusticeData
-) -> GameState:
+) -> float:
     new_value = value
     if (
         resource in NON_NEGATIVE_RESOURCES
@@ -306,6 +534,26 @@ def _set_resource(
         and new_value < 0
     ):
         new_value = 0
+    floor = state.resource_floors.get(resource)
+    if floor is not None and new_value < floor:
+        new_value = floor
+    if resource in MAIN_RESOURCES:
+        new_value = math.ceil(new_value)
+    return new_value
+
+
+def _update_resource(
+    state: GameState, resource: str, state_delta: float, data: JusticeData
+) -> GameState:
+    value = getattr(state, resource)
+    new_value = coerce_resource_value(state, resource, value + state_delta, data)
+    return replace(state, **{resource: new_value})
+
+
+def _set_resource(
+    state: GameState, resource: str, value: float, data: JusticeData
+) -> GameState:
+    new_value = coerce_resource_value(state, resource, value, data)
     return replace(state, **{resource: new_value})
 
 
@@ -378,6 +626,11 @@ def _build_numeric_context(
         "mh": state.mh,
         "dismissals": state.dismissals,
         "retirement_chests": state.retirement_chests,
+        "counters": SimpleNamespace(**state.counters),
+        "flags": _FlagAccessor(set(state.flags)),
+        "statuses": _FlagAccessor(set(state.statuses.keys())),
+        "true": True,
+        "false": False,
     }
 
     ctx = expr_util.build_numeric_context(variables, functions)
@@ -400,3 +653,11 @@ def _build_numeric_context(
 
     variables["harbinger_cost"] = harbinger_cost_value
     return case_scale_value, harbinger_cost_value, functions, variables
+
+
+class _FlagAccessor:
+    def __init__(self, values: set[str]) -> None:
+        self._values = values
+
+    def __getattr__(self, name: str) -> bool:
+        return name in self._values

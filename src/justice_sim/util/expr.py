@@ -133,6 +133,14 @@ class _FlagAccessor:
         return name in self._values
 
 
+class _CounterAccessor:
+    def __init__(self, values: Mapping[str, float]) -> None:
+        self._values = values
+
+    def __getattr__(self, name: str) -> float:
+        return float(self._values.get(name, 0.0))
+
+
 def build_predicate_context(
     *,
     case_index: int,
@@ -155,7 +163,7 @@ def build_predicate_context(
         "retirement_chests": retirement_chests,
         "flags": _FlagAccessor(flags),
         "statuses": _FlagAccessor(statuses),
-        "counters": SimpleNamespace(**counters),
+        "counters": _CounterAccessor(counters),
         "true": True,
         "false": False,
     }

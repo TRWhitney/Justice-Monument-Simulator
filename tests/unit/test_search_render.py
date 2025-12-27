@@ -1,6 +1,6 @@
 import pytest
 
-from justice_sim.models.offer import EffectSpec, OutcomeSpec
+from justice_sim.models.offer import BernoulliSpec, EffectSpec, OutcomeSpec
 from justice_sim.models.state import GameState
 from justice_sim.util.render import summarize_outcome
 from justice_sim.util.search import search_offers
@@ -38,6 +38,22 @@ def test_search_empty_query_returns_all(data_factory):
 
 
 @pytest.mark.unit
+def test_search_can_filter_by_eligible_offer_ids(data_factory):
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    eligible_ids = {"offer1"}
+    results = search_offers("", data, state, eligible_offer_ids=eligible_ids)
+    assert {result.offer.id for result in results} == {"offer1"}
+
+
+@pytest.mark.unit
 def test_search_full_text_matches_summary(data_factory):
     data = data_factory()
     state = GameState(
@@ -68,6 +84,29 @@ def test_summary_includes_raw_effect_text(data_factory):
     )
     summary = summarize_outcome(outcome, state, data)
     assert "special" in summary
+
+
+@pytest.mark.unit
+def test_summary_hides_fizarre_drink_counter(data_factory):
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    outcome = OutcomeSpec(
+        effects=(
+            EffectSpec(
+                type="add_counter",
+                params={"counter": "fizarre_drink_approves", "amount": 1},
+            ),
+        )
+    )
+    summary = summarize_outcome(outcome, state, data)
+    assert "Fizarre Drink Approves" not in summary
 
 
 @pytest.mark.unit
@@ -111,6 +150,41 @@ def test_summary_scales_by_case(data_factory):
     summary = summarize_outcome(outcome, state, data)
     assert "+4 coins" in summary
     assert "*case" not in summary
+
+
+@pytest.mark.unit
+def test_summary_includes_random_outcome_effects(data_factory):
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    outcome = OutcomeSpec(
+        random=BernoulliSpec(
+            type="bernoulli",
+            p=0.5,
+            then_effects=(
+                EffectSpec(
+                    type="add_resource",
+                    params={"resource": "coins", "amount": 1},
+                ),
+            ),
+            else_effects=(
+                EffectSpec(
+                    type="add_resource",
+                    params={"resource": "pop", "amount": 2},
+                ),
+            ),
+        )
+    )
+    summary = summarize_outcome(outcome, state, data)
+    assert "+1 coins" in summary
+    assert "+2 pop" in summary
+    assert "OR" in summary
 
 
 @pytest.mark.unit
@@ -160,4 +234,19 @@ def test_search_npc_and_effect_terms(data_factory):
         retirement_chests=0,
     )
     results = search_offers("#npc $pop", data, state)
+    assert [result.offer.id for result in results] == ["offer1"]
+
+
+@pytest.mark.unit
+def test_search_npc_with_underscores(data_factory):
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    results = search_offers("#npc_one", data, state)
     assert [result.offer.id for result in results] == ["offer1"]

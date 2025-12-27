@@ -95,6 +95,7 @@ class HarbingerRule:
     offer_id: str
     cadence_modulus: int
     cost_expr: str
+    offer_pool: tuple[str, ...] = ()
     on_unpaid_effects: tuple[EffectSpec, ...] = ()
 
 
@@ -268,6 +269,7 @@ def _parse_special_rules(data: Mapping[str, Any]) -> SpecialRules:
     )
     harbinger = HarbingerRule(
         offer_id=str(harbinger_data.get("offer_id")),
+        offer_pool=tuple(harbinger_data.get("offer_pool", []) or ()),
         cadence_modulus=int(harbinger_data.get("cadence_modulus", 5)),
         cost_expr=str(harbinger_data.get("cost_expr")),
         on_unpaid_effects=tuple(

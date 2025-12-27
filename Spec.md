@@ -114,10 +114,12 @@ JusticeMonumentSimulator/
 │     ├─ data/
 │     │  ├─ builtin/
 │     │  │  ├─ justice_data.json
+│     │  │  ├─ suggested_rules.json
 │     │  │  └─ images/
 │     │  │     └─ (pngs for npcs and icons...)
 │     │  └─ schema/
-│     │     └─ justice_data.schema.json
+│     │     ├─ justice_data.schema.json
+│     │     └─ suggested_rules.schema.json
 │     ├─ engine/
 │     │  ├─ __init__.py
 │     │  ├─ reducer.py
@@ -545,3 +547,23 @@ CLI must reuse the same `OfferSearch` code and `Planner` engine as GUI.
 - Keep engine deterministic under a fixed RNG seed.
 - Avoid tight coupling between UI and engine.
 - Design effect system to be future-proof: new effects should be addable without rewriting planner/UI.
+
+# Suggested rules
+- Notes: Rules that say "Always", "Never", or "Only" are enforced as hard constraints; "Prefer" rules are soft biases.
+- [x] Timmy: Stinky Head and Poopy Head - It's a lose-lose, but rejecting adds to Harbinger/Timmy interaction so it should always, if possible, be approved
+- [x] Timmy: Ice Cream - Prefer approving if not in imminent danger
+- [x] Reanimated Hand: Bail Me Out - Prefer rejecting unless very far ahead of the curve in coins (determine ahead of the curve based on how much money 3x (x is for the case number formula) is compared to how many coins you have)
+- [x] Reanimated Hand: Waive the Fine - Prefer accepting unless low on coins (behind the curve in coins using money 2x compared to how many coins you have)
+- [x] Reanimated Hand: Chest Heist - Always approve this unless cannot afford.
+- [x] Head Honcho: Hedgefund - Never approve after case 15, prefer not to approve between 10-15, no bias prior to case 10.
+- [x] Head Honcho: 15-Day Return - Only approve if very far ahead of the curve (compare money 5x to how many coins you have)
+- [x] Head Honcho: Pop Futures - Only reject if you're far ahead of the curve (compared money 3x to how many coins you have)
+- [x] Head Honcho: Life Insurance - Never approve unless on 1 health
+- [x] Head Honcho: Reaper Contract - Never approve unless at 1 or less dismissals, in which case no bias
+- [x] Mister Bribe: Approval Lock - Never approve if within 3 cases of a Harbinger (getting gratefulbinger with this is certain death)
+- [x] Scripticus: Promise Me - Never approve if the next case is a Harbinger
+- [x] Cool Bird: Sanity Flip - Prefer not to approve at low health
+- [x] Fizzare Drink: All (but Chest Magnet) - Prefer to approve fizarre deals (except no bias on Chest Magnet)
+- [x] Retirement Chester: Vitality Trade - Never approve if over 1 health
+- [x] Retirement Chester: Double Dip - Prefer not to approve
+- [x] Retirement Chester: Jackpot Boost - Prefer not to approve

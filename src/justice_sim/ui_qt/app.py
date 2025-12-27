@@ -7,7 +7,7 @@ import sys
 
 from PySide6 import QtCore, QtWidgets
 
-from justice_sim.config import load_builtin_data
+from justice_sim.config import load_builtin_data, load_builtin_suggested_rules
 from justice_sim.ui_qt.main_window import MainWindow
 
 
@@ -34,7 +34,8 @@ def main() -> int:
     app = create_app()
     app._sigint_timer = install_sigint_handler(app)
     data = load_builtin_data()
-    window = MainWindow(data)
+    suggested_rules = load_builtin_suggested_rules(data)
+    window = MainWindow(data, suggested_rules=suggested_rules)
     window.show()
     return app.exec()
 

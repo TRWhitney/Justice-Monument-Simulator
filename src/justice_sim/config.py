@@ -9,7 +9,12 @@ from typing import Any, Mapping
 import jsonschema
 
 from justice_sim.models.offer import JusticeData
-from justice_sim.util.validation import ValidationError, validate_data
+from justice_sim.models.suggested_rules import SuggestedRules
+from justice_sim.util.validation import (
+    ValidationError,
+    validate_data,
+    validate_suggested_rules,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +23,17 @@ BUILTIN_DATA_PATH = (
 )
 SCHEMA_PATH = (
     REPO_ROOT / "src" / "justice_sim" / "data" / "schema" / "justice_data.schema.json"
+)
+SUGGESTED_RULES_PATH = (
+    REPO_ROOT / "src" / "justice_sim" / "data" / "builtin" / "suggested_rules.json"
+)
+SUGGESTED_RULES_SCHEMA_PATH = (
+    REPO_ROOT
+    / "src"
+    / "justice_sim"
+    / "data"
+    / "schema"
+    / "suggested_rules.schema.json"
 )
 
 
@@ -57,3 +73,25 @@ def load_data(
 
 def load_builtin_data() -> JusticeData:
     return load_data(BUILTIN_DATA_PATH)
+
+
+def load_suggested_rules(
+    rules_path: Path,
+    *,
+    data: JusticeData,
+    schema_path: Path | None = None,
+    validate_schema: bool = True,
+) -> SuggestedRules:
+    rules = _load_json(rules_path)
+    if validate_schema:
+        _validate_schema(rules, schema_path or SUGGESTED_RULES_SCHEMA_PATH)
+    errors = validate_suggested_rules(
+        rules, offer_ids=(offer.id for offer in data.offers)
+    )
+    if errors:
+        raise ValidationError("\n".join(errors))
+    return SuggestedRules.from_dict(rules)
+
+
+def load_builtin_suggested_rules(data: JusticeData) -> SuggestedRules:
+    return load_suggested_rules(SUGGESTED_RULES_PATH, data=data)

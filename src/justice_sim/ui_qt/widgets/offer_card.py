@@ -6,7 +6,7 @@ import html
 import math
 from pathlib import Path
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -47,6 +47,10 @@ class OfferCard(QtWidgets.QFrame):
         effect_highlight_terms: Sequence[str] | None = None,
         npc_highlight: str | None = None,
         action_filter: str | None = None,
+        extra_effects: Mapping[
+            str, Sequence[tuple[str, Sequence[EffectSpec], GameState]]
+        ]
+        | None = None,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -56,6 +60,7 @@ class OfferCard(QtWidgets.QFrame):
         self._effect_highlight_terms = list(effect_highlight_terms or [])
         self._npc_highlight = npc_highlight
         self._action_filter = action_filter
+        self._extra_effects = extra_effects or {}
         self.setObjectName("offer_card")
         self.setProperty("selected", False)
         self.setStyleSheet(
@@ -196,9 +201,13 @@ class OfferCard(QtWidgets.QFrame):
         stack.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
         for action, outcome, summary in sections:
             icon = _build_action_icon_label(_resolve_icon_path(f"{action}.png"), action)
+            tokens = _extract_effect_tokens(outcome, self._data, self._state)
+            extra = self._extra_effects.get(action, ())
+            if extra:
+                tokens = _append_extra_effects(tokens, extra, self._data)
             effects = _build_effects_widget(
                 summary,
-                _extract_effect_tokens(outcome, self._data, self._state),
+                tokens,
                 action,
                 _merge_terms(self._highlight_terms, self._effect_highlight_terms),
             )
@@ -372,6 +381,23 @@ def _extract_effect_tokens(
             )
         )
     return tokens
+
+
+def _append_extra_effects(
+    tokens: list[tuple[str, str] | tuple[str, str, str] | tuple[str, str, str, str]],
+    extras: Sequence[tuple[str, Sequence[EffectSpec], GameState]],
+    data: JusticeData,
+) -> list[tuple[str, str] | tuple[str, str, str] | tuple[str, str, str, str]]:
+    combined = list(tokens)
+    for label, effects, state in extras:
+        filtered = [
+            effect for effect in effects if _effect_applies(effect, state, data)
+        ]
+        effect_tokens = _tokens_from_effects(filtered, data, state)
+        if not effect_tokens:
+            continue
+        combined.extend(_prefixed_tokens(f"{label}: ", effect_tokens, combined))
+    return combined
 
 
 def _is_deferred_effect(effect_type: str) -> bool:

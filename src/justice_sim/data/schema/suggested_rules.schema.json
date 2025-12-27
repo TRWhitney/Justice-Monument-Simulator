@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Suggested rules schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "rules"],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "offer_ids"],
+        "anyOf": [
+          {
+            "required": ["biases"]
+          },
+          {
+            "required": ["constraints"]
+          }
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "offer_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "biases": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["action", "amount"],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": ["approve", "reject", "dismiss"]
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "when": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "constraints": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["action", "mode"],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": ["approve", "reject", "dismiss"]
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": ["forbid", "require"]
+                },
+                "when": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

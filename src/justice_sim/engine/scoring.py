@@ -11,18 +11,34 @@ from justice_sim.models.state import GameState
 
 @dataclass(frozen=True)
 class UtilityWeights:
-    w_chests: float = 10.0
-    w_death: float = 100.0
-    w_low_mh: float = 5.0
-    w_insolvency: float = 20.0
-    w_resources: float = 0.5
+    w_chests: float = 20.0
+    w_death: float = 150.0
+    w_low_mh: float = 8.0
+    w_insolvency: float = 60.0
+    w_resources: float = 0.1
+    w_dismissals: float = 3.0
+    w_progress: float = 0.5
     mh_threshold: float = 2.0
 
 
 _PRESET_WEIGHTS = {
-    "safe": UtilityWeights(w_death=200.0, w_insolvency=40.0, w_resources=0.3),
+    "safe": UtilityWeights(
+        w_death=220.0,
+        w_low_mh=12.0,
+        w_insolvency=90.0,
+        w_resources=0.05,
+        w_dismissals=3.5,
+        w_progress=0.8,
+    ),
     "balanced": UtilityWeights(),
-    "greedy": UtilityWeights(w_death=60.0, w_insolvency=10.0, w_resources=1.0),
+    "greedy": UtilityWeights(
+        w_death=90.0,
+        w_low_mh=5.0,
+        w_insolvency=30.0,
+        w_resources=0.2,
+        w_dismissals=2.0,
+        w_progress=0.3,
+    ),
 }
 
 
@@ -34,7 +50,7 @@ def utility(state: GameState, data: JusticeData, weights: UtilityWeights) -> flo
     death_penalty = 1.0 if state.mh <= 0 else 0.0
     low_mh_penalty = max(0.0, weights.mh_threshold - state.mh)
     insolvency_penalty = 1.0 if _next_harbinger_unpayable(state, data) else 0.0
-    resources_score = state.coins + state.pop + state.dismissals
+    resources_score = state.coins + state.pop
 
     return (
         weights.w_chests * state.retirement_chests
@@ -42,11 +58,13 @@ def utility(state: GameState, data: JusticeData, weights: UtilityWeights) -> flo
         - weights.w_low_mh * low_mh_penalty
         - weights.w_insolvency * insolvency_penalty
         + weights.w_resources * resources_score
+        + weights.w_dismissals * state.dismissals
+        + weights.w_progress * state.case_index
     )
 
 
 def _next_harbinger_unpayable(state: GameState, data: JusticeData) -> bool:
-    if state.dismissals > 0:
+    if state.dismissals > 0 and "cannot_dismiss_harbinger" not in state.statuses:
         return False
     modulus = data.special_rules.harbinger.cadence_modulus
     remainder = state.case_index % modulus

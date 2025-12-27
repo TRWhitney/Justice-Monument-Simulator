@@ -1,0 +1,260 @@
+{
+  "version": "suggested_rules",
+  "metadata": {
+    "notes": "Community best-practice biases for specific offers. Biases are soft preferences; constraints are hard rules."
+  },
+  "rules": [
+    {
+      "id": "timmy_stinky_poopy_approve",
+      "offer_ids": [
+        "little_timmy_hewwo_owo_can_u_tell_everyone_they_are_s_239bb3fb",
+        "little_timmy_your_a_big_poopy_head_fr_fr_you_stink_da_f73c88ad"
+      ],
+      "constraints": [
+        {
+          "action": "approve",
+          "mode": "require"
+        }
+      ],
+      "notes": "Rejecting worsens the Timmy/Harbinger interaction; community consensus is to approve if possible."
+    },
+    {
+      "id": "timmy_ice_cream_prefer_approve",
+      "offer_ids": [
+        "little_timmy_musical_theme_plays_ooh_ohh_teh_ice_cwea_6f685625",
+        "little_timmy_musical_theme_plays_ooh_ohh_teh_ice_cwea_52004749",
+        "little_timmy_musical_theme_plays_ooh_ohh_teh_ice_cwea_a9700eed",
+        "little_timmy_musical_theme_plays_nonono_i_cant_eat_mo_05a5a624"
+      ],
+      "biases": [
+        {
+          "action": "approve",
+          "amount": 5,
+          "when": "mh > 1"
+        }
+      ],
+      "notes": "Prefer approve unless in imminent danger (low health)."
+    },
+    {
+      "id": "reanimated_hand_bail_me_out_prefer_reject",
+      "offer_ids": [
+        "reanimated_hand_good_going_judge_your_stupid_laws_just_g_7165cf9b"
+      ],
+      "biases": [
+        {
+          "action": "reject",
+          "amount": 5,
+          "when": "coins < 3 * case_scale"
+        }
+      ],
+      "notes": "Prefer reject unless very far ahead of the curve in coins."
+    },
+    {
+      "id": "reanimated_hand_waive_fine_prefer_approve",
+      "offer_ids": [
+        "reanimated_hand_i_got_fined_x_coins_by_your_laws_for_usi_aef10241"
+      ],
+      "biases": [
+        {
+          "action": "approve",
+          "amount": 5,
+          "when": "coins >= 2 * case_scale"
+        },
+        {
+          "action": "approve",
+          "amount": -5,
+          "when": "coins < 2 * case_scale"
+        }
+      ],
+      "notes": "Prefer accept unless low on coins."
+    },
+    {
+      "id": "reanimated_hand_chest_heist_approve",
+      "offer_ids": [
+        "reanimated_hand_you_look_richer_than_the_guy_i_just_stol_b9c031da"
+      ],
+      "constraints": [
+        {
+          "action": "approve",
+          "mode": "require"
+        }
+      ],
+      "notes": "Community consensus is to approve unless unaffordable."
+    },
+    {
+      "id": "head_honcho_hedgefund_timing",
+      "offer_ids": [
+        "head_honcho_of_big_biz_llc_good_afternoon_i_am_seeking_invesetment__482cacba"
+      ],
+      "biases": [
+        {
+          "action": "approve",
+          "amount": -5,
+          "when": "case_index >= 10 and case_index <= 15"
+        }
+      ],
+      "constraints": [
+        {
+          "action": "approve",
+          "mode": "forbid",
+          "when": "case_index >= 16"
+        }
+      ],
+      "notes": "Avoid approving later in a run; strongest avoid after case 15."
+    },
+    {
+      "id": "head_honcho_15_day_return_curve",
+      "offer_ids": [
+        "head_honcho_of_big_biz_llc_greetings_i_come_to_you_today_seeking_a__55d424ba"
+      ],
+      "constraints": [
+        {
+          "action": "approve",
+          "mode": "forbid",
+          "when": "coins < 8 * case_scale"
+        }
+      ],
+      "notes": "Only approve when very far ahead of the coin curve."
+    },
+    {
+      "id": "head_honcho_pop_futures_curve",
+      "offer_ids": [
+        "head_honcho_of_big_biz_llc_greetings_i_come_to_you_today_seeking_a__7c4eb020"
+      ],
+      "constraints": [
+        {
+          "action": "reject",
+          "mode": "forbid",
+          "when": "coins < 5 * case_scale"
+        }
+      ],
+      "notes": "Only reject when far ahead of the coin curve."
+    },
+    {
+      "id": "head_honcho_life_insurance_low_mh",
+      "offer_ids": [
+        "head_honcho_of_big_biz_llc_you_aren_t_looking_too_well_my_friend_pe_82709538"
+      ],
+      "constraints": [
+        {
+          "action": "approve",
+          "mode": "forbid",
+          "when": "mh > 1"
+        }
+      ],
+      "notes": "Never approve unless on 1 health."
+    },
+    {
+      "id": "head_honcho_reaper_contract_dismissals",
+      "offer_ids": [
+        "head_honcho_of_big_biz_llc_greetings_are_you_interested_in_making_s_cba0f9d6"
+      ],
+      "constraints": [
+        {
+          "action": "approve",
+          "mode": "forbid",
+          "when": "dismissals > 1"
+        }
+      ],
+      "notes": "Never approve unless at 1 or fewer dismissals."
+    },
+    {
+      "id": "mister_bribe_approval_lock_harbinger_window",
+      "offer_ids": [
+        "mister_bribe_hey_buddy_how_s_the_grind_going_look_i_g_35938b26"
+      ],
+      "constraints": [
+        {
+          "action": "approve",
+          "mode": "forbid",
+          "when": "harbinger_in >= 1 and harbinger_in <= 3"
+        }
+      ],
+      "notes": "Never approve close to a Harbinger case."
+    },
+    {
+      "id": "scripticus_promise_me_next_harbinger",
+      "offer_ids": [
+        "scripticus_hey_it_s_me_everyone_s_favorite_wiggly_p_39c2f421"
+      ],
+      "constraints": [
+        {
+          "action": "approve",
+          "mode": "forbid",
+          "when": "harbinger_in == 1"
+        }
+      ],
+      "notes": "Never approve if the next case is Harbinger."
+    },
+    {
+      "id": "cool_bird_sanity_flip_low_health",
+      "offer_ids": [
+        "cool_bird_sup_heads_you_the_man_and_get_2_mental_h_80b6c9c3"
+      ],
+      "biases": [
+        {
+          "action": "approve",
+          "amount": -5,
+          "when": "mh <= 2"
+        }
+      ],
+      "notes": "Prefer not to approve at low health."
+    },
+    {
+      "id": "fizarre_drink_prefer_approve",
+      "offer_ids": [
+        "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_1f67196f",
+        "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_38ef5cd7",
+        "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_4b3017f9",
+        "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_d8c926e1"
+      ],
+      "biases": [
+        {
+          "action": "approve",
+          "amount": 5
+        }
+      ],
+      "notes": "Prefer approving Fizarre deals (excluding Chest Magnet)."
+    },
+    {
+      "id": "retirement_chester_vitality_trade_health",
+      "offer_ids": [
+        "retirement_chester_retirement_is_everything_trust_me_i_d_kn_d1759597"
+      ],
+      "constraints": [
+        {
+          "action": "approve",
+          "mode": "forbid",
+          "when": "mh > 1"
+        }
+      ],
+      "notes": "Never approve unless at 1 health."
+    },
+    {
+      "id": "retirement_chester_double_dip_avoid",
+      "offer_ids": [
+        "retirement_chester_retirement_is_the_top_priority_trust_me__b6355d05"
+      ],
+      "biases": [
+        {
+          "action": "approve",
+          "amount": -5
+        }
+      ],
+      "notes": "Prefer not to approve."
+    },
+    {
+      "id": "retirement_chester_jackpot_boost_avoid",
+      "offer_ids": [
+        "retirement_chester_have_you_hit_the_lottery_are_you_looking_427a1e99"
+      ],
+      "biases": [
+        {
+          "action": "approve",
+          "amount": -5
+        }
+      ],
+      "notes": "Prefer not to approve."
+    }
+  ]
+}

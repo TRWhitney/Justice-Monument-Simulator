@@ -7,7 +7,7 @@ from pathlib import Path
 from prompt_toolkit import prompt
 from rich.console import Console
 
-from justice_sim.config import load_builtin_data
+from justice_sim.config import load_builtin_data, load_builtin_suggested_rules
 from justice_sim.engine.reducer import ActionNotAllowed, apply_action
 from justice_sim.engine.rng import Rng
 from justice_sim.models.state import GameState
@@ -62,7 +62,8 @@ class RunSession:
 def main() -> int:
     console = Console()
     data = load_builtin_data()
-    planner = RolloutPlanner.from_defaults(data)
+    suggested_rules = load_builtin_suggested_rules(data)
+    planner = RolloutPlanner.from_defaults(data, suggested_rules=suggested_rules)
     session = RunSession(data)
 
     console.print("Justice Monument Simulator (CLI)")

@@ -8,10 +8,10 @@
     "default_probability_format": "unit",
     "encounter_model_default": "uniform",
     "planner_defaults": {
-      "horizon_cases": 20,
-      "rollouts_per_action": 5000,
-      "adaptive_rollouts": true,
-      "adaptive_rollouts_max": 20000,
+      "horizon_cases": 12,
+      "rollouts_per_action": 200,
+      "adaptive_rollouts": false,
+      "adaptive_rollouts_max": 1000,
       "risk_preset": "balanced"
     }
   },
@@ -358,6 +358,13 @@
       ],
       "approve": {
         "effects": [
+          {
+            "type": "add_resource",
+            "params": {
+              "resource": "mh",
+              "amount": -1
+            }
+          },
           {
             "type": "add_resource",
             "params": {
@@ -1667,13 +1674,6 @@
       ],
       "approve": {
         "effects": [
-          {
-            "type": "add_resource",
-            "params": {
-              "resource": "mh",
-              "amount": -1
-            }
-          },
           {
             "type": "add_resource",
             "params": {

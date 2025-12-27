@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+import threading
+import time
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -32,6 +34,7 @@ from justice_sim.models.offer import (
     OfferSpec,
     OutcomeSpec,
 )
+from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.models.state import GameState
 from justice_sim.persistence.logs import SessionLog
 from justice_sim.persistence.runs import RunState, load_run_state, save_run_state
@@ -315,32 +318,31 @@ class _OutcomeChoiceDialog(QtWidgets.QDialog):
         self.accept()
 
 
-class PlannerWorker(QtCore.QObject):
-    finished = QtCore.Signal(object, int)
-
-    def __init__(
-        self,
-        planner: RolloutPlanner,
-        state: GameState,
-        offer: OfferSpec,
-        generation: int,
-    ) -> None:
-        super().__init__()
-        self.planner = planner
-        self.state = state
-        self.offer = offer
-        self.generation = generation
-
-    @QtCore.Slot()
-    def run(self) -> None:
-        recommendation = self.planner.recommend(self.state, self.offer)
-        self.finished.emit(recommendation, self.generation)
+class _PlannerCancelled(RuntimeError):
+    """Raised inside the planner thread when a newer request supersedes it."""
 
 
 class GuiSession:
     def __init__(self, data: JusticeData) -> None:
         self.data = data
-        self.state = GameState(
+        self.state = self._build_starting_state()
+        self.rng = Rng()
+        self.log = SessionLog()
+
+    def reset(self, *, reseed: bool = True) -> None:
+        previous_seed = self.rng.seed
+        self.state = self._build_starting_state()
+        self.log = SessionLog()
+        if reseed:
+            new_rng = Rng()
+            while new_rng.seed == previous_seed:
+                new_rng = Rng()
+            self.rng = new_rng
+        else:
+            self.rng = Rng(previous_seed)
+
+    def _build_starting_state(self) -> GameState:
+        return GameState(
             case_index=1,
             coins=5,
             pop=3,
@@ -348,8 +350,6 @@ class GuiSession:
             dismissals=0,
             retirement_chests=0,
         )
-        self.rng = Rng()
-        self.log = SessionLog()
 
     def apply(self, offer: OfferSpec, action: str) -> None:
         pre_state = self.state
@@ -394,16 +394,42 @@ class GuiSession:
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, data: JusticeData) -> None:
+    planner_progress_signal = QtCore.Signal()
+    planner_progress_value_signal = QtCore.Signal(int)
+
+    def __init__(
+        self, data: JusticeData, suggested_rules: SuggestedRules | None = None
+    ) -> None:
         super().__init__()
         self.data = data
         self.session = GuiSession(data)
-        self.planner = RolloutPlanner.from_defaults(data)
+        self.planner = RolloutPlanner.from_defaults(
+            data, suggested_rules=suggested_rules
+        )
         self.encounter_model = UniformEncounterModel()
         self.current_offer: OfferSpec | None = None
         self.current_recommendation: PlannerRecommendation | None = None
         self._planner_generation = 0
-        self._planner_thread: QtCore.QThread | None = None
+        self._planner_thread: threading.Thread | None = None
+        self._planner_cancel_event: threading.Event | None = None
+        self._planner_result_lock = threading.Lock()
+        self._planner_result_generation: int | None = None
+        self._planner_result: PlannerRecommendation | None = None
+        self._planner_result_error: str | None = None
+        self._planner_result_cancelled = False
+        self._planner_progress_lock = threading.Lock()
+        self._planner_progress_value = 0
+        self._planner_progress_total_value: int | None = None
+        self._planner_progress_timer = QtCore.QTimer(self)
+        self._planner_progress_timer.setInterval(125)
+        self._planner_progress_timer.timeout.connect(self._tick_planner_progress)
+        self._planner_progress_pending = False
+        self.planner_progress_signal.connect(
+            self._tick_planner_progress, QtCore.Qt.ConnectionType.QueuedConnection
+        )
+        self.planner_progress_value_signal.connect(
+            self._on_planner_progress_value, QtCore.Qt.ConnectionType.QueuedConnection
+        )
         self._dark_mode = False
         self._auto_offer_id: str | None = None
         self._auto_offer_case: int | None = None
@@ -454,27 +480,55 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rollouts_spin.setValue(self.planner.config.rollouts_per_action)
         self.rollouts_spin.valueChanged.connect(self._update_planner_settings)
 
-        self.full_simulate_checkbox = QtWidgets.QCheckBox("Full simulate")
-        self.full_simulate_checkbox.setChecked(False)
-        self.full_simulate_checkbox.setToolTip(
-            "When enabled, random outcomes are rolled automatically."
+        self._sim_mode = "mid"
+        self.sim_full_radio = QtWidgets.QRadioButton("Full")
+        self.sim_mid_radio = QtWidgets.QRadioButton("Mid")
+        self.sim_none_radio = QtWidgets.QRadioButton("None")
+        self.sim_mid_radio.setChecked(True)
+        self.sim_full_radio.setToolTip(
+            "Auto-roll random outcomes and auto-pick offers."
         )
-        self.full_simulate_checkbox.toggled.connect(self._on_full_simulate_toggled)
+        self.sim_mid_radio.setToolTip(
+            "Manual random outcomes with recommendations enabled."
+        )
+        self.sim_none_radio.setToolTip(
+            "Manual outcomes and no recommendations or simulations."
+        )
+        self.sim_full_radio.toggled.connect(
+            lambda checked: self._on_sim_mode_changed("full", checked)
+        )
+        self.sim_mid_radio.toggled.connect(
+            lambda checked: self._on_sim_mode_changed("mid", checked)
+        )
+        self.sim_none_radio.toggled.connect(
+            lambda checked: self._on_sim_mode_changed("none", checked)
+        )
+        sim_mode_row = QtWidgets.QHBoxLayout()
+        sim_mode_row.setSpacing(8)
+        sim_mode_row.addWidget(self.sim_full_radio)
+        sim_mode_row.addWidget(self.sim_mid_radio)
+        sim_mode_row.addWidget(self.sim_none_radio)
+        sim_mode_container = QtWidgets.QWidget()
+        sim_mode_container.setLayout(sim_mode_row)
 
         settings_group = QtWidgets.QGroupBox("Planner Settings")
         settings_layout = QtWidgets.QFormLayout(settings_group)
         settings_layout.addRow("Risk", self.risk_combo)
         settings_layout.addRow("Horizon", self.horizon_spin)
         settings_layout.addRow("Rollouts", self.rollouts_spin)
-        settings_layout.addRow("Full simulate", self.full_simulate_checkbox)
+        settings_layout.addRow("Sim Mode", sim_mode_container)
         left_column.addWidget(settings_group)
 
         self.import_button = QtWidgets.QPushButton("Import Run")
         self.export_button = QtWidgets.QPushButton("Export Run")
+        self.reset_button = QtWidgets.QPushButton("Reset Run")
+        self.reset_button.setObjectName("reset_run_button")
         self.import_button.clicked.connect(self._import_run)
         self.export_button.clicked.connect(self._export_run)
+        self.reset_button.clicked.connect(self._reset_run)
         left_column.addWidget(self.import_button)
         left_column.addWidget(self.export_button)
+        left_column.addWidget(self.reset_button)
 
         self.toast_area = ToastArea()
         left_column.addWidget(self.toast_area)
@@ -503,6 +557,34 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dismiss_button.clicked.connect(lambda: self._apply_action("dismiss"))
         self.best_button.clicked.connect(self._apply_best)
 
+        hotkeys = {
+            "approve": "Ctrl+Shift+A",
+            "reject": "Ctrl+Shift+R",
+            "dismiss": "Ctrl+Shift+D",
+            "best": "Ctrl+Shift+B",
+            "undo": "Ctrl+Z",
+        }
+        self.approve_button.setText(f"Approve ({hotkeys['approve']})")
+        self.reject_button.setText(f"Reject ({hotkeys['reject']})")
+        self.dismiss_button.setText(f"Dismiss ({hotkeys['dismiss']})")
+        self.best_button.setText(f"Apply Recommended ({hotkeys['best']})")
+        self._shortcuts: list[QtGui.QShortcut] = []
+        self._shortcuts.append(
+            self._make_shortcut(
+                hotkeys["approve"], lambda: self._apply_action("approve")
+            )
+        )
+        self._shortcuts.append(
+            self._make_shortcut(hotkeys["reject"], lambda: self._apply_action("reject"))
+        )
+        self._shortcuts.append(
+            self._make_shortcut(
+                hotkeys["dismiss"], lambda: self._apply_action("dismiss")
+            )
+        )
+        self._shortcuts.append(self._make_shortcut(hotkeys["best"], self._apply_best))
+        self._shortcuts.append(self._make_shortcut(hotkeys["undo"], self._undo))
+
         right_column.addWidget(self.approve_button)
         right_column.addWidget(self.reject_button)
         right_column.addWidget(self.dismiss_button)
@@ -511,6 +593,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.log_panel = LogPanel(data)
         self.log_panel.undo_requested.connect(self._undo)
+        self.log_panel.undo_button.setText(f"Undo ({hotkeys['undo']})")
         right_column.addWidget(self.log_panel)
 
         self.theme_toggle = QtWidgets.QToolButton(self)
@@ -526,6 +609,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._apply_theme(self._dark_mode)
         self.title_bar.set_maximized(self.isMaximized())
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
         self._refresh()
 
     def _refresh(self) -> None:
@@ -534,18 +620,68 @@ class MainWindow(QtWidgets.QMainWindow):
         self.state_panel.set_adjust_enabled(not self.session.log.entries)
         self.log_panel.update_log(self.session.log)
         self.offer_search.set_auto_offer_id(self._auto_offer_id)
-        self.offer_search.set_show_all_visible(
-            not self.full_simulate_checkbox.isChecked()
-        )
+        self.offer_search.set_show_all_visible(self._sim_mode != "full")
         self.offer_search.update_state(self.session.state, preserve_scroll=True)
         self._update_action_controls()
-        if self.current_recommendation:
+        if self._planner_progress_timer.isActive():
+            self._tick_planner_progress()
+        elif self.current_recommendation:
             self.suggestion_panel.update_recommendation(self.current_recommendation)
 
     def changeEvent(self, event: QtCore.QEvent) -> None:
         if event.type() == QtCore.QEvent.Type.WindowStateChange:
             self.title_bar.set_maximized(self.isMaximized())
         super().changeEvent(event)
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if event.type() == QtCore.QEvent.Type.KeyPress and isinstance(
+            event, QtGui.QKeyEvent
+        ):
+            if self._should_focus_search_on_keypress(obj, event):
+                if self.offer_search.focus_search_input(event.text()):
+                    event.accept()
+                    return True
+        return super().eventFilter(obj, event)
+
+    def _should_focus_search_on_keypress(
+        self, obj: QtCore.QObject, event: QtGui.QKeyEvent
+    ) -> bool:
+        if not self.isActiveWindow():
+            return False
+        active_window = QtWidgets.QApplication.activeWindow()
+        if active_window is not None and active_window is not self:
+            return False
+        if isinstance(obj, QtWidgets.QWidget):
+            if obj is not self and not self.isAncestorOf(obj):
+                return False
+        focus_widget = self.focusWidget()
+        if focus_widget is not None and self._is_input_widget(focus_widget):
+            return False
+        modifiers = event.modifiers()
+        if modifiers & (
+            QtCore.Qt.KeyboardModifier.ControlModifier
+            | QtCore.Qt.KeyboardModifier.AltModifier
+            | QtCore.Qt.KeyboardModifier.MetaModifier
+        ):
+            return False
+        text = event.text()
+        if not text or not text.strip():
+            return False
+        if not text.isprintable():
+            return False
+        return self.offer_search.can_accept_typed_input()
+
+    def _is_input_widget(self, widget: QtWidgets.QWidget) -> bool:
+        return isinstance(
+            widget,
+            (
+                QtWidgets.QLineEdit,
+                QtWidgets.QTextEdit,
+                QtWidgets.QPlainTextEdit,
+                QtWidgets.QAbstractSpinBox,
+                QtWidgets.QComboBox,
+            ),
+        )
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
@@ -561,10 +697,28 @@ class MainWindow(QtWidgets.QMainWindow):
             self.theme_toggle.setToolTip("Light theme")
         self._apply_theme(self._dark_mode)
 
-    def _on_full_simulate_toggled(self, checked: bool) -> None:
+    def _on_sim_mode_changed(self, mode: str, checked: bool) -> None:
         if not checked:
+            return
+        previous = self._sim_mode
+        if previous == mode:
+            return
+        self._sim_mode = mode
+        if previous == "full" and mode != "full":
             self._auto_offer_id = None
             self._auto_offer_case = None
+        if mode == "none":
+            self._stop_planner_thread()
+            self.current_recommendation = None
+            self._clear_recommendation_ui()
+        elif self.current_offer:
+            self.current_recommendation = None
+            self.suggestion_panel.best_label.setText("Calculating...")
+            self.suggestion_panel.metrics_label.setText("")
+            self.suggestion_panel.set_calculating(
+                True, self._planner_progress_total(self.current_offer)
+            )
+            self._start_planner(self.current_offer)
         self._refresh()
 
     def _apply_theme(self, dark: bool) -> None:
@@ -651,17 +805,29 @@ class MainWindow(QtWidgets.QMainWindow):
             geo.height() - grip_margin - self._size_grip.height(),
         )
 
+    def _make_shortcut(self, sequence: str, handler: callable) -> QtGui.QShortcut:
+        shortcut = QtGui.QShortcut(QtGui.QKeySequence(sequence), self)
+        shortcut.setContext(QtCore.Qt.ShortcutContext.WindowShortcut)
+        shortcut.activated.connect(handler)
+        return shortcut
+
     def _on_offer_selected(self, offer: OfferSpec | None) -> None:
         if offer is None:
             self.current_offer = None
             self.current_recommendation = None
             self._stop_planner_thread()
-            self.suggestion_panel.best_label.setText("No recommendation")
-            self.suggestion_panel.metrics_label.setText("")
+            self._clear_recommendation_ui()
             self._update_action_controls()
             return
         self.current_offer = offer
+        self.current_recommendation = None
         self._update_action_controls()
+        if self._sim_mode == "none":
+            self._clear_recommendation_ui()
+            return
+        self.suggestion_panel.best_label.setText("Calculating...")
+        self.suggestion_panel.metrics_label.setText("")
+        self.suggestion_panel.set_calculating(True, self._planner_progress_total(offer))
         self._start_planner(offer)
 
     def _start_planner(self, offer: OfferSpec) -> None:
@@ -669,14 +835,50 @@ class MainWindow(QtWidgets.QMainWindow):
         generation = self._planner_generation
         self._stop_planner_thread()
 
-        thread = QtCore.QThread()
-        worker = PlannerWorker(self.planner, self.session.state, offer, generation)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(self._on_planner_finished)
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
+        total = self._reset_planner_progress(offer)
+        with self._planner_result_lock:
+            self._planner_result_generation = None
+            self._planner_result = None
+            self._planner_result_error = None
+            self._planner_result_cancelled = False
+        cancel_event = threading.Event()
+        self._planner_cancel_event = cancel_event
+        progress_count = 0
+        progress_last_emit_time = 0.0
+
+        def progress(delta: int) -> None:
+            nonlocal progress_count, progress_last_emit_time
+            if cancel_event.is_set():
+                raise _PlannerCancelled()
+            self._increment_planner_progress(delta)
+            progress_count += delta
+            if total is None or total <= 0:
+                return
+            now = time.monotonic()
+            if progress_count >= total or now - progress_last_emit_time >= 0.05:
+                progress_last_emit_time = now
+                self.planner_progress_value_signal.emit(progress_count)
+
+        def run() -> None:
+            try:
+                recommendation = self.planner.recommend(
+                    self.session.state, offer, progress=progress
+                )
+            except _PlannerCancelled:
+                with self._planner_result_lock:
+                    self._planner_result_generation = generation
+                    self._planner_result_cancelled = True
+                return
+            except Exception as exc:  # pragma: no cover - defensive UI safety
+                with self._planner_result_lock:
+                    self._planner_result_generation = generation
+                    self._planner_result_error = str(exc)
+                return
+            with self._planner_result_lock:
+                self._planner_result_generation = generation
+                self._planner_result = recommendation
+
+        thread = threading.Thread(target=run, daemon=True)
         self._planner_thread = thread
         thread.start()
 
@@ -687,18 +889,14 @@ class MainWindow(QtWidgets.QMainWindow):
     def _stop_planner_thread(self) -> None:
         if not self._planner_thread:
             return
-        self._planner_thread.requestInterruption()
-        self._planner_thread.quit()
-        self._planner_thread.wait()
+        if self._planner_cancel_event:
+            self._planner_cancel_event.set()
+        if isinstance(self._planner_thread, threading.Thread):
+            if self._planner_thread.is_alive():
+                self._planner_thread.join(timeout=0.2)
         self._planner_thread = None
-
-    def _on_planner_finished(
-        self, recommendation: PlannerRecommendation, generation: int
-    ) -> None:
-        if generation != self._planner_generation:
-            return
-        self.current_recommendation = recommendation
-        self.suggestion_panel.update_recommendation(recommendation)
+        self._planner_cancel_event = None
+        self._stop_planner_progress()
 
     def _apply_action(self, action: str) -> None:
         if not self.current_offer:
@@ -706,7 +904,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         pre_state = self.session.state
         try:
-            if self.full_simulate_checkbox.isChecked():
+            if self._sim_mode == "full":
                 self.session.apply(self.current_offer, action)
             else:
                 outcome = self._select_outcome(self.current_offer, action)
@@ -725,6 +923,7 @@ class MainWindow(QtWidgets.QMainWindow):
             format_resource_delta_html(pre_state, self.session.state)
         )
         self.current_recommendation = None
+        self._clear_recommendation_ui()
         self._refresh()
 
     def _select_outcome(self, offer: OfferSpec, action: str) -> OutcomeSpec:
@@ -995,12 +1194,14 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self.current_offer:
             self.toast_area.show_toast("Select an offer first.")
             return
-        if not self.current_recommendation:
+        best_action = self._recommended_action()
+        if not best_action:
+            self.toast_area.show_toast("No recommendation yet.")
             return
-        self._apply_action(self.current_recommendation.best_action)
+        self._apply_action(best_action)
 
     def _sync_auto_offer(self) -> None:
-        if not self.full_simulate_checkbox.isChecked():
+        if self._sim_mode != "full":
             return
         if self.session.state.ended:
             self._auto_offer_id = None
@@ -1019,6 +1220,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.session.undo()
         self._refresh()
 
+    def _reset_run(self) -> None:
+        self._stop_planner_thread()
+        self.session.reset(reseed=True)
+        self.current_offer = None
+        self.current_recommendation = None
+        self._auto_offer_id = None
+        self._auto_offer_case = None
+        self.offer_search.clear_selection()
+        self._clear_recommendation_ui()
+        self._refresh()
+
     def _update_planner_settings(self) -> None:
         self.planner.config = PlannerConfig(
             horizon_cases=int(self.horizon_spin.value()),
@@ -1028,8 +1240,91 @@ class MainWindow(QtWidgets.QMainWindow):
             risk_preset=self.risk_combo.currentText(),
         )
         self.planner.weights = weights_for_preset(self.planner.config.risk_preset)
+        self.planner.reset_cache()
+        if self._sim_mode == "none":
+            self.current_recommendation = None
+            self._clear_recommendation_ui()
+            return
         if self.current_offer:
+            self.current_recommendation = None
+            self.suggestion_panel.best_label.setText("Calculating...")
+            self.suggestion_panel.metrics_label.setText("")
+            self.suggestion_panel.set_calculating(
+                True, self._planner_progress_total(self.current_offer)
+            )
             self._start_planner(self.current_offer)
+
+    def _planner_progress_total(self, offer: OfferSpec) -> int | None:
+        if self.planner.config.adaptive_rollouts:
+            return None
+        return len(offer.actions_available) * self.planner.config.rollouts_per_action
+
+    def _reset_planner_progress(self, offer: OfferSpec) -> int | None:
+        total = self._planner_progress_total(offer)
+        with self._planner_progress_lock:
+            self._planner_progress_value = 0
+            self._planner_progress_total_value = total
+        self._planner_progress_timer.start()
+        return total
+
+    def _increment_planner_progress(self, delta: int) -> None:
+        with self._planner_progress_lock:
+            self._planner_progress_value += delta
+
+    def _tick_planner_progress(self) -> None:
+        self._planner_progress_pending = False
+        with self._planner_progress_lock:
+            total = self._planner_progress_total_value
+            value = self._planner_progress_value
+        if total is not None and total > 0:
+            self.suggestion_panel.update_progress(value)
+        self._consume_planner_result()
+
+    def _on_planner_progress_value(self, value: int) -> None:
+        self.suggestion_panel.update_progress(value)
+
+    def _stop_planner_progress(self) -> None:
+        self._planner_progress_timer.stop()
+        with self._planner_progress_lock:
+            self._planner_progress_value = 0
+            self._planner_progress_total_value = None
+        self._planner_progress_pending = False
+
+    def _schedule_progress_tick(self) -> None:
+        if self._planner_progress_pending:
+            return
+        self._planner_progress_pending = True
+        self.planner_progress_signal.emit()
+
+    def _consume_planner_result(self) -> None:
+        with self._planner_result_lock:
+            generation = self._planner_result_generation
+            recommendation = self._planner_result
+            error = self._planner_result_error
+            cancelled = self._planner_result_cancelled
+            self._planner_result_generation = None
+            self._planner_result = None
+            self._planner_result_error = None
+            self._planner_result_cancelled = False
+        if generation is None or generation != self._planner_generation:
+            return
+        if cancelled:
+            self._stop_planner_progress()
+            self._update_action_controls()
+            return
+        if error:
+            self.current_recommendation = None
+            self._clear_recommendation_ui()
+            self.suggestion_panel.metrics_label.setText("Planner failed.")
+            self.toast_area.show_toast(f"Planner failed: {error}")
+            self._stop_planner_progress()
+            self._update_action_controls()
+            return
+        if recommendation:
+            self.current_recommendation = recommendation
+            self.suggestion_panel.update_recommendation(recommendation)
+            self._stop_planner_progress()
+            self._update_action_controls()
 
     def _update_action_controls(self) -> None:
         game_over = self._is_game_over()
@@ -1063,18 +1358,15 @@ class MainWindow(QtWidgets.QMainWindow):
             self._action_unaffordable("dismiss", preview_state)
             or self._action_blocked_by_status("dismiss", preview_state),
         )
-        if self.current_recommendation:
+        best_action = self._recommended_action()
+        if best_action and not self.suggestion_panel.is_calculating():
             self._set_button_dimmed(
                 self.best_button,
-                self._action_unaffordable(
-                    self.current_recommendation.best_action, preview_state
-                )
-                or self._action_blocked_by_status(
-                    self.current_recommendation.best_action, preview_state
-                ),
+                self._action_unaffordable(best_action, preview_state)
+                or self._action_blocked_by_status(best_action, preview_state),
             )
         else:
-            self._set_button_dimmed(self.best_button, False)
+            self._set_button_dimmed(self.best_button, True)
 
     def _adjust_resource(self, resource: str, delta: int) -> None:
         if self.session.log.entries:
@@ -1125,8 +1417,15 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             return
         self.current_recommendation = None
-        if self.current_offer:
+        if self.current_offer and self._sim_mode != "none":
+            self.suggestion_panel.best_label.setText("Calculating...")
+            self.suggestion_panel.metrics_label.setText("")
+            self.suggestion_panel.set_calculating(
+                True, self._planner_progress_total(self.current_offer)
+            )
             self._start_planner(self.current_offer)
+        else:
+            self._clear_recommendation_ui()
         self._refresh()
 
     def _action_unaffordable(self, action: str, state: GameState | None = None) -> bool:
@@ -1162,6 +1461,16 @@ class MainWindow(QtWidgets.QMainWindow):
             button.setStyleSheet("color: #8a8a8a;")
         else:
             button.setStyleSheet("")
+
+    def _clear_recommendation_ui(self) -> None:
+        self.suggestion_panel.clear_recommendation()
+
+    def _recommended_action(self) -> str | None:
+        if self.current_recommendation:
+            return self.current_recommendation.best_action
+        if self.suggestion_panel.is_calculating():
+            return None
+        return self.suggestion_panel.last_action
 
     def _is_game_over(self) -> bool:
         if self.session.state.mh <= 0:

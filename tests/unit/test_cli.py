@@ -8,6 +8,7 @@ from justice_sim.ui_cli import render as cli_render
 from justice_sim.ui_cli import screens as cli_screens
 from justice_sim.ui_cli import search as cli_search
 from justice_sim.util.search import search_offers
+from justice_sim.models.suggested_rules import SuggestedRules
 
 
 @pytest.mark.unit
@@ -89,6 +90,9 @@ def test_run_session_apply_and_undo(data_factory):
 def test_cli_main_quits_immediately(monkeypatch, data_factory):
     monkeypatch.setattr(cli_module, "prompt", lambda _: "quit")
     monkeypatch.setattr(cli_module, "load_builtin_data", lambda: data_factory())
+    monkeypatch.setattr(
+        cli_module, "load_builtin_suggested_rules", lambda _data: SuggestedRules.empty()
+    )
     assert cli_module.main() == 0
 
 
@@ -99,4 +103,7 @@ def test_cli_main_handles_keyboard_interrupt(monkeypatch, data_factory):
 
     monkeypatch.setattr(cli_module, "prompt", _raise_interrupt)
     monkeypatch.setattr(cli_module, "load_builtin_data", lambda: data_factory())
+    monkeypatch.setattr(
+        cli_module, "load_builtin_suggested_rules", lambda _data: SuggestedRules.empty()
+    )
     assert cli_module.main() == 0

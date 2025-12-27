@@ -75,6 +75,67 @@ def validate_data(data: Mapping[str, Any]) -> list[str]:
     return errors
 
 
+def validate_suggested_rules(
+    rules: Mapping[str, Any], *, offer_ids: Iterable[str] | None = None
+) -> list[str]:
+    errors: list[str] = []
+    rule_ids = [rule.get("id") for rule in rules.get("rules", [])]
+    _report_duplicates("suggested rule", rule_ids, errors)
+    offer_id_set = set(offer_ids or [])
+
+    for rule in rules.get("rules", []) or []:
+        rule_id = rule.get("id")
+        for offer_id in rule.get("offer_ids", []) or []:
+            if offer_id_set and offer_id not in offer_id_set:
+                errors.append(
+                    f"Suggested rule '{rule_id}' references unknown offer_id '{offer_id}'"
+                )
+        for bias in rule.get("biases", []) or []:
+            predicate = bias.get("when")
+            if predicate is None:
+                continue
+            _validate_suggested_predicate(predicate, rule_id, errors)
+        for constraint in rule.get("constraints", []) or []:
+            predicate = constraint.get("when")
+            if predicate is None:
+                continue
+            _validate_suggested_predicate(predicate, rule_id, errors)
+
+    return errors
+
+
+def _validate_suggested_predicate(
+    predicate: Any, rule_id: str | None, errors: list[str]
+) -> None:
+    if isinstance(predicate, str):
+        ctx = expr_util.build_predicate_context(
+            case_index=1,
+            coins=0,
+            pop=0,
+            mh=1,
+            dismissals=0,
+            retirement_chests=0,
+            flags=set(),
+            statuses=set(),
+            counters={},
+            extra_vars={
+                "case_scale": 1,
+                "harbinger_cost": 1,
+                "harbinger_in": 1,
+            },
+        )
+        try:
+            expr_util.evaluate_predicate(predicate, ctx)
+        except expr_util.ExprError as exc:
+            errors.append(
+                f"Suggested rule '{rule_id}' has malformed predicate '{predicate}': {exc}"
+            )
+        return
+    if predicate is None:
+        return
+    errors.append(f"Suggested rule '{rule_id}' has unsupported predicate format")
+
+
 def _report_duplicates(label: str, ids: Iterable[Any], errors: list[str]) -> None:
     seen: set[Any] = set()
     for item_id in ids:

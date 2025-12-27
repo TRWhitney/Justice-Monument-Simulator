@@ -1,8 +1,10 @@
 import os
+from dataclasses import replace
 
 import pytest
 from PySide6 import QtWidgets
 
+from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
 from justice_sim.ui_qt.app import create_app
@@ -155,6 +157,54 @@ def test_state_panel_adjust_updates_state(data_factory):
     assert increase is not None
     increase.click()
     assert window.session.state.coins == 6
+
+    window.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_reset_run_button_resets_state_and_rng(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    window = MainWindow(data)
+    window.show()
+    QtWidgets.QApplication.processEvents()
+
+    window.session.state = replace(
+        window.session.state,
+        case_index=5,
+        coins=0,
+        pop=0,
+        mh=2,
+        dismissals=1,
+        retirement_chests=1,
+    )
+    window.session.rng = Rng(1234)
+    offer = data.offers_by_id["offer1"]
+    window.session.log.record(
+        window.session.state,
+        offer.id,
+        "approve",
+        window.session.rng.state(),
+        window.session.state,
+    )
+    assert window.session.log.entries
+
+    reset = window.findChild(QtWidgets.QPushButton, "reset_run_button")
+    assert reset is not None
+    reset.click()
+    QtWidgets.QApplication.processEvents()
+
+    state = window.session.state
+    assert state.case_index == 1
+    assert state.coins == 5
+    assert state.pop == 3
+    assert state.mh == 1
+    assert state.dismissals == 0
+    assert state.retirement_chests == 0
+    assert window.session.rng.seed != 1234
+    assert not window.session.log.entries
 
     window.close()
     app.quit()

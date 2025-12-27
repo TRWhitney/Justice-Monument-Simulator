@@ -177,6 +177,21 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self.show_all_toggle.setVisible(visible)
         self._position_show_all_toggle()
 
+    def can_accept_typed_input(self) -> bool:
+        return (
+            self.search_input.isEnabled()
+            and self.search_input.isVisible()
+            and not self.search_input.isReadOnly()
+        )
+
+    def focus_search_input(self, text: str | None = None) -> bool:
+        if not self.can_accept_typed_input():
+            return False
+        self.search_input.setFocus(QtCore.Qt.FocusReason.OtherFocusReason)
+        if text:
+            self.search_input.insert(text)
+        return True
+
     def _on_search(
         self,
         text: str,
@@ -256,6 +271,9 @@ class OfferSearchWidget(QtWidgets.QWidget):
             preserve_scroll=preserve,
             selected_offer_id=selected_offer_id if preserve else None,
         )
+
+    def clear_selection(self) -> None:
+        self._clear_selection()
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)

@@ -852,12 +852,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 raise _PlannerCancelled()
             self._increment_planner_progress(delta)
             progress_count += delta
-            if total is None or total <= 0:
-                return
             now = time.monotonic()
-            if progress_count >= total or now - progress_last_emit_time >= 0.05:
+            total_reached = total is not None and total > 0 and progress_count >= total
+            if total_reached or now - progress_last_emit_time >= 0.05:
                 progress_last_emit_time = now
-                self.planner_progress_value_signal.emit(progress_count)
+                if total is not None and total > 0:
+                    self.planner_progress_value_signal.emit(progress_count)
+                time.sleep(0)
 
         def run() -> None:
             try:

@@ -15,6 +15,11 @@ uv run justice-sim
 uv run justice-sim-gui
 ```
 
+## GUI Notes
+
+- Bottom-left buttons toggle theme and UI scale (Auto/Small/Medium/Large).
+- Theme and UI scale persist between runs.
+
 ## Tests
 
 ```bash

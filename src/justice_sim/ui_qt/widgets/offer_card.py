@@ -27,6 +27,7 @@ from justice_sim.models.state import GameState
 from justice_sim.util.assets import resolve_npc_image_path
 from justice_sim.util import expr as expr_util
 from justice_sim.util.search import OfferSearchResult
+from justice_sim.ui_qt.ui_scale import scale_int
 
 
 class _WrappingLabel(QtWidgets.QLabel):
@@ -51,6 +52,7 @@ class OfferCard(QtWidgets.QFrame):
             str, Sequence[tuple[str, Sequence[EffectSpec], GameState]]
         ]
         | None = None,
+        ui_scale: float = 1.0,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -61,12 +63,15 @@ class OfferCard(QtWidgets.QFrame):
         self._npc_highlight = npc_highlight
         self._action_filter = action_filter
         self._extra_effects = extra_effects or {}
+        self._ui_scale = ui_scale
         self.setObjectName("offer_card")
         self.setProperty("selected", False)
+        border_width = self._scaled(2, minimum=1)
+        radius = self._scaled(8, minimum=1)
         self.setStyleSheet(
             'QFrame#offer_card[selected="true"] {'
-            " border: 2px solid #6aa9ff;"
-            " border-radius: 8px;"
+            f" border: {border_width}px solid #6aa9ff;"
+            f" border-radius: {radius}px;"
             "}"
         )
         self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
@@ -80,15 +85,20 @@ class OfferCard(QtWidgets.QFrame):
         )
 
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(
+            self._scaled(8),
+            self._scaled(8),
+            self._scaled(8),
+            self._scaled(8),
+        )
+        layout.setSpacing(self._scaled(12))
 
         left_widget = self._build_npc_panel(data, result)
         center_widget = self._build_offer_panel(result)
         right_widget = self._build_effects_panel(result)
 
-        left_widget.setFixedWidth(_NPC_PANEL_WIDTH)
-        right_widget.setFixedWidth(_EFFECTS_PANEL_WIDTH)
+        left_widget.setFixedWidth(self._scaled(_NPC_PANEL_WIDTH))
+        right_widget.setFixedWidth(self._scaled(_EFFECTS_PANEL_WIDTH))
         left_widget.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Fixed,
             QtWidgets.QSizePolicy.Policy.Preferred,
@@ -106,20 +116,24 @@ class OfferCard(QtWidgets.QFrame):
         layout.addWidget(center_widget, 1, QtCore.Qt.AlignmentFlag.AlignTop)
         layout.addWidget(right_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
 
+    def _scaled(self, value: int, *, minimum: int | None = None) -> int:
+        return scale_int(value, self._ui_scale, minimum=minimum)
+
     def _build_npc_panel(
         self, data: JusticeData, result: OfferSearchResult
     ) -> QtWidgets.QWidget:
         npc = data.npcs_by_id.get(result.offer.npc_id)
         npc_name = npc.name if npc else result.npc_name
         image_label = QtWidgets.QLabel()
-        image_label.setFixedSize(64, 64)
+        image_size = self._scaled(64, minimum=1)
+        image_label.setFixedSize(image_size, image_size)
         image_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         pixmap = _load_pixmap(resolve_npc_image_path(data, npc) if npc else None)
         if pixmap is not None:
             image_label.setPixmap(
                 pixmap.scaled(
-                    64,
-                    64,
+                    image_size,
+                    image_size,
                     QtCore.Qt.AspectRatioMode.KeepAspectRatio,
                     QtCore.Qt.TransformationMode.SmoothTransformation,
                 )
@@ -192,15 +206,23 @@ class OfferCard(QtWidgets.QFrame):
 
         stack = QtWidgets.QVBoxLayout()
         stack.setContentsMargins(
-            _EFFECTS_PANEL_PADDING,
-            _EFFECTS_PANEL_PADDING,
-            _EFFECTS_PANEL_PADDING,
-            _EFFECTS_PANEL_PADDING,
+            self._scaled(_EFFECTS_PANEL_PADDING),
+            self._scaled(_EFFECTS_PANEL_PADDING),
+            self._scaled(_EFFECTS_PANEL_PADDING),
+            self._scaled(_EFFECTS_PANEL_PADDING),
         )
-        stack.setSpacing(_EFFECTS_PANEL_SPACING)
+        stack.setSpacing(self._scaled(_EFFECTS_PANEL_SPACING))
         stack.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        action_icon_width = self._scaled(_ACTION_ICON_WIDTH, minimum=1)
+        action_icon_fallback = self._scaled(_ACTION_ICON_FALLBACK_HEIGHT, minimum=1)
+        resource_icon_size = self._scaled(_RESOURCE_ICON_SIZE, minimum=1)
         for action, outcome, summary in sections:
-            icon = _build_action_icon_label(_resolve_icon_path(f"{action}.png"), action)
+            icon = _build_action_icon_label(
+                _resolve_icon_path(f"{action}.png"),
+                action,
+                action_icon_width,
+                action_icon_fallback,
+            )
             tokens = _extract_effect_tokens(outcome, self._data, self._state)
             extra = self._extra_effects.get(action, ())
             if extra:
@@ -210,6 +232,7 @@ class OfferCard(QtWidgets.QFrame):
                 tokens,
                 action,
                 _merge_terms(self._highlight_terms, self._effect_highlight_terms),
+                resource_icon_size,
             )
             stack.addWidget(icon, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
             stack.addWidget(effects)
@@ -225,18 +248,23 @@ class OfferCard(QtWidgets.QFrame):
         return widget
 
 
-def _build_action_icon_label(icon_path: Path | None, name: str) -> QtWidgets.QLabel:
+def _build_action_icon_label(
+    icon_path: Path | None,
+    name: str,
+    icon_width: int,
+    fallback_height: int,
+) -> QtWidgets.QLabel:
     icon_label = QtWidgets.QLabel()
     icon_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
     pixmap = _load_pixmap(icon_path)
     if pixmap is not None:
         scaled = pixmap.scaledToWidth(
-            _ACTION_ICON_WIDTH, QtCore.Qt.TransformationMode.SmoothTransformation
+            icon_width, QtCore.Qt.TransformationMode.SmoothTransformation
         )
         icon_label.setPixmap(scaled)
         icon_label.setFixedSize(scaled.size())
     else:
-        icon_label.setFixedSize(_ACTION_ICON_WIDTH, _ACTION_ICON_FALLBACK_HEIGHT)
+        icon_label.setFixedSize(icon_width, fallback_height)
     icon_label.setObjectName(f"action_icon_{name}")
     return icon_label
 
@@ -246,12 +274,16 @@ def _build_effects_widget(
     tokens: list[tuple[str, str]],
     name: str,
     highlight_terms: Sequence[str] | None = None,
+    icon_size: int | None = None,
 ) -> QtWidgets.QWidget:
     label = _WrappingLabel()
     label.setWordWrap(True)
     label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
     label.setTextFormat(QtCore.Qt.TextFormat.RichText)
-    label.setText(_format_effects_html(tokens, summary, highlight_terms))
+    resolved_icon_size = _RESOURCE_ICON_SIZE if icon_size is None else icon_size
+    label.setText(
+        _format_effects_html(tokens, summary, highlight_terms, resolved_icon_size)
+    )
     label.setSizePolicy(
         QtWidgets.QSizePolicy.Policy.Expanding,
         QtWidgets.QSizePolicy.Policy.Preferred,
@@ -932,6 +964,7 @@ def _format_effects_html(
     tokens: list[tuple[str, str] | tuple[str, str, str] | tuple[str, str, str, str]],
     summary: str,
     highlight_terms: Sequence[str] | None = None,
+    icon_size: int = _RESOURCE_ICON_SIZE,
 ) -> str:
     if not tokens:
         summary_text = summary
@@ -960,7 +993,7 @@ def _format_effects_html(
         if icon_path:
             icon_html = (
                 f'<img src="{html.escape(str(icon_path))}" '
-                f'width="{_RESOURCE_ICON_SIZE}" height="{_RESOURCE_ICON_SIZE}">'
+                f'width="{icon_size}" height="{icon_size}">'
             )
             parts.append(f"{icon_html} {effect_html}")
         else:

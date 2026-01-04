@@ -12,6 +12,7 @@ from justice_sim.engine.effects import resolve_probability
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
 from justice_sim.ui_qt.widgets.offer_card import OfferCard
+from justice_sim.ui_qt.ui_scale import scale_int
 from justice_sim.util.assets import resolve_npc_image_path
 from justice_sim.util.search import (
     OfferSearchResult,
@@ -26,8 +27,10 @@ class _NpcButtonBar(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self._buttons: list[QtWidgets.QToolButton] = []
-        self._hspacing = 6
-        self._vspacing = 6
+        self._hspacing_base = 6
+        self._vspacing_base = 6
+        self._hspacing = self._hspacing_base
+        self._vspacing = self._vspacing_base
 
     def add_button(self, button: QtWidgets.QToolButton) -> None:
         button.setParent(self)
@@ -49,6 +52,11 @@ class _NpcButtonBar(QtWidgets.QWidget):
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
         self._do_layout(event.size().width(), test_only=False)
+
+    def set_ui_scale(self, scale: float) -> None:
+        self._hspacing = scale_int(self._hspacing_base, scale)
+        self._vspacing = scale_int(self._vspacing_base, scale)
+        self.updateGeometry()
 
     def _do_layout(self, width: int, test_only: bool) -> int:
         margins = self.contentsMargins()
@@ -122,6 +130,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self._npc_queries: dict[str, str] = {}
         self._auto_offer_id: str | None = None
         self._show_all_restore_state = False
+        self._ui_scale = 1.0
 
         layout = QtWidgets.QVBoxLayout(self)
         self.search_input = QtWidgets.QLineEdit()
@@ -134,11 +143,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self.show_all_toggle.setText("Show All")
         self.show_all_toggle.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.show_all_toggle.setToolTip("Ignore offer conditions and show every offer.")
-        self.show_all_toggle.setStyleSheet(
-            "QToolButton { border: none; padding: 2px 6px; border-radius: 8px; }"
-            "QToolButton:checked { background-color: rgba(0, 0, 0, 0.12);"
-            " font-weight: 600; }"
-        )
+        self._apply_show_all_styles()
         self._npc_filter_bar = self._build_npc_filter_bar()
         self.results_list = QtWidgets.QListWidget()
         self.results_list.setSelectionMode(
@@ -156,6 +161,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self.results_list.itemSelectionChanged.connect(self._on_selection)
         self.search_input.installEventFilter(self)
         self._position_show_all_toggle()
+        self.set_ui_scale(1.0)
 
     def _on_search_text_changed(self, text: str) -> None:
         self._on_search(text)
@@ -224,6 +230,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
                 highlight_terms=highlight_terms,
                 effect_highlight_terms=effect_terms,
                 npc_highlight=npc_query.replace("_", " ") if npc_query else None,
+                ui_scale=self._ui_scale,
             )
             item.setSizeHint(card.sizeHint())
             self.results_list.addItem(item)
@@ -278,6 +285,11 @@ class OfferSearchWidget(QtWidgets.QWidget):
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
         self._update_item_sizes()
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        super().showEvent(event)
+        QtCore.QTimer.singleShot(0, self._update_item_sizes)
+        QtCore.QTimer.singleShot(0, self._position_show_all_toggle)
 
     def _update_item_sizes(self) -> None:
         viewport_width = self.results_list.viewport().width()
@@ -345,6 +357,43 @@ class OfferSearchWidget(QtWidgets.QWidget):
             self._npc_filter_bar.setEnabled(False)
             return changed
         return False
+
+    def set_ui_scale(self, scale: float) -> None:
+        self._ui_scale = scale
+        self._npc_filter_bar.set_ui_scale(scale)
+        self._npc_filter_bar.setContentsMargins(
+            self._scaled(4),
+            self._scaled(2),
+            self._scaled(4),
+            self._scaled(2),
+        )
+        icon_size = self._scaled(28, minimum=1)
+        for button in self._npc_buttons.values():
+            button.setIconSize(QtCore.QSize(icon_size, icon_size))
+        self._apply_show_all_styles()
+        selected_offer_id = self._selected_offer_id()
+        self._on_search(
+            self.search_input.text(),
+            preserve_scroll=True,
+            selected_offer_id=selected_offer_id,
+        )
+        self._position_show_all_toggle()
+
+    def _scaled(self, value: int, *, minimum: int | None = None) -> int:
+        return scale_int(value, self._ui_scale, minimum=minimum)
+
+    def _apply_show_all_styles(self) -> None:
+        pad_v = scale_int(2, self._ui_scale)
+        pad_h = scale_int(6, self._ui_scale)
+        radius = scale_int(8, self._ui_scale)
+        self.show_all_toggle.setStyleSheet(
+            (
+                "QToolButton {{ border: none; padding: {pad_v}px {pad_h}px;"
+                " border-radius: {radius}px; }}"
+                "QToolButton:checked {{ background-color: rgba(0, 0, 0, 0.12);"
+                " font-weight: 600; }}"
+            ).format(pad_v=pad_v, pad_h=pad_h, radius=radius)
+        )
 
     def _eligible_offer_ids(self) -> set[str] | None:
         if self._auto_offer_id:
@@ -478,13 +527,19 @@ class OfferSearchWidget(QtWidgets.QWidget):
 
     def _build_npc_filter_bar(self) -> QtWidgets.QWidget:
         container = _NpcButtonBar()
-        container.setContentsMargins(4, 2, 4, 2)
+        container.setContentsMargins(
+            self._scaled(4),
+            self._scaled(2),
+            self._scaled(4),
+            self._scaled(2),
+        )
 
         for npc in self._npc_filter_npcs():
             button = QtWidgets.QToolButton()
             button.setAutoRaise(True)
             button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
-            button.setIconSize(QtCore.QSize(28, 28))
+            icon_size = self._scaled(28, minimum=1)
+            button.setIconSize(QtCore.QSize(icon_size, icon_size))
             button.setToolTip(npc.name)
             button.setAccessibleName(npc.name)
             icon = self._load_npc_icon(npc)
@@ -549,11 +604,11 @@ class OfferSearchWidget(QtWidgets.QWidget):
             self.search_input.setTextMargins(0, 0, 0, 0)
             return
         rect = self.search_input.rect()
-        padding = 4
-        height = max(18, rect.height() - padding * 2)
+        padding = self._scaled(4)
+        height = max(self._scaled(18, minimum=1), rect.height() - padding * 2)
         self.show_all_toggle.setFixedHeight(height)
         self.show_all_toggle.adjustSize()
-        width = self.show_all_toggle.sizeHint().width() + 4
+        width = self.show_all_toggle.sizeHint().width() + self._scaled(4)
         self.show_all_toggle.setFixedWidth(width)
         x = rect.right() - width - padding
         y = (rect.height() - height) // 2

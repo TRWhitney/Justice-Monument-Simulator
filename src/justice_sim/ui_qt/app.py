@@ -15,6 +15,9 @@ def create_app() -> QtWidgets.QApplication:
     app = QtWidgets.QApplication.instance()
     if app is None:
         app = QtWidgets.QApplication(sys.argv)
+    app.setOrganizationName("JusticeMonumentSimulator")
+    app.setApplicationName("JusticeMonumentSimulator")
+    app.setApplicationDisplayName("Justice Monument Simulator")
     return app
 
 

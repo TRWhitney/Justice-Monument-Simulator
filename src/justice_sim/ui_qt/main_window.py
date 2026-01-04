@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import os
 from pathlib import Path
 import threading
 import time
@@ -43,12 +44,20 @@ from justice_sim.planner.rollout import (
     PlannerRecommendation,
     RolloutPlanner,
 )
+from justice_sim.ui_qt.prefs import load_ui_prefs, save_ui_prefs
 from justice_sim.ui_qt.widgets.log_panel import LogPanel
 from justice_sim.ui_qt.widgets.offer_search import OfferSearchWidget
 from justice_sim.ui_qt.widgets.state_panel import StatePanel
 from justice_sim.ui_qt.widgets.suggestion_panel import SuggestionPanel
 from justice_sim.ui_qt.widgets.toast_area import ToastArea
 from justice_sim.ui_qt.widgets.resource_delta import format_resource_delta_html
+from justice_sim.ui_qt.ui_scale import (
+    UI_SCALE_MODES,
+    UI_SCALE_LABELS,
+    next_ui_scale,
+    resolve_ui_scale,
+    scale_int,
+)
 from justice_sim.util import expr as expr_util
 from justice_sim.util.render import summarize_outcome
 
@@ -58,9 +67,9 @@ class TitleBar(QtWidgets.QWidget):
         super().__init__(parent)
         self.setObjectName("title_bar")
         self._drag_pos: QtCore.QPoint | None = None
-        layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(6)
+        self._layout = QtWidgets.QHBoxLayout(self)
+        self._layout.setContentsMargins(8, 4, 8, 4)
+        self._layout.setSpacing(6)
 
         self.title_label = QtWidgets.QLabel(title)
         self.title_label.setObjectName("title_label")
@@ -77,11 +86,12 @@ class TitleBar(QtWidgets.QWidget):
         self.max_button.clicked.connect(self._on_maximize_restore)
         self.close_button.clicked.connect(self._on_close)
 
-        layout.addWidget(self.title_label)
-        layout.addStretch(1)
-        layout.addWidget(self.min_button)
-        layout.addWidget(self.max_button)
-        layout.addWidget(self.close_button)
+        self._layout.addWidget(self.title_label)
+        self._layout.addStretch(1)
+        self._layout.addWidget(self.min_button)
+        self._layout.addWidget(self.max_button)
+        self._layout.addWidget(self.close_button)
+        self.set_ui_scale(1.0)
 
     def _make_button(
         self, text: str, tooltip: str, role: str = "default"
@@ -94,6 +104,19 @@ class TitleBar(QtWidgets.QWidget):
         button.setProperty("title_button", True)
         button.setProperty("title_role", role)
         return button
+
+    def set_ui_scale(self, scale: float) -> None:
+        self._layout.setContentsMargins(
+            scale_int(8, scale),
+            scale_int(4, scale),
+            scale_int(8, scale),
+            scale_int(4, scale),
+        )
+        self._layout.setSpacing(scale_int(6, scale))
+        width = scale_int(28, scale, minimum=1)
+        height = scale_int(24, scale, minimum=1)
+        for button in (self.min_button, self.max_button, self.close_button):
+            button.setFixedSize(width, height)
 
     def set_maximized(self, maximized: bool) -> None:
         self.max_button.setText("❐" if maximized else "□")
@@ -182,10 +205,12 @@ class _OutcomeChoiceDialog(QtWidgets.QDialog):
         choices: list[dict[str, object]],
         *,
         dark: bool,
+        ui_scale: float = 1.0,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._choices = choices
+        self._ui_scale = ui_scale
         self._selected_index: int | None = None
         self.setWindowFlags(
             QtCore.Qt.WindowType.Dialog | QtCore.Qt.WindowType.FramelessWindowHint
@@ -194,22 +219,28 @@ class _OutcomeChoiceDialog(QtWidgets.QDialog):
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
 
         root_layout = QtWidgets.QVBoxLayout(self)
-        root_layout.setContentsMargins(14, 14, 14, 14)
+        margin = scale_int(14, ui_scale)
+        root_layout.setContentsMargins(margin, margin, margin, margin)
 
         panel = QtWidgets.QFrame()
         panel.setObjectName("outcome_dialog_panel")
         panel_layout = QtWidgets.QVBoxLayout(panel)
-        panel_layout.setContentsMargins(16, 16, 16, 16)
-        panel_layout.setSpacing(12)
+        panel_margin = scale_int(16, ui_scale)
+        panel_layout.setContentsMargins(
+            panel_margin, panel_margin, panel_margin, panel_margin
+        )
+        panel_layout.setSpacing(scale_int(12, ui_scale))
         root_layout.addWidget(panel)
 
         self._shadow = QtWidgets.QGraphicsDropShadowEffect(panel)
-        self._shadow.setBlurRadius(22)
-        self._shadow.setOffset(0, 5)
+        self._shadow.setBlurRadius(scale_int(22, ui_scale))
+        self._shadow.setOffset(0, scale_int(5, ui_scale))
         panel.setGraphicsEffect(self._shadow)
 
         title = QtWidgets.QLabel("Choose what happened")
-        title.setStyleSheet("font-weight: 700; font-size: 14px;")
+        title.setStyleSheet(
+            f"font-weight: 700; font-size: {scale_int(14, ui_scale)}px;"
+        )
         panel_layout.addWidget(title)
 
         self._combo = QtWidgets.QComboBox()
@@ -219,14 +250,16 @@ class _OutcomeChoiceDialog(QtWidgets.QDialog):
         max_icons = max(
             (len(choice.get("resources", [])) for choice in choices), default=1
         )
-        icon_width = _RESOURCE_ICON_SIZE * max_icons + _RESOURCE_ICON_SPACING * (
-            max_icons - 1
-        )
-        self._combo.setIconSize(QtCore.QSize(icon_width, _RESOURCE_ICON_SIZE))
+        icon_size = scale_int(_RESOURCE_ICON_SIZE, ui_scale, minimum=1)
+        icon_spacing = scale_int(_RESOURCE_ICON_SPACING, ui_scale)
+        icon_width = icon_size * max_icons + icon_spacing * (max_icons - 1)
+        self._combo.setIconSize(QtCore.QSize(icon_width, icon_size))
         for choice in choices:
             summary = str(choice.get("display") or choice.get("summary") or "")
             resources = list(choice.get("resources", []))
-            icon = self._build_resource_icon(resources, icon_width)
+            icon = self._build_resource_icon(
+                resources, icon_width, icon_size, icon_spacing
+            )
             self._combo.addItem(icon, summary)
         panel_layout.addWidget(self._combo)
 
@@ -269,32 +302,48 @@ class _OutcomeChoiceDialog(QtWidgets.QDialog):
                 "fg": "#1b1b1b",
             }
             self._shadow.setColor(QtGui.QColor(0, 0, 0, 120))
+        sizes = {
+            "border_w": max(1, scale_int(1, self._ui_scale)),
+            "panel_radius": scale_int(12, self._ui_scale),
+            "field_radius": scale_int(6, self._ui_scale),
+            "field_pad_v": scale_int(4, self._ui_scale),
+            "field_pad_h": scale_int(8, self._ui_scale),
+            "btn_pad_h": scale_int(10, self._ui_scale),
+        }
         panel.setStyleSheet(
-            "QFrame#outcome_dialog_panel {"
-            " background-color: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-            " stop:0 %(panel_top)s, stop:1 %(panel_bottom)s);"
-            " border-radius: 12px;"
-            " color: %(fg)s;"
-            "}"
-            "QComboBox {"
-            " background-color: %(field_bg)s;"
-            " border: 1px solid %(border)s;"
-            " border-radius: 6px;"
-            " padding: 4px 8px;"
-            "}"
-            "QComboBox::drop-down { border: none; }"
-            "QPushButton {"
-            " background-color: %(btn_bg)s;"
-            " border: 1px solid %(border)s;"
-            " border-radius: 6px;"
-            " padding: 4px 10px;"
-            "}"
-            "QPushButton:hover { background-color: %(btn_hover)s; }"
-            "QPushButton:pressed { background-color: %(btn_pressed)s; }" % palette
+            (
+                "QFrame#outcome_dialog_panel {{"
+                " background-color: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+                " stop:0 {panel_top}, stop:1 {panel_bottom});"
+                " border-radius: {panel_radius}px;"
+                " color: {fg};"
+                "}}"
+                "QComboBox {{"
+                " background-color: {field_bg};"
+                " border: {border_w}px solid {border};"
+                " border-radius: {field_radius}px;"
+                " padding: {field_pad_v}px {field_pad_h}px;"
+                "}}"
+                "QComboBox::drop-down {{ border: none; }}"
+                "QPushButton {{"
+                " background-color: {btn_bg};"
+                " border: {border_w}px solid {border};"
+                " border-radius: {field_radius}px;"
+                " padding: {field_pad_v}px {btn_pad_h}px;"
+                "}}"
+                "QPushButton:hover {{ background-color: {btn_hover}; }}"
+                "QPushButton:pressed {{ background-color: {btn_pressed}; }}"
+            ).format(**palette, **sizes)
         )
 
-    def _build_resource_icon(self, resources: list[str], width: int) -> QtGui.QIcon:
-        pixmap = QtGui.QPixmap(width, _RESOURCE_ICON_SIZE)
+    def _build_resource_icon(
+        self,
+        resources: list[str],
+        width: int,
+        icon_size: int,
+        icon_spacing: int,
+    ) -> QtGui.QIcon:
+        pixmap = QtGui.QPixmap(width, icon_size)
         pixmap.fill(QtCore.Qt.GlobalColor.transparent)
         painter = QtGui.QPainter(pixmap)
         x = 0
@@ -303,13 +352,13 @@ class _OutcomeChoiceDialog(QtWidgets.QDialog):
             if not path:
                 continue
             icon_pix = QtGui.QPixmap(str(path)).scaled(
-                _RESOURCE_ICON_SIZE,
-                _RESOURCE_ICON_SIZE,
+                icon_size,
+                icon_size,
                 QtCore.Qt.AspectRatioMode.KeepAspectRatio,
                 QtCore.Qt.TransformationMode.SmoothTransformation,
             )
             painter.drawPixmap(x, 0, icon_pix)
-            x += _RESOURCE_ICON_SIZE + _RESOURCE_ICON_SPACING
+            x += icon_size + icon_spacing
         painter.end()
         return QtGui.QIcon(pixmap)
 
@@ -431,12 +480,23 @@ class MainWindow(QtWidgets.QMainWindow):
             self._on_planner_progress_value, QtCore.Qt.ConnectionType.QueuedConnection
         )
         self._dark_mode = False
+        self._ui_scale_mode = "auto"
+        self._ui_scale_factor = 1.0
+        app = QtWidgets.QApplication.instance()
+        self._base_app_font = app.font() if app is not None else self.font()
+        self._base_font_point_size = (
+            self._base_app_font.pointSizeF()
+            if self._base_app_font.pointSizeF() > 0
+            else float(self._base_app_font.pointSize() or 10)
+        )
+        self._settings = QtCore.QSettings() if self._settings_enabled() else None
+        self._load_ui_preferences()
         self._auto_offer_id: str | None = None
         self._auto_offer_case: int | None = None
 
         self.setWindowTitle("Justice Monument Simulator")
         self.setMinimumSize(1200, 800)
-        self.resize(1400, 900)
+        self.resize(1540, 900)
         self.setWindowFlag(QtCore.Qt.WindowType.FramelessWindowHint, True)
         central = QtWidgets.QWidget()
         central.setObjectName("root_container")
@@ -603,11 +663,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.theme_toggle.setToolTip("Light theme")
         self.theme_toggle.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.theme_toggle.toggled.connect(self._on_theme_toggled)
+        self.scale_toggle = QtWidgets.QToolButton(self)
+        self.scale_toggle.setAutoRaise(True)
+        self.scale_toggle.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.scale_toggle.setAccessibleName("UI scale")
+        self.scale_toggle.clicked.connect(self._on_scale_toggled)
         self._size_grip = QtWidgets.QSizeGrip(self)
         self._size_grip.setFixedSize(16, 16)
         self._update_window_controls_geometry()
 
-        self._apply_theme(self._dark_mode)
+        self._sync_theme_toggle()
+        self._apply_ui_scale()
         self.title_bar.set_maximized(self.isMaximized())
         app = QtWidgets.QApplication.instance()
         if app is not None:
@@ -696,6 +762,13 @@ class MainWindow(QtWidgets.QMainWindow):
             self.theme_toggle.setText("☀")
             self.theme_toggle.setToolTip("Light theme")
         self._apply_theme(self._dark_mode)
+        self._update_scale_toggle_visuals()
+        self._save_ui_preferences()
+
+    def _on_scale_toggled(self) -> None:
+        self._ui_scale_mode = next_ui_scale(self._ui_scale_mode)
+        self._apply_ui_scale()
+        self._save_ui_preferences()
 
     def _on_sim_mode_changed(self, mode: str, checked: bool) -> None:
         if not checked:
@@ -720,6 +793,128 @@ class MainWindow(QtWidgets.QMainWindow):
             )
             self._start_planner(self.current_offer)
         self._refresh()
+
+    def _apply_ui_scale(self) -> None:
+        scale = resolve_ui_scale(self._ui_scale_mode, dpi=self._logical_dpi())
+        self._ui_scale_factor = scale
+        app = QtWidgets.QApplication.instance()
+        if app is not None:
+            font = QtGui.QFont(self._base_app_font)
+            if self._base_font_point_size > 0:
+                font.setPointSizeF(self._base_font_point_size * scale)
+            else:
+                base_px = self._base_app_font.pixelSize() or 12
+                font.setPixelSize(scale_int(base_px, scale, minimum=1))
+            app.setFont(font)
+        self.title_bar.set_ui_scale(scale)
+        self.state_panel.set_ui_scale(scale)
+        self.offer_search.set_ui_scale(scale)
+        self.log_panel.set_ui_scale(scale)
+        self.toast_area.set_ui_scale(scale)
+        self._size_grip.setFixedSize(
+            self._scaled(16, minimum=1), self._scaled(16, minimum=1)
+        )
+        self.game_over_label.setStyleSheet(
+            "color: #b00020; font-weight: 700; "
+            f"font-size: {self._scaled(18, minimum=1)}px;"
+        )
+        self._apply_theme(self._dark_mode)
+        self._update_scale_toggle_visuals()
+
+    def _logical_dpi(self) -> float | None:
+        screen = self.screen()
+        if screen is None:
+            screen = QtGui.QGuiApplication.primaryScreen()
+        return screen.logicalDotsPerInch() if screen is not None else None
+
+    def _scaled(self, value: int, *, minimum: int | None = None) -> int:
+        return scale_int(value, self._ui_scale_factor, minimum=minimum)
+
+    def _resource_icon_size(self) -> int:
+        return self._scaled(_RESOURCE_ICON_SIZE, minimum=1)
+
+    def _settings_enabled(self) -> bool:
+        if os.environ.get("JUSTICE_SIM_DISABLE_SETTINGS") == "1":
+            return False
+        return "PYTEST_CURRENT_TEST" not in os.environ
+
+    def _load_ui_preferences(self) -> None:
+        if self._settings is None:
+            return
+        theme_dark, scale_mode = load_ui_prefs(
+            self._settings,
+            default_theme=self._dark_mode,
+            default_scale=self._ui_scale_mode,
+            allowed_modes=UI_SCALE_MODES,
+        )
+        self._dark_mode = theme_dark
+        self._ui_scale_mode = scale_mode
+
+    def _save_ui_preferences(self) -> None:
+        if self._settings is None:
+            return
+        save_ui_prefs(
+            self._settings,
+            theme_dark=self._dark_mode,
+            scale_mode=self._ui_scale_mode,
+        )
+
+    def _sync_theme_toggle(self) -> None:
+        blocker = QtCore.QSignalBlocker(self.theme_toggle)
+        self.theme_toggle.setChecked(self._dark_mode)
+        if self._dark_mode:
+            self.theme_toggle.setText("☾")
+            self.theme_toggle.setToolTip("Dark theme")
+        else:
+            self.theme_toggle.setText("☀")
+            self.theme_toggle.setToolTip("Light theme")
+        del blocker
+
+    def _update_scale_toggle_visuals(self) -> None:
+        label = UI_SCALE_LABELS.get(self._ui_scale_mode, "Auto")
+        icon_size = self._scaled(20, minimum=1)
+        icon = self._build_scale_icon(self._ui_scale_mode, icon_size)
+        self.scale_toggle.setIcon(icon)
+        self.scale_toggle.setIconSize(QtCore.QSize(icon_size, icon_size))
+        self.scale_toggle.setToolTip(f"UI scale: {label}")
+
+    def _build_scale_icon(self, mode: str, size: int) -> QtGui.QIcon:
+        letters = {
+            "auto": "A",
+            "small": "S",
+            "medium": "M",
+            "large": "L",
+        }
+        text = letters.get(mode, "A")
+        pixmap = QtGui.QPixmap(size, size)
+        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        if self._dark_mode:
+            border = QtGui.QColor(230, 230, 230)
+            text_color = QtGui.QColor(245, 245, 245)
+        else:
+            border = QtGui.QColor(40, 40, 40)
+            text_color = QtGui.QColor(30, 30, 30)
+        pen_width = max(1, int(round(size * 0.08)))
+        painter.setPen(QtGui.QPen(border, pen_width))
+        painter.setBrush(QtCore.Qt.BrushStyle.NoBrush)
+        radius = max(2, int(round(size * 0.25)))
+        rect = QtCore.QRect(
+            pen_width,
+            pen_width,
+            size - pen_width * 2,
+            size - pen_width * 2,
+        )
+        painter.drawRoundedRect(rect, radius, radius)
+        font = painter.font()
+        font.setBold(True)
+        font.setPointSize(max(1, int(round(size * 0.55))))
+        painter.setFont(font)
+        painter.setPen(text_color)
+        painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
+        painter.end()
+        return QtGui.QIcon(pixmap)
 
     def _apply_theme(self, dark: bool) -> None:
         palette = (
@@ -759,47 +954,81 @@ class MainWindow(QtWidgets.QMainWindow):
                 "close_fg": "#ffffff",
             }
         )
+        sizes = {
+            "border_w": max(1, self._scaled(1)),
+            "title_pad_left": self._scaled(4),
+            "title_btn_pad_v": self._scaled(2),
+            "title_btn_pad_h": self._scaled(6),
+            "title_btn_radius": self._scaled(6, minimum=1),
+            "group_radius": self._scaled(6, minimum=1),
+            "group_margin_top": self._scaled(6),
+            "group_title_left": self._scaled(8),
+            "group_title_pad": self._scaled(4),
+            "field_radius": self._scaled(4, minimum=1),
+            "field_pad_v": self._scaled(2),
+            "field_pad_h": self._scaled(6),
+            "btn_radius": self._scaled(4, minimum=1),
+            "btn_pad_v": self._scaled(4),
+            "btn_pad_h": self._scaled(8),
+            "tool_pad_v": self._scaled(2),
+            "tool_pad_h": self._scaled(4),
+        }
         self.setStyleSheet(
-            "QWidget { background-color: %(bg)s; color: %(fg)s; }"
-            "QWidget#root_container { border: 1px solid %(border)s; }"
-            "QWidget#title_bar { background-color: %(title_bg)s; border-bottom: 1px solid %(border)s; }"
-            "QLabel#title_label { font-weight: 600; padding-left: 4px; }"
-            'QToolButton[title_button="true"] { background: transparent; border: none; padding: 2px 6px; }'
-            'QToolButton[title_button="true"]:hover { background-color: %(title_hover)s; border-radius: 6px; }'
-            'QToolButton[title_button="true"]:pressed { background-color: %(title_pressed)s; border-radius: 6px; }'
-            'QToolButton[title_role="close"]:hover { background-color: %(close_hover)s; color: %(close_fg)s; }'
-            'QToolButton[title_role="close"]:pressed { background-color: %(close_pressed)s; color: %(close_fg)s; }'
-            "QGroupBox { border: 1px solid %(border)s; border-radius: 6px; margin-top: 6px; }"
-            "QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }"
-            "QLineEdit, QSpinBox, QComboBox, QListWidget {"
-            " background-color: %(field_bg)s; border: 1px solid %(border)s; border-radius: 4px; padding: 2px 6px; }"
-            "QPushButton {"
-            " background-color: %(btn_bg)s; border: 1px solid %(border)s; border-radius: 4px; padding: 4px 8px; }"
-            "QPushButton:hover { background-color: %(btn_hover)s; }"
-            "QPushButton:pressed { background-color: %(btn_pressed)s; }"
-            "QToolButton { background: transparent; border: none; padding: 2px 4px; }"
-            "QPushButton:disabled, QToolButton:disabled { color: %(disabled)s; }"
-            "QListWidget::item:selected { background-color: %(selected)s; }" % palette
+            (
+                "QWidget {{ background-color: {bg}; color: {fg}; }}"
+                "QWidget#root_container {{ border: {border_w}px solid {border}; }}"
+                "QWidget#title_bar {{ background-color: {title_bg}; border-bottom: {border_w}px solid {border}; }}"
+                "QLabel#title_label {{ font-weight: 600; padding-left: {title_pad_left}px; }}"
+                'QToolButton[title_button="true"] {{ background: transparent; border: none;'
+                " padding: {title_btn_pad_v}px {title_btn_pad_h}px; }}"
+                'QToolButton[title_button="true"]:hover {{ background-color: {title_hover};'
+                " border-radius: {title_btn_radius}px; }}"
+                'QToolButton[title_button="true"]:pressed {{ background-color: {title_pressed};'
+                " border-radius: {title_btn_radius}px; }}"
+                'QToolButton[title_role="close"]:hover {{ background-color: {close_hover}; color: {close_fg}; }}'
+                'QToolButton[title_role="close"]:pressed {{ background-color: {close_pressed}; color: {close_fg}; }}'
+                "QGroupBox {{ border: {border_w}px solid {border}; border-radius: {group_radius}px;"
+                " margin-top: {group_margin_top}px; }}"
+                "QGroupBox::title {{ subcontrol-origin: margin; left: {group_title_left}px;"
+                " padding: 0 {group_title_pad}px; }}"
+                "QLineEdit, QSpinBox, QComboBox, QListWidget {{"
+                " background-color: {field_bg}; border: {border_w}px solid {border};"
+                " border-radius: {field_radius}px; padding: {field_pad_v}px {field_pad_h}px; }}"
+                "QPushButton {{ background-color: {btn_bg}; border: {border_w}px solid {border};"
+                " border-radius: {btn_radius}px; padding: {btn_pad_v}px {btn_pad_h}px; }}"
+                "QPushButton:hover {{ background-color: {btn_hover}; }}"
+                "QPushButton:pressed {{ background-color: {btn_pressed}; }}"
+                "QToolButton {{ background: transparent; border: none;"
+                " padding: {tool_pad_v}px {tool_pad_h}px; }}"
+                "QPushButton:disabled, QToolButton:disabled {{ color: {disabled}; }}"
+                "QListWidget::item:selected {{ background-color: {selected}; }}"
+            ).format(**palette, **sizes)
         )
         self.toast_area.set_theme(dark)
         self.log_panel.set_theme(dark)
         self._update_window_controls_geometry()
 
     def _update_window_controls_geometry(self) -> None:
-        size = 44
-        margin = 16
+        size = self._scaled(44, minimum=1)
+        margin = self._scaled(16)
+        hover_radius = self._scaled(10, minimum=1)
+        toggle_style = (
+            "QToolButton { border: none; background: transparent; }"
+            f"QToolButton:hover {{ background-color: rgba(0, 0, 0, 20); border-radius: {hover_radius}px; }}"
+            f"QToolButton:pressed {{ background-color: rgba(0, 0, 0, 40); border-radius: {hover_radius}px; }}"
+        )
         self.theme_toggle.setFixedSize(size, size)
         font = self.theme_toggle.font()
-        font.setPointSize(18)
+        font.setPointSize(self._scaled(18, minimum=1))
         self.theme_toggle.setFont(font)
-        self.theme_toggle.setStyleSheet(
-            "QToolButton { border: none; background: transparent; }"
-            "QToolButton:hover { background-color: rgba(0, 0, 0, 20); border-radius: 10px; }"
-            "QToolButton:pressed { background-color: rgba(0, 0, 0, 40); border-radius: 10px; }"
-        )
+        self.theme_toggle.setStyleSheet(toggle_style)
+        self.scale_toggle.setFixedSize(size, size)
+        self.scale_toggle.setStyleSheet(toggle_style)
         geo = self.geometry()
         self.theme_toggle.move(margin, geo.height() - margin - size)
-        grip_margin = 10
+        spacing = self._scaled(8)
+        self.scale_toggle.move(margin + size + spacing, geo.height() - margin - size)
+        grip_margin = self._scaled(10)
         self._size_grip.move(
             geo.width() - grip_margin - self._size_grip.width(),
             geo.height() - grip_margin - self._size_grip.height(),
@@ -921,7 +1150,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.toast_area.show_toast(f"{action.title()} failed: {exc}")
             return
         self.toast_area.show_toast(
-            format_resource_delta_html(pre_state, self.session.state)
+            format_resource_delta_html(
+                pre_state,
+                self.session.state,
+                icon_size=self._resource_icon_size(),
+            )
         )
         self.current_recommendation = None
         self._clear_recommendation_ui()
@@ -1105,7 +1338,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def _prompt_random_choice(self, choices: list[dict[str, object]]) -> int | None:
         if not choices:
             return None
-        dialog = _OutcomeChoiceDialog(choices, dark=self._dark_mode, parent=self)
+        dialog = _OutcomeChoiceDialog(
+            choices, dark=self._dark_mode, ui_scale=self._ui_scale_factor, parent=self
+        )
         if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return None
         if dialog.selected_index is None:

@@ -10,6 +10,7 @@ from justice_sim.models.state import ActionTrigger, EncounterTrigger, GameState
 from justice_sim.persistence.logs import SessionLog
 from justice_sim.ui_qt.widgets.offer_card import OfferCard
 from justice_sim.ui_qt.widgets.resource_delta import format_resource_delta_html
+from justice_sim.ui_qt.ui_scale import scale_int
 from justice_sim.util.render import summarize_offer
 from justice_sim.util.search import OfferSearchResult
 from justice_sim.util import expr as expr_util
@@ -23,7 +24,9 @@ class LogPanel(QtWidgets.QWidget):
     ) -> None:
         super().__init__(parent)
         self._data = data
-        self._popover = _LogPopover(data)
+        self._ui_scale = 1.0
+        self._last_log: SessionLog | None = None
+        self._popover = _LogPopover(data, ui_scale=self._ui_scale)
         self.destroyed.connect(self._popover.deleteLater)
         self._hover_item: QtWidgets.QListWidgetItem | None = None
         layout = QtWidgets.QVBoxLayout(self)
@@ -38,12 +41,13 @@ class LogPanel(QtWidgets.QWidget):
         self.undo_button.clicked.connect(self.undo_requested.emit)
 
     def update_log(self, log: SessionLog) -> None:
+        self._last_log = log
         self._popover.hide()
         self._hover_item = None
         self.log_list.clear()
         for entry in log.entries:
             item = QtWidgets.QListWidgetItem()
-            widget = _LogEntryWidget(entry)
+            widget = _LogEntryWidget(entry, ui_scale=self._ui_scale)
             item.setSizeHint(widget.sizeHint())
             item.setData(QtCore.Qt.ItemDataRole.UserRole, entry)
             self.log_list.addItem(item)
@@ -398,15 +402,32 @@ class LogPanel(QtWidgets.QWidget):
     def set_theme(self, dark: bool) -> None:
         self._popover.set_theme(dark)
 
+    def set_ui_scale(self, scale: float) -> None:
+        self._ui_scale = scale
+        self._popover.set_ui_scale(scale)
+        if self._last_log is not None:
+            self.update_log(self._last_log)
+
 
 class _LogEntryWidget(QtWidgets.QWidget):
-    def __init__(self, entry, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(
+        self, entry, ui_scale: float = 1.0, parent: QtWidgets.QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.entry = entry
         layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setContentsMargins(
+            scale_int(6, ui_scale),
+            scale_int(4, ui_scale),
+            scale_int(6, ui_scale),
+            scale_int(4, ui_scale),
+        )
         label = QtWidgets.QLabel(
-            format_resource_delta_html(entry.pre_state, entry.post_state)
+            format_resource_delta_html(
+                entry.pre_state,
+                entry.post_state,
+                icon_size=scale_int(_BASE_RESOURCE_ICON_SIZE, ui_scale, minimum=1),
+            )
         )
         label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         label.setWordWrap(True)
@@ -416,14 +437,18 @@ class _LogEntryWidget(QtWidgets.QWidget):
 
 class _LogPopover(QtWidgets.QFrame):
     def __init__(
-        self, data: JusticeData, parent: QtWidgets.QWidget | None = None
+        self,
+        data: JusticeData,
+        ui_scale: float = 1.0,
+        parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._ui_scale = ui_scale
         self.apply_window_attributes()
         self._data = data
         self._shadow = QtWidgets.QGraphicsDropShadowEffect(self)
-        self._shadow.setBlurRadius(26)
-        self._shadow.setOffset(0, 6)
+        self._shadow.setBlurRadius(scale_int(_BASE_SHADOW_BLUR, ui_scale))
+        self._shadow.setOffset(0, scale_int(_BASE_SHADOW_OFFSET_Y, ui_scale))
         self.setGraphicsEffect(self._shadow)
         self._layout = QtWidgets.QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
@@ -435,18 +460,20 @@ class _LogPopover(QtWidgets.QFrame):
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
 
     def set_theme(self, dark: bool) -> None:
+        self._dark = dark
+        radius = scale_int(_BASE_POPOVER_RADIUS, self._ui_scale)
         if dark:
             self.setStyleSheet(
                 "background-color: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
                 " stop:0 #2e2e2e, stop:1 #1f1f1f);"
-                "border-radius: 10px;"
+                f"border-radius: {radius}px;"
             )
             self._shadow.setColor(QtGui.QColor(0, 0, 0, 200))
         else:
             self.setStyleSheet(
                 "background-color: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
                 " stop:0 #fff8ee, stop:1 #efe1cc);"
-                "border-radius: 10px;"
+                f"border-radius: {radius}px;"
             )
             self._shadow.setColor(QtGui.QColor(0, 0, 0, 130))
 
@@ -470,13 +497,24 @@ class _LogPopover(QtWidgets.QFrame):
             state,
             action_filter=action,
             extra_effects=extra_effects,
+            ui_scale=self._ui_scale,
         )
-        card.setFixedWidth(_LOG_POPOVER_WIDTH)
+        card.setFixedWidth(scale_int(_LOG_POPOVER_WIDTH, self._ui_scale, minimum=1))
         card.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
         card.layout().activate()
         card.adjustSize()
         self._layout.addWidget(card)
         self.adjustSize()
 
+    def set_ui_scale(self, scale: float) -> None:
+        self._ui_scale = scale
+        self._shadow.setBlurRadius(scale_int(_BASE_SHADOW_BLUR, scale))
+        self._shadow.setOffset(0, scale_int(_BASE_SHADOW_OFFSET_Y, scale))
+        self.set_theme(getattr(self, "_dark", False))
 
+
+_BASE_RESOURCE_ICON_SIZE = 18
+_BASE_SHADOW_BLUR = 26
+_BASE_SHADOW_OFFSET_Y = 6
+_BASE_POPOVER_RADIUS = 10
 _LOG_POPOVER_WIDTH = 520

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from collections.abc import Callable
 import os
 from pathlib import Path
 import threading
@@ -44,12 +45,18 @@ from justice_sim.planner.rollout import (
     PlannerRecommendation,
     RolloutPlanner,
 )
-from justice_sim.ui_qt.prefs import load_ui_prefs, save_ui_prefs
+from justice_sim.ui_qt.prefs import (
+    load_tour_seen,
+    load_ui_prefs,
+    save_tour_seen,
+    save_ui_prefs,
+)
 from justice_sim.ui_qt.widgets.log_panel import LogPanel
 from justice_sim.ui_qt.widgets.offer_search import OfferSearchWidget
 from justice_sim.ui_qt.widgets.state_panel import StatePanel
 from justice_sim.ui_qt.widgets.suggestion_panel import SuggestionPanel
 from justice_sim.ui_qt.widgets.toast_area import ToastArea
+from justice_sim.ui_qt.widgets.tour_panel import TourPanel, TourStartDialog
 from justice_sim.ui_qt.widgets.resource_delta import format_resource_delta_html
 from justice_sim.ui_qt.ui_scale import (
     UI_SCALE_MODES,
@@ -168,6 +175,51 @@ class TitleBar(QtWidgets.QWidget):
 
     def _on_close(self) -> None:
         self.window().close()
+
+
+@dataclass(frozen=True)
+class _TourStep:
+    title: str
+    body: str
+    target: Callable[[], QtWidgets.QWidget | None] | None = None
+    preferred_positions: tuple[str, ...] = ("right", "left", "bottom", "top")
+    setup: Callable[[], None] | None = None
+
+
+class _TourHighlight(QtWidgets.QFrame):
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._ui_scale = 1.0
+        self._dark = False
+        self.setObjectName("tour_highlight")
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self._shadow = QtWidgets.QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(16)
+        self._shadow.setOffset(0, 0)
+        self.setGraphicsEffect(self._shadow)
+        self.set_theme(False)
+        self.set_ui_scale(1.0)
+
+    def set_theme(self, dark: bool) -> None:
+        self._dark = dark
+        color = "#f2b153" if dark else "#c2792a"
+        border = scale_int(2, self._ui_scale, minimum=1)
+        radius = scale_int(10, self._ui_scale, minimum=2)
+        self.setStyleSheet(
+            "QFrame#tour_highlight {"
+            f" border: {border}px solid {color};"
+            f" border-radius: {radius}px;"
+            " background: transparent;"
+            "}"
+        )
+        shadow_color = QtGui.QColor(242, 177, 83, 140)
+        self._shadow.setColor(shadow_color)
+
+    def set_ui_scale(self, scale: float) -> None:
+        self._ui_scale = scale
+        self._shadow.setBlurRadius(scale_int(16, scale))
+        self.set_theme(self._dark)
 
 
 def _is_titlebar_button(widget: QtWidgets.QWidget | None) -> bool:
@@ -447,7 +499,13 @@ class MainWindow(QtWidgets.QMainWindow):
     planner_progress_value_signal = QtCore.Signal(int)
 
     def __init__(
-        self, data: JusticeData, suggested_rules: SuggestedRules | None = None
+        self,
+        data: JusticeData,
+        suggested_rules: SuggestedRules | None = None,
+        *,
+        theme_override: bool | None = None,
+        ui_scale_override: str | None = None,
+        prompt_tour: bool = False,
     ) -> None:
         super().__init__()
         self.data = data
@@ -482,6 +540,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._dark_mode = False
         self._ui_scale_mode = "auto"
         self._ui_scale_factor = 1.0
+        self._theme_override = theme_override
+        self._ui_scale_override = ui_scale_override
+        self._force_tour_prompt = prompt_tour
+        self._tour_seen = False
         app = QtWidgets.QApplication.instance()
         self._base_app_font = app.font() if app is not None else self.font()
         self._base_font_point_size = (
@@ -493,6 +555,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._load_ui_preferences()
         self._auto_offer_id: str | None = None
         self._auto_offer_case: int | None = None
+        self._tour_steps: list[_TourStep] = self._build_tour_steps()
+        self._tour_index = 0
+        self._tour_active = False
+        self._tour_prompt_shown = False
+        self._tour_prompt: TourStartDialog | None = None
+        self._tour_applied_action = False
 
         self.setWindowTitle("Justice Monument Simulator")
         self.setMinimumSize(1200, 800)
@@ -578,6 +646,8 @@ class MainWindow(QtWidgets.QMainWindow):
         settings_layout.addRow("Rollouts", self.rollouts_spin)
         settings_layout.addRow("Sim Mode", sim_mode_container)
         left_column.addWidget(settings_group)
+        self._planner_settings_group = settings_group
+        self._sim_mode_container = sim_mode_container
 
         self.import_button = QtWidgets.QPushButton("Import Run")
         self.export_button = QtWidgets.QPushButton("Export Run")
@@ -670,6 +740,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.scale_toggle.clicked.connect(self._on_scale_toggled)
         self._size_grip = QtWidgets.QSizeGrip(self)
         self._size_grip.setFixedSize(16, 16)
+        self._tour_highlight = _TourHighlight(self)
+        self._tour_highlight.hide()
+        self.tour_panel = TourPanel(self)
+        self.tour_panel.hide()
+        self.tour_panel.next_requested.connect(self._on_tour_next)
+        self.tour_panel.back_requested.connect(self._on_tour_back)
+        self.tour_panel.close_requested.connect(self._dismiss_tour)
         self._update_window_controls_geometry()
 
         self._sync_theme_toggle()
@@ -698,6 +775,11 @@ class MainWindow(QtWidgets.QMainWindow):
         if event.type() == QtCore.QEvent.Type.WindowStateChange:
             self.title_bar.set_maximized(self.isMaximized())
         super().changeEvent(event)
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        super().showEvent(event)
+        if not self._tour_prompt_shown and self._should_prompt_tour():
+            QtCore.QTimer.singleShot(0, self._prompt_tour_start)
 
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
         if event.type() == QtCore.QEvent.Type.KeyPress and isinstance(
@@ -811,6 +893,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.offer_search.set_ui_scale(scale)
         self.log_panel.set_ui_scale(scale)
         self.toast_area.set_ui_scale(scale)
+        self.tour_panel.set_ui_scale(scale)
+        self._tour_highlight.set_ui_scale(scale)
+        if self._tour_prompt is not None:
+            self._tour_prompt.set_ui_scale(scale)
         self._size_grip.setFixedSize(
             self._scaled(16, minimum=1), self._scaled(16, minimum=1)
         )
@@ -833,22 +919,305 @@ class MainWindow(QtWidgets.QMainWindow):
     def _resource_icon_size(self) -> int:
         return self._scaled(_RESOURCE_ICON_SIZE, minimum=1)
 
+    def _ensure_offer_selected(self) -> None:
+        if self.offer_search.results_list.count() == 0:
+            self.offer_search._on_search(self.offer_search.search_input.text())
+        if self.offer_search.results_list.count() == 0:
+            return
+        self.offer_search.results_list.setCurrentRow(0)
+        self.offer_search._on_selection()
+
+    def _ensure_action_applied(self) -> None:
+        if self._tour_applied_action:
+            return
+        self._ensure_offer_selected()
+        offer = self.current_offer
+        if offer is None:
+            return
+        action = None
+        if "approve" in offer.actions_available:
+            action = "approve"
+        elif "reject" in offer.actions_available:
+            action = "reject"
+        elif "dismiss" in offer.actions_available:
+            action = "dismiss"
+        if action is None:
+            return
+        pre_state = self.session.state
+        try:
+            self.session.apply(offer, action)
+        except ActionNotAllowed:
+            return
+        self.toast_area.show_toast(
+            format_resource_delta_html(
+                pre_state,
+                self.session.state,
+                icon_size=self._resource_icon_size(),
+            )
+        )
+        self.current_recommendation = None
+        self._clear_recommendation_ui()
+        self._tour_applied_action = True
+        self._refresh()
+
+    def _build_tour_steps(self) -> list[_TourStep]:
+        return [
+            _TourStep(
+                title="Welcome to Justice Monument Simulator",
+                body=(
+                    "This tour highlights the main features and shows where to "
+                    "interact. Use Next to continue or Skip Tour to dismiss. "
+                    "You can always explore freely after the tour ends."
+                ),
+            ),
+            _TourStep(
+                title="Search offers",
+                body=(
+                    "Type to search NPCs, titles, or offer text. "
+                    "Use #npc or #npc_name_with_underscores to filter by NPC, "
+                    "and $term to filter by effect text."
+                ),
+                target=lambda: self.offer_search.search_input,
+                preferred_positions=("bottom", "right", "left", "top"),
+            ),
+            _TourStep(
+                title="NPC filters",
+                body=(
+                    "Click an NPC icon to filter offers by that character. "
+                    "Icons dim when a filter is active, making matches stand out."
+                ),
+                target=lambda: self.offer_search._npc_filter_bar,
+                preferred_positions=("bottom", "right", "left", "top"),
+            ),
+            _TourStep(
+                title="Show all toggle",
+                body=(
+                    "Use this toggle to ignore offer conditions when browsing. "
+                    "It’s handy when you want to read ahead or debug offer chains."
+                ),
+                target=lambda: self.offer_search.show_all_toggle,
+                preferred_positions=("bottom", "right", "left", "top"),
+            ),
+            _TourStep(
+                title="Offer list",
+                body=(
+                    "Browse offers here and click one to select it. "
+                    "Each card summarizes the approve/reject effects."
+                ),
+                target=lambda: self.offer_search.results_list,
+                preferred_positions=("right", "left", "bottom", "top"),
+            ),
+            _TourStep(
+                title="Select an offer",
+                body=(
+                    "We’ll select an offer to enable actions and recommendations. "
+                    "Selection also drives what appears in the suggestion panel."
+                ),
+                target=lambda: self.offer_search.results_list,
+                preferred_positions=("right", "left", "bottom", "top"),
+                setup=self._ensure_offer_selected,
+            ),
+            _TourStep(
+                title="Recommendations",
+                body=(
+                    "The suggestion panel shows the best action and expected metrics. "
+                    "It updates as state changes or settings are adjusted."
+                ),
+                target=lambda: self.suggestion_panel,
+                preferred_positions=("left", "bottom", "top", "right"),
+                setup=self._ensure_offer_selected,
+            ),
+            _TourStep(
+                title="Action buttons",
+                body=(
+                    "Apply actions here once an offer is selected. "
+                    "Buttons enable/disable based on affordability and rules."
+                ),
+                target=lambda: self.approve_button,
+                preferred_positions=("left", "top", "bottom", "right"),
+                setup=self._ensure_offer_selected,
+            ),
+            _TourStep(
+                title="Apply an action",
+                body=(
+                    "We’ll apply an action to add an entry to the log. "
+                    "This simulates a real decision so you can see the flow."
+                ),
+                target=lambda: self.approve_button,
+                preferred_positions=("left", "top", "bottom", "right"),
+                setup=self._ensure_action_applied,
+            ),
+            _TourStep(
+                title="State panel",
+                body=(
+                    "These resources update after every action. "
+                    "Use the +/- controls to adjust the starting state."
+                ),
+                target=lambda: self.state_panel,
+                preferred_positions=("right", "bottom", "top", "left"),
+            ),
+            _TourStep(
+                title="Planner settings",
+                body=(
+                    "Tune risk, horizon, rollouts, and sim mode here. "
+                    "These settings change how recommendations are calculated."
+                ),
+                target=lambda: self._planner_settings_group,
+                preferred_positions=("right", "bottom", "top", "left"),
+            ),
+            _TourStep(
+                title="Session log",
+                body=(
+                    "Your action history appears here with details on hover. "
+                    "Hover entries to see the offer card and effects."
+                ),
+                target=lambda: self.log_panel,
+                preferred_positions=("left", "top", "bottom", "right"),
+                setup=self._ensure_action_applied,
+            ),
+            _TourStep(
+                title="Theme + UI scale",
+                body=(
+                    "Toggle theme and UI scale here for comfort. "
+                    "These preferences persist between launches."
+                ),
+                target=lambda: self.theme_toggle,
+                preferred_positions=("top", "right", "left", "bottom"),
+            ),
+            _TourStep(
+                title="Import and export",
+                body=(
+                    "Save or load runs and reset the session from these buttons. "
+                    "Export is useful for sharing, resuming later, or saving "
+                    "starting conditions."
+                ),
+                target=lambda: self.import_button,
+                preferred_positions=("right", "bottom", "top", "left"),
+            ),
+            _TourStep(
+                title="Tour complete",
+                body=(
+                    "That’s it! You’re ready to explore on your own. "
+                    "We’ll reset the run when you finish the tour."
+                ),
+            ),
+        ]
+
+    def _start_tour(self) -> None:
+        self._tour_index = 0
+        self._tour_active = True
+        self._tour_applied_action = False
+        self._update_tour_panel()
+        self.tour_panel.show()
+        self.tour_panel.raise_()
+        self._position_tour_panel()
+
+    def _prompt_tour_start(self) -> None:
+        if self._tour_prompt_shown:
+            return
+        self._tour_prompt_shown = True
+        if self._tour_prompt is None:
+            self._tour_prompt = TourStartDialog(self)
+            self._tour_prompt.start_requested.connect(self._on_tour_start)
+            self._tour_prompt.skip_requested.connect(self._on_tour_skip)
+        self._tour_prompt.set_theme(self._dark_mode)
+        self._tour_prompt.set_ui_scale(self._ui_scale_factor)
+        self._position_tour_prompt()
+        self._tour_prompt.show()
+        self._tour_prompt.raise_()
+
+    def _dismiss_tour(self) -> None:
+        self._tour_active = False
+        self.tour_panel.hide()
+        self._clear_tour_highlight()
+
+    def _on_tour_start(self) -> None:
+        if self._tour_prompt is not None:
+            self._tour_prompt.hide()
+        self._mark_tour_seen()
+        self._start_tour()
+
+    def _on_tour_skip(self) -> None:
+        if self._tour_prompt is not None:
+            self._tour_prompt.hide()
+        self._mark_tour_seen()
+        self._dismiss_tour()
+
+    def _on_tour_next(self) -> None:
+        if self._tour_index >= len(self._tour_steps) - 1:
+            self._finish_tour()
+            return
+        self._tour_index += 1
+        self._update_tour_panel()
+
+    def _on_tour_back(self) -> None:
+        if self._tour_index <= 0:
+            return
+        self._tour_index -= 1
+        self._update_tour_panel()
+
+    def _finish_tour(self) -> None:
+        self._mark_tour_seen()
+        self._dismiss_tour()
+        self._reset_run()
+
+    def _should_prompt_tour(self) -> bool:
+        if self._force_tour_prompt:
+            return True
+        return not self._tour_seen
+
+    def _mark_tour_seen(self) -> None:
+        if self._tour_seen:
+            return
+        self._tour_seen = True
+        if self._settings is None:
+            return
+        save_tour_seen(self._settings, seen=True)
+
+    def _update_tour_panel(self) -> None:
+        if not self._tour_steps:
+            self._dismiss_tour()
+            return
+        step = self._tour_steps[self._tour_index]
+        if step.setup:
+            step.setup()
+        self.tour_panel.set_step(
+            self._tour_index,
+            len(self._tour_steps),
+            step.title,
+            step.body,
+        )
+        self.tour_panel.layout().activate()
+        self.tour_panel.adjustSize()
+        self.tour_panel.resize(
+            self.tour_panel.width(), self.tour_panel.sizeHint().height()
+        )
+        self._update_tour_highlight()
+        self._position_tour_panel()
+
     def _settings_enabled(self) -> bool:
         if os.environ.get("JUSTICE_SIM_DISABLE_SETTINGS") == "1":
             return False
         return "PYTEST_CURRENT_TEST" not in os.environ
 
     def _load_ui_preferences(self) -> None:
-        if self._settings is None:
-            return
-        theme_dark, scale_mode = load_ui_prefs(
-            self._settings,
-            default_theme=self._dark_mode,
-            default_scale=self._ui_scale_mode,
-            allowed_modes=UI_SCALE_MODES,
-        )
-        self._dark_mode = theme_dark
-        self._ui_scale_mode = scale_mode
+        if self._settings is not None:
+            theme_dark, scale_mode = load_ui_prefs(
+                self._settings,
+                default_theme=self._dark_mode,
+                default_scale=self._ui_scale_mode,
+                allowed_modes=UI_SCALE_MODES,
+            )
+            self._dark_mode = theme_dark
+            self._ui_scale_mode = scale_mode
+            self._tour_seen = load_tour_seen(self._settings, default_seen=False)
+        if self._theme_override is not None:
+            self._dark_mode = self._theme_override
+        if (
+            self._ui_scale_override is not None
+            and self._ui_scale_override in UI_SCALE_MODES
+        ):
+            self._ui_scale_mode = self._ui_scale_override
 
     def _save_ui_preferences(self) -> None:
         if self._settings is None:
@@ -1006,6 +1375,10 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.toast_area.set_theme(dark)
         self.log_panel.set_theme(dark)
+        self.tour_panel.set_theme(dark)
+        if self._tour_prompt is not None:
+            self._tour_prompt.set_theme(dark)
+        self._tour_highlight.set_theme(dark)
         self._update_window_controls_geometry()
 
     def _update_window_controls_geometry(self) -> None:
@@ -1033,6 +1406,150 @@ class MainWindow(QtWidgets.QMainWindow):
             geo.width() - grip_margin - self._size_grip.width(),
             geo.height() - grip_margin - self._size_grip.height(),
         )
+        self._position_tour_panel()
+        self._position_tour_prompt()
+        self._update_tour_highlight()
+
+    def _position_tour_panel(self) -> None:
+        if not self.tour_panel.isVisible():
+            return
+        margin = self._scaled(16)
+        panel_width = self.tour_panel.width() or self.tour_panel.sizeHint().width()
+        panel_height = self.tour_panel.sizeHint().height()
+        window_rect = QtCore.QRect(0, 0, self.width(), self.height())
+        target_rect = self._tour_target_rect()
+        if target_rect is None:
+            x = margin
+            y = self.title_bar.height() + margin
+            max_x = max(margin, self.width() - panel_width - margin)
+            max_y = max(margin, self.height() - panel_height - margin)
+            self.tour_panel.move(min(x, max_x), min(y, max_y))
+            return
+        candidates: list[QtCore.QPoint] = []
+        for position in self._tour_candidate_positions():
+            x, y = self._tour_position_for_target(
+                target_rect, panel_width, panel_height, margin, position
+            )
+            candidates.append(QtCore.QPoint(x, y))
+        if not candidates:
+            candidates = [QtCore.QPoint(margin, self.title_bar.height() + margin)]
+        best = candidates[0]
+        best_score = self._tour_position_score(
+            best,
+            panel_width,
+            panel_height,
+            target_rect,
+            window_rect,
+        )
+        for candidate in candidates[1:]:
+            score = self._tour_position_score(
+                candidate, panel_width, panel_height, target_rect, window_rect
+            )
+            if score < best_score:
+                best_score = score
+                best = candidate
+        self.tour_panel.move(best)
+
+    def _position_tour_prompt(self) -> None:
+        if self._tour_prompt is None or not self._tour_prompt.isVisible():
+            return
+        self._tour_prompt.adjustSize()
+        prompt_size = self._tour_prompt.sizeHint()
+        window_geo = self.geometry()
+        center = window_geo.center()
+        x = center.x() - prompt_size.width() // 2
+        y = center.y() - prompt_size.height() // 2
+        self._tour_prompt.move(max(0, x), max(0, y))
+
+    def _tour_candidate_positions(self) -> tuple[str, ...]:
+        if not self._tour_active:
+            return ()
+        step = self._tour_steps[self._tour_index]
+        return step.preferred_positions
+
+    def _tour_target_rect(self) -> QtCore.QRect | None:
+        if not self._tour_active:
+            return None
+        step = self._tour_steps[self._tour_index]
+        if step.target is None:
+            return None
+        target = step.target()
+        if target is None or not target.isVisible():
+            return None
+        top_left = target.mapTo(self, QtCore.QPoint(0, 0))
+        rect = QtCore.QRect(top_left, target.size())
+        return rect
+
+    def _tour_position_for_target(
+        self,
+        target_rect: QtCore.QRect,
+        panel_width: int,
+        panel_height: int,
+        margin: int,
+        position: str,
+    ) -> tuple[int, int]:
+        if position == "right":
+            x = target_rect.right() + margin
+            y = target_rect.top()
+        elif position == "left":
+            x = target_rect.left() - panel_width - margin
+            y = target_rect.top()
+        elif position == "top":
+            x = target_rect.left()
+            y = target_rect.top() - panel_height - margin
+        else:  # bottom
+            x = target_rect.left()
+            y = target_rect.bottom() + margin
+        max_x = max(margin, self.width() - panel_width - margin)
+        max_y = max(margin, self.height() - panel_height - margin)
+        x = min(max(margin, x), max_x)
+        y = min(max(margin, y), max_y)
+        return x, y
+
+    def _tour_position_score(
+        self,
+        pos: QtCore.QPoint,
+        panel_width: int,
+        panel_height: int,
+        target_rect: QtCore.QRect,
+        window_rect: QtCore.QRect,
+    ) -> float:
+        panel_rect = QtCore.QRect(pos, QtCore.QSize(panel_width, panel_height))
+        intersection = panel_rect.intersected(target_rect)
+        intersection_area = intersection.width() * intersection.height()
+        center_distance = (panel_rect.center().x() - target_rect.center().x()) ** 2 + (
+            panel_rect.center().y() - target_rect.center().y()
+        ) ** 2
+        overflow = 0
+        if not window_rect.contains(panel_rect):
+            overflow_rect = panel_rect.adjusted(
+                -window_rect.left(),
+                -window_rect.top(),
+                window_rect.right() - panel_rect.right(),
+                window_rect.bottom() - panel_rect.bottom(),
+            )
+            overflow = abs(overflow_rect.left()) + abs(overflow_rect.top())
+        return intersection_area * 1000 + center_distance + overflow * 10000
+
+    def _update_tour_highlight(self) -> None:
+        if not self._tour_active:
+            self._tour_highlight.hide()
+            return
+        target_rect = self._tour_target_rect()
+        if target_rect is None:
+            self._tour_highlight.hide()
+            return
+        padding = self._scaled(6)
+        highlight_rect = target_rect.adjusted(
+            -padding, -padding, padding, padding
+        ).intersected(QtCore.QRect(0, 0, self.width(), self.height()))
+        self._tour_highlight.setGeometry(highlight_rect)
+        self._tour_highlight.show()
+        self._tour_highlight.raise_()
+        self.tour_panel.raise_()
+
+    def _clear_tour_highlight(self) -> None:
+        self._tour_highlight.hide()
 
     def _make_shortcut(self, sequence: str, handler: callable) -> QtGui.QShortcut:
         shortcut = QtGui.QShortcut(QtGui.QKeySequence(sequence), self)
@@ -1114,6 +1631,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         self._stop_planner_thread()
+        if self._tour_prompt is not None:
+            self._tour_prompt.hide()
         super().closeEvent(event)
 
     def _stop_planner_thread(self) -> None:

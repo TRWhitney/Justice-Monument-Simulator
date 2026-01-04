@@ -15,10 +15,17 @@ uv run justice-sim
 uv run justice-sim-gui
 ```
 
+Optional GUI launch overrides:
+
+```bash
+uv run justice-sim-gui --theme dark --ui-scale large --prompt-tour
+```
+
 ## GUI Notes
 
 - Bottom-left buttons toggle theme and UI scale (Auto/Small/Medium/Large).
 - Theme and UI scale persist between runs.
+- Guided tour appears once until dismissed or completed.
 
 ## Tests
 

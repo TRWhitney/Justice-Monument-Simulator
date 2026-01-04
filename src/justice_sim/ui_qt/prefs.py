@@ -8,6 +8,7 @@ from justice_sim.ui_qt.ui_scale import UI_SCALE_MODES
 
 KEY_THEME_DARK = "ui/theme_dark"
 KEY_SCALE_MODE = "ui/scale_mode"
+KEY_TOUR_SEEN = "ui/tour_seen"
 
 
 def load_ui_prefs(
@@ -29,4 +30,13 @@ def save_ui_prefs(
 ) -> None:
     settings.setValue(KEY_THEME_DARK, bool(theme_dark))
     settings.setValue(KEY_SCALE_MODE, str(scale_mode))
+    settings.sync()
+
+
+def load_tour_seen(settings: QtCore.QSettings, *, default_seen: bool = False) -> bool:
+    return bool(settings.value(KEY_TOUR_SEEN, default_seen, type=bool))
+
+
+def save_tour_seen(settings: QtCore.QSettings, *, seen: bool) -> None:
+    settings.setValue(KEY_TOUR_SEEN, bool(seen))
     settings.sync()

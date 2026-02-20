@@ -1,4 +1,5 @@
 import os
+import time
 from dataclasses import replace
 
 import pytest
@@ -7,6 +8,7 @@ from PySide6 import QtWidgets
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
+from justice_sim.planner.rollout import ActionScore, PlannerRecommendation
 from justice_sim.ui_qt.app import create_app
 from justice_sim.ui_qt.main_window import MainWindow
 
@@ -94,6 +96,33 @@ def test_game_over_shown_when_mh_zero(data_factory):
     window._update_action_controls()
 
     assert not window.game_over_label.isHidden()
+
+    window.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_game_over_offer_selection_skips_planner(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    window = MainWindow(data)
+    window.session.state = GameState(
+        case_index=1, coins=0, pop=1, mh=0, dismissals=0, retirement_chests=0
+    )
+
+    class _NoCallPlanner:
+        def __init__(self, config):
+            self.config = config
+
+        def recommend(self, *_args, **_kwargs):
+            raise AssertionError("Planner should not run for game-over state")
+
+    window.planner = _NoCallPlanner(window.planner.config)
+    window._on_offer_selected(data.offers_by_id["offer1"])
+
+    assert not window.suggestion_panel.is_calculating()
+    assert window.suggestion_panel.best_label.text() == "No recommendation"
 
     window.close()
     app.quit()
@@ -244,6 +273,66 @@ def test_action_buttons_toast_without_offer(data_factory):
     window.best_button.click()
 
     assert window.toast_area.toast_count() == initial + 3
+
+    window.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_resource_adjust_debounces_planner_and_log_refresh(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    window = MainWindow(data)
+    window.current_offer = data.offers_by_id["offer1"]
+    window._manual_adjust_timer.setInterval(80)
+
+    class _CountingPlanner:
+        def __init__(self, config) -> None:
+            self.config = config
+            self.calls = 0
+
+        def recommend(self, _state, offer, progress=None):
+            self.calls += 1
+            scores = tuple(
+                ActionScore(
+                    action=action,
+                    expected_utility=1.0,
+                    expected_chests=0.0,
+                    death_probability=0.0,
+                    variance=0.0,
+                )
+                for action in offer.actions_available
+            )
+            return PlannerRecommendation(
+                best_action=offer.actions_available[0], action_scores=scores
+            )
+
+    planner = _CountingPlanner(window.planner.config)
+    window.planner = planner
+    window._on_offer_selected(data.offers_by_id["offer1"])
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and planner.calls < 1:
+        QtWidgets.QApplication.processEvents()
+        time.sleep(0.01)
+    baseline_calls = planner.calls
+
+    window._adjust_resource("coins", 1)
+    window._adjust_resource("coins", 1)
+    QtWidgets.QApplication.processEvents()
+
+    assert window.session.state.coins == 7
+    assert planner.calls == baseline_calls
+    assert not window.session.log.entries
+
+    deadline = time.monotonic() + 1.5
+    while time.monotonic() < deadline and planner.calls < baseline_calls + 1:
+        QtWidgets.QApplication.processEvents()
+        time.sleep(0.01)
+
+    assert planner.calls == baseline_calls + 1
+    assert window.session.log.entries
+    assert window.session.log.entries[-1].action == "adjust"
 
     window.close()
     app.quit()

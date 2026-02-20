@@ -699,7 +699,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._manual_adjust_timer = QtCore.QTimer(self)
         self._manual_adjust_timer.setSingleShot(True)
         self._manual_adjust_timer.setInterval(350)
-        self._manual_adjust_timer.timeout.connect(self._commit_manual_adjust_log)
+        self._manual_adjust_timer.timeout.connect(self._finalize_manual_adjust)
         self.planner_progress_signal.connect(
             self._tick_planner_progress, QtCore.Qt.ConnectionType.QueuedConnection
         )
@@ -1752,6 +1752,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._start_planner(offer)
 
     def _start_planner(self, offer: OfferSpec) -> None:
+        if self._sim_mode == "none" or self._is_game_over():
+            self._stop_planner_thread()
+            self.current_recommendation = None
+            self._stop_planner_progress()
+            self._clear_recommendation_ui()
+            self._update_action_controls()
+            return
         self._planner_generation += 1
         generation = self._planner_generation
         self._stop_planner_thread()
@@ -2332,6 +2339,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_button_dimmed(self.best_button, True)
 
     def _adjust_resource(self, resource: str, delta: int) -> None:
+        if not self._manual_adjust_timer.isActive():
+            self._stop_planner_thread()
         if self._manual_adjust_pre_state is None:
             self._manual_adjust_pre_state = self.session.state
         state = self.session.state
@@ -2381,16 +2390,14 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self.current_recommendation = None
         if self.current_offer and self._sim_mode != "none":
-            self.suggestion_panel.best_label.setText("Calculating...")
+            self.suggestion_panel.best_label.setText("Adjusting...")
             self.suggestion_panel.metrics_label.setText("")
-            self.suggestion_panel.set_calculating(
-                True, self._planner_progress_total(self.current_offer)
-            )
-            self._start_planner(self.current_offer)
+            self.suggestion_panel.set_calculating(False)
         else:
             self._clear_recommendation_ui()
+        self.state_panel.update_state(self.session.state)
+        self._update_action_controls()
         self._manual_adjust_timer.start()
-        self._refresh()
 
     def _flush_manual_adjust_log(self) -> None:
         if self._manual_adjust_pre_state is None:
@@ -2399,15 +2406,29 @@ class MainWindow(QtWidgets.QMainWindow):
             self._manual_adjust_timer.stop()
         self._commit_manual_adjust_log()
 
-    def _commit_manual_adjust_log(self) -> None:
+    def _finalize_manual_adjust(self) -> None:
+        if not self._commit_manual_adjust_log():
+            return
+        self._refresh()
+        if self.current_offer and self._sim_mode != "none":
+            self.suggestion_panel.best_label.setText("Calculating...")
+            self.suggestion_panel.metrics_label.setText("")
+            self.suggestion_panel.set_calculating(
+                True, self._planner_progress_total(self.current_offer)
+            )
+            self._start_planner(self.current_offer)
+        else:
+            self._clear_recommendation_ui()
+
+    def _commit_manual_adjust_log(self) -> bool:
         pre_state = self._manual_adjust_pre_state
         if pre_state is None:
-            return
+            return False
         self._manual_adjust_pre_state = None
         self.session.log.record_manual_adjust(
             pre_state, self.session.state, self.session.rng.state()
         )
-        self._refresh()
+        return True
 
     def _action_unaffordable(self, action: str, state: GameState | None = None) -> bool:
         if not self.current_offer:

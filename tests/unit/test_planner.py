@@ -238,3 +238,194 @@ def test_planner_respects_suggested_rule_constraint_require(data_dict_factory):
     recommendation = planner.recommend(state, offer)
 
     assert recommendation.best_action == "approve"
+
+
+@pytest.mark.unit
+def test_planner_short_circuits_rollouts_for_required_action(data_dict_factory):
+    data_dict = data_dict_factory()
+    data = JusticeData.from_dict(data_dict)
+    rules = SuggestedRules.from_dict(
+        {
+            "version": "suggested_rules",
+            "rules": [
+                {
+                    "id": "require_approve",
+                    "offer_ids": ["offer1"],
+                    "constraints": [{"action": "approve", "mode": "require"}],
+                }
+            ],
+        }
+    )
+    planner = RolloutPlanner.from_defaults(data, suggested_rules=rules)
+    planner.config = PlannerConfig(
+        horizon_cases=3,
+        rollouts_per_action=200,
+        adaptive_rollouts=False,
+        adaptive_rollouts_max=200,
+        risk_preset="balanced",
+    )
+    state = GameState(
+        case_index=1, coins=5, pop=3, mh=3, dismissals=0, retirement_chests=0
+    )
+    offer = data.offers_by_id["offer1"]
+    progress_calls: list[int] = []
+
+    recommendation = planner.recommend(state, offer, progress=progress_calls.append)
+
+    assert recommendation.best_action == "approve"
+    assert progress_calls == []
+
+
+@pytest.mark.unit
+def test_planner_short_circuits_rollouts_for_strict_upside(data_factory):
+    data = data_factory()
+    planner = RolloutPlanner.from_defaults(data)
+    planner.config = PlannerConfig(
+        horizon_cases=3,
+        rollouts_per_action=200,
+        adaptive_rollouts=False,
+        adaptive_rollouts_max=200,
+        risk_preset="balanced",
+    )
+    state = GameState(
+        case_index=1, coins=5, pop=3, mh=3, dismissals=0, retirement_chests=0
+    )
+    offer = data.offers_by_id["offer1"]
+    progress_calls: list[int] = []
+
+    recommendation = planner.recommend(state, offer, progress=progress_calls.append)
+
+    assert recommendation.best_action == "approve"
+    assert progress_calls == []
+
+
+@pytest.mark.unit
+def test_planner_short_circuits_rollouts_for_game_over_outcome(data_dict_factory):
+    data_dict = data_dict_factory()
+    data_dict["offers"][0]["actions_available"] = ["approve", "reject"]
+    data_dict["offers"][0]["approve"]["effects"] = [
+        {"type": "add_resource", "params": {"resource": "mh", "amount": -1}}
+    ]
+    data_dict["offers"][0]["reject"]["effects"] = [
+        {"type": "add_resource", "params": {"resource": "mh", "amount": -1}}
+    ]
+    data = JusticeData.from_dict(data_dict)
+    planner = RolloutPlanner.from_defaults(data)
+    planner.config = PlannerConfig(
+        horizon_cases=3,
+        rollouts_per_action=200,
+        adaptive_rollouts=False,
+        adaptive_rollouts_max=200,
+        risk_preset="balanced",
+    )
+    state = GameState(
+        case_index=1, coins=5, pop=3, mh=1, dismissals=0, retirement_chests=0
+    )
+    offer = data.offers_by_id["offer1"]
+    progress_calls: list[int] = []
+
+    recommendation = planner.recommend(state, offer, progress=progress_calls.append)
+
+    assert progress_calls == []
+    assert all(
+        score.death_probability == pytest.approx(1.0)
+        for score in recommendation.action_scores
+    )
+
+
+@pytest.mark.unit
+def test_planner_short_circuits_for_random_sure_thing_upside(data_dict_factory):
+    data_dict = data_dict_factory()
+    data_dict["offers"][0]["actions_available"] = ["approve", "reject"]
+    data_dict["offers"][0]["approve"] = {
+        "effects": [],
+        "random": {
+            "type": "categorical",
+            "choices": [
+                {
+                    "weight": 1,
+                    "effects": [
+                        {
+                            "type": "random_range_resource",
+                            "params": {
+                                "resource": "retirement_chests",
+                                "min": 2,
+                                "max": 3,
+                            },
+                        }
+                    ],
+                },
+                {
+                    "weight": 1,
+                    "effects": [
+                        {
+                            "type": "add_resource",
+                            "params": {"resource": "coins", "amount": 1},
+                        }
+                    ],
+                },
+            ],
+        },
+    }
+    data_dict["offers"][0]["reject"] = {
+        "effects": [
+            {"type": "add_resource", "params": {"resource": "coins", "amount": -1}}
+        ]
+    }
+    data = JusticeData.from_dict(data_dict)
+    planner = RolloutPlanner.from_defaults(data)
+    planner.config = PlannerConfig(
+        horizon_cases=3,
+        rollouts_per_action=200,
+        adaptive_rollouts=False,
+        adaptive_rollouts_max=200,
+        risk_preset="balanced",
+    )
+    state = GameState(
+        case_index=1, coins=5, pop=3, mh=3, dismissals=0, retirement_chests=0
+    )
+    offer = data.offers_by_id["offer1"]
+    progress_calls: list[int] = []
+
+    recommendation = planner.recommend(state, offer, progress=progress_calls.append)
+
+    assert recommendation.best_action == "approve"
+    assert progress_calls == []
+
+
+@pytest.mark.unit
+def test_planner_does_not_short_circuit_for_mixed_random_action(data_dict_factory):
+    data_dict = data_dict_factory()
+    data_dict["offers"][0]["actions_available"] = ["approve", "reject"]
+    data_dict["offers"][0]["approve"] = {
+        "effects": [],
+        "random": {
+            "type": "bernoulli",
+            "p": 0.5,
+            "then": [
+                {"type": "add_resource", "params": {"resource": "coins", "amount": 2}}
+            ],
+            "else": [
+                {"type": "add_resource", "params": {"resource": "coins", "amount": -2}}
+            ],
+        },
+    }
+    data_dict["offers"][0]["reject"] = {"effects": []}
+    data = JusticeData.from_dict(data_dict)
+    planner = RolloutPlanner.from_defaults(data)
+    planner.config = PlannerConfig(
+        horizon_cases=3,
+        rollouts_per_action=20,
+        adaptive_rollouts=False,
+        adaptive_rollouts_max=20,
+        risk_preset="balanced",
+    )
+    state = GameState(
+        case_index=1, coins=5, pop=3, mh=3, dismissals=0, retirement_chests=0
+    )
+    offer = data.offers_by_id["offer1"]
+    progress_calls: list[int] = []
+
+    planner.recommend(state, offer, progress=progress_calls.append)
+
+    assert progress_calls

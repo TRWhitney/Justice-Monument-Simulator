@@ -18,13 +18,14 @@ from justice_sim.engine.effects import resolve_expr
 from justice_sim.engine.reducer import (
     ActionNotAllowed,
     apply_action,
+    apply_action_with_outcome,
     can_afford_action,
     is_action_blocked,
     preview_state_after_encounter_triggers,
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.engine.scoring import utility, weights_for_preset
-from justice_sim.models.offer import JusticeData, OfferSpec
+from justice_sim.models.offer import EffectSpec, JusticeData, OfferSpec, OutcomeSpec
 from justice_sim.models.state import GameState
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.planner.cache import ValueCache
@@ -100,6 +101,11 @@ class RolloutPlanner:
         policy_action = self._policy_override_action(
             state, offer, eligible_actions=eligible_actions
         )
+        fast_path = self._fast_path_recommendation(
+            state, offer, eligible_actions=eligible_actions, policy_action=policy_action
+        )
+        if fast_path is not None:
+            return fast_path
         scores = self._score_actions(
             state, offer, self.config.rollouts_per_action, progress=progress
         )
@@ -128,6 +134,35 @@ class RolloutPlanner:
         return PlannerRecommendation(
             best_action=best_action, action_scores=tuple(scores)
         )
+
+    def _fast_path_recommendation(
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        *,
+        eligible_actions: tuple[str, ...],
+        policy_action: str | None,
+    ) -> PlannerRecommendation | None:
+        scores = self._deterministic_action_scores(state, offer)
+        if not scores:
+            return None
+        scores = self._apply_action_biases(state, offer, scores)
+        if self._is_terminal_offer_state(state, offer):
+            best = max(scores, key=lambda s: s.expected_utility)
+            return PlannerRecommendation(
+                best_action=best.action, action_scores=tuple(scores)
+            )
+        if len(eligible_actions) == 1 and self._action_is_possible(
+            state, offer, eligible_actions[0]
+        ):
+            return PlannerRecommendation(
+                best_action=eligible_actions[0], action_scores=tuple(scores)
+            )
+        if policy_action is not None:
+            return PlannerRecommendation(
+                best_action=policy_action, action_scores=tuple(scores)
+            )
+        return None
 
     def reset_cache(self) -> None:
         self.cache = ValueCache()
@@ -264,9 +299,9 @@ class RolloutPlanner:
         eligible_actions: tuple[str, ...] | None = None,
     ) -> str | None:
         actions = eligible_actions or offer.actions_available
-        results: dict[str, tuple[dict[str, float], tuple]] = {}
+        results: dict[str, tuple[str, tuple]] = {}
         for action in actions:
-            evaluation = self._deterministic_action_delta(state, offer, action)
+            evaluation = self._action_outcome_profile(state, offer, action)
             if evaluation is None:
                 continue
             results[action] = evaluation
@@ -276,23 +311,171 @@ class RolloutPlanner:
         if len(signatures) > 1:
             return None
         positives = [
-            action
-            for action, (delta, _) in results.items()
-            if self._is_strictly_positive(delta)
+            action for action, (profile, _) in results.items() if profile == "positive"
         ]
         neutrals = [
-            action for action, (delta, _) in results.items() if self._is_neutral(delta)
+            action for action, (profile, _) in results.items() if profile == "neutral"
         ]
         negatives = [
-            action
-            for action, (delta, _) in results.items()
-            if self._is_strictly_negative(delta)
+            action for action, (profile, _) in results.items() if profile == "negative"
         ]
         mixed = [
-            action for action, (delta, _) in results.items() if self._is_mixed(delta)
+            action for action, (profile, _) in results.items() if profile == "mixed"
         ]
         if len(positives) == 1 and not mixed and (negatives or neutrals):
             return positives[0]
+        return None
+
+    def _action_outcome_profile(
+        self, state: GameState, offer: OfferSpec, action: str
+    ) -> tuple[str, tuple] | None:
+        deterministic = self._deterministic_action_delta(state, offer, action)
+        if deterministic is not None:
+            delta, signature = deterministic
+            return self._delta_profile(delta), signature
+
+        stochastic = self._stochastic_action_delta_profile(state, offer, action)
+        if stochastic is None:
+            return None
+        return stochastic
+
+    def _stochastic_action_delta_profile(
+        self, state: GameState, offer: OfferSpec, action: str
+    ) -> tuple[str, tuple] | None:
+        outcome = self._outcome_for_action(offer, action)
+        if outcome is None:
+            return None
+        scenarios = self._expand_outcome_scenarios(outcome)
+        if scenarios is None or not scenarios:
+            return None
+
+        profiles: list[str] = []
+        signatures: set[tuple] = set()
+        for scenario in scenarios:
+            rng = Rng(0)
+            try:
+                next_state, _ = apply_action_with_outcome(
+                    state,
+                    offer,
+                    action,
+                    scenario,
+                    self.data,
+                    rng,
+                )
+            except ActionNotAllowed:
+                return None
+            if rng.state().draws != 0:
+                return None
+            delta = {
+                "coins": next_state.coins - state.coins,
+                "pop": next_state.pop - state.pop,
+                "mh": next_state.mh - state.mh,
+                "dismissals": next_state.dismissals - state.dismissals,
+                "retirement_chests": (
+                    next_state.retirement_chests - state.retirement_chests
+                ),
+            }
+            profiles.append(self._delta_profile(delta))
+            cache_key = next_state.to_cache_key()
+            signatures.add(cache_key[6:13] + cache_key[14:])
+
+        if len(signatures) != 1:
+            return None
+
+        if all(profile == "positive" for profile in profiles):
+            profile = "positive"
+        elif all(profile == "neutral" for profile in profiles):
+            profile = "neutral"
+        elif all(profile == "negative" for profile in profiles):
+            profile = "negative"
+        else:
+            profile = "mixed"
+        return profile, next(iter(signatures))
+
+    def _expand_outcome_scenarios(
+        self, outcome: OutcomeSpec
+    ) -> list[OutcomeSpec] | None:
+        branch_effects: list[tuple[EffectSpec, ...]]
+        if outcome.random is None:
+            branch_effects = [()]
+        elif hasattr(outcome.random, "then_effects"):
+            branch_effects = [
+                tuple(outcome.random.then_effects),
+                tuple(outcome.random.else_effects),
+            ]
+        elif hasattr(outcome.random, "choices"):
+            branch_effects = [
+                tuple(choice.effects) for choice in outcome.random.choices
+            ]
+        else:
+            return None
+
+        scenarios: list[OutcomeSpec] = []
+        for branch in branch_effects:
+            expanded = self._expand_effect_scenarios(outcome.effects + branch)
+            if expanded is None:
+                return None
+            scenarios.extend(OutcomeSpec(effects=effects) for effects in expanded)
+        return scenarios
+
+    def _expand_effect_scenarios(
+        self, effects: tuple[EffectSpec, ...]
+    ) -> list[tuple[EffectSpec, ...]] | None:
+        scenarios: list[tuple[EffectSpec, ...]] = [()]
+        for effect in effects:
+            effect_variants = self._effect_variants(effect)
+            if effect_variants is None:
+                return None
+            next_scenarios: list[tuple[EffectSpec, ...]] = []
+            for scenario in scenarios:
+                for variant in effect_variants:
+                    next_scenarios.append(scenario + (variant,))
+            scenarios = next_scenarios
+        return scenarios
+
+    def _effect_variants(self, effect: EffectSpec) -> tuple[EffectSpec, ...] | None:
+        if (
+            effect.when is not None
+            or effect.duration_cases is not None
+            or effect.schedule_after_cases is not None
+        ):
+            return None
+        if effect.type == "random_range_resource":
+            resource = effect.params.get("resource")
+            if not resource:
+                return None
+            try:
+                low = int(effect.params.get("min", 0))
+                high = int(effect.params.get("max", 0))
+            except (TypeError, ValueError):
+                return None
+            min_amount = min(low, high)
+            max_amount = max(low, high)
+            variants = [
+                EffectSpec(
+                    type="add_resource",
+                    params={"resource": resource, "amount": min_amount},
+                )
+            ]
+            if max_amount != min_amount:
+                variants.append(
+                    EffectSpec(
+                        type="add_resource",
+                        params={"resource": resource, "amount": max_amount},
+                    )
+                )
+            return tuple(variants)
+        if effect.type in {"random_exchange"}:
+            return None
+        return (effect,)
+
+    def _outcome_for_action(self, offer: OfferSpec, action: str) -> OutcomeSpec | None:
+        if action == "approve":
+            return offer.approve
+        if action == "reject":
+            return offer.reject
+        if action == "dismiss":
+            return offer.dismiss or offer.reject
         return None
 
     def _deterministic_survival_actions(
@@ -312,6 +495,53 @@ class RolloutPlanner:
             else:
                 survivable.add(action)
         return survivable, lethal
+
+    def _is_terminal_offer_state(self, state: GameState, offer: OfferSpec) -> bool:
+        if state.ended or state.mh <= 0:
+            return True
+        if not offer.actions_available:
+            return True
+        for action in offer.actions_available:
+            preview = self._action_preview(state, offer, action)
+            if preview is None:
+                continue
+            next_state, draws = preview
+            if draws != 0:
+                return False
+            if not (next_state.ended or next_state.mh <= 0):
+                return False
+        return True
+
+    def _deterministic_action_scores(
+        self, state: GameState, offer: OfferSpec
+    ) -> list[ActionScore]:
+        scores: list[ActionScore] = []
+        for action in offer.actions_available:
+            preview = self._action_preview(state, offer, action)
+            if preview is None:
+                scores.append(
+                    ActionScore(
+                        action=action,
+                        expected_utility=float("-inf"),
+                        expected_chests=0.0,
+                        death_probability=1.0,
+                        variance=0.0,
+                    )
+                )
+                continue
+            next_state, _ = preview
+            scores.append(
+                ActionScore(
+                    action=action,
+                    expected_utility=utility(next_state, self.data, self.weights),
+                    expected_chests=next_state.retirement_chests,
+                    death_probability=1.0
+                    if (next_state.ended or next_state.mh <= 0)
+                    else 0.0,
+                    variance=0.0,
+                )
+            )
+        return scores
 
     def _action_preview(
         self, state: GameState, offer: OfferSpec, action: str
@@ -344,6 +574,15 @@ class RolloutPlanner:
         cache_key = next_state.to_cache_key()
         signature = cache_key[6:13] + cache_key[14:]
         return delta, signature
+
+    def _delta_profile(self, delta: dict[str, float]) -> str:
+        if self._is_strictly_positive(delta):
+            return "positive"
+        if self._is_neutral(delta):
+            return "neutral"
+        if self._is_strictly_negative(delta):
+            return "negative"
+        return "mixed"
 
     def _apply_action_biases(
         self,

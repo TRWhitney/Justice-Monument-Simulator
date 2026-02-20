@@ -561,7 +561,7 @@ def resolve_expr(expr: Any, state: GameState, data: JusticeData) -> float:
     if isinstance(expr, (int, float)):
         return float(expr)
     if isinstance(expr, str):
-        case_scale_value, _, functions, variables = _build_numeric_context(state, data)
+        _, _, functions, variables = _build_numeric_context(state, data)
         value = expr_util.evaluate_numeric(
             expr, expr_util.build_numeric_context(variables, functions)
         )
@@ -574,8 +574,13 @@ def resolve_expr(expr: Any, state: GameState, data: JusticeData) -> float:
         value = expr_util.evaluate_numeric(
             raw_expr, expr_util.build_numeric_context(variables, functions)
         )
-        if expr.get("scaled_by_case"):
+        scaling = str(expr.get("scaling", "none"))
+        if scaling == "case":
             value *= case_scale_value
+        elif scaling == "harbinger":
+            value *= harbinger_cost_value
+        elif scaling != "none":
+            raise ValueError(f"Unsupported scaling mode: {scaling}")
         return float(value)
     raise ValueError("Unsupported expression format")
 

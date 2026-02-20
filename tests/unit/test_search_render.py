@@ -142,7 +142,7 @@ def test_summary_scales_by_case(data_factory):
                 type="add_resource",
                 params={
                     "resource": "coins",
-                    "amount": {"expr": "2", "scaled_by_case": True},
+                    "amount": {"expr": "2", "scaling": "case"},
                 },
             ),
         ),

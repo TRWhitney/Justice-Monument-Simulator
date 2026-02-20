@@ -188,6 +188,24 @@ def test_resolve_expr_and_probability_string_formats():
 
 
 @pytest.mark.unit
+def test_resolve_expr_scaling_modes():
+    data = build_minimal_data()
+    state = GameState(
+        case_index=6, coins=0, pop=20, mh=3, dismissals=0, retirement_chests=0
+    )
+    assert resolve_expr({"expr": "2"}, state, data) == pytest.approx(2.0)
+    assert resolve_expr({"expr": "2", "scaling": "none"}, state, data) == pytest.approx(
+        2.0
+    )
+    assert resolve_expr({"expr": "2", "scaling": "case"}, state, data) == pytest.approx(
+        4.0
+    )
+    assert resolve_expr(
+        {"expr": "-1", "scaling": "harbinger"}, state, data
+    ) == pytest.approx(-2.0)
+
+
+@pytest.mark.unit
 def test_flags_statuses_and_modifiers_apply():
     data = build_minimal_data()
     state = GameState(
@@ -268,7 +286,7 @@ def test_scheduled_effect_snapshots_scaled_amount():
         type="add_resource",
         params={
             "resource": "coins",
-            "amount": {"expr": "3", "scaled_by_case": True, "snapshot": True},
+            "amount": {"expr": "3", "scaling": "case", "snapshot": True},
         },
         schedule_after_cases=1,
     )

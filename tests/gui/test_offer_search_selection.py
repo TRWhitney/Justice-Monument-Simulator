@@ -26,7 +26,7 @@ def test_offer_search_preserves_selection_without_spurious_emit(data_dict_factor
                         "type": "add_resource",
                         "params": {
                             "resource": "pop",
-                            "amount": {"expr": "2", "scaled_by_case": True},
+                            "amount": {"expr": "2", "scaling": "case"},
                         },
                     }
                 ]

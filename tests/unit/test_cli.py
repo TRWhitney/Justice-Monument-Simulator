@@ -137,6 +137,26 @@ def test_cli_command_adjust_reset_and_sim_mode(data_factory):
 
 
 @pytest.mark.unit
+def test_cli_skips_recommendation_when_game_over(data_factory):
+    data = data_factory()
+    console = Console(record=True)
+    app = cli_module.CliApp(data, SuggestedRules.empty(), console=console)
+    app.current_offer = data.offers_by_id["offer1"]
+    app.session.state = GameState(
+        case_index=1, coins=0, pop=0, mh=0, dismissals=0, retirement_chests=0
+    )
+
+    class _NoCallPlanner:
+        def recommend(self, *_args, **_kwargs):
+            raise AssertionError("Planner should not run for game-over state")
+
+    app.planner = _NoCallPlanner()
+    app._update_recommendation()
+
+    assert app.current_recommendation is None
+
+
+@pytest.mark.unit
 def test_cli_manual_random_resolution_flow(data_dict_factory):
     data_dict = data_dict_factory()
     data_dict["offers"].append(

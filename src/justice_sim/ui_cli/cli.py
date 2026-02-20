@@ -1096,7 +1096,7 @@ class CliApp:
             )
 
     def _update_recommendation(self) -> None:
-        if self.sim_mode == "none" or not self.current_offer:
+        if self.sim_mode == "none" or not self.current_offer or self._is_game_over():
             self.current_recommendation = None
             return
         self.current_recommendation = self.planner.recommend(

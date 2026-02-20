@@ -218,9 +218,14 @@
               "type": "string",
               "minLength": 1
             },
-            "scaled_by_case": {
-              "type": "boolean",
-              "default": false
+            "scaling": {
+              "type": "string",
+              "enum": [
+                "none",
+                "case",
+                "harbinger"
+              ],
+              "default": "none"
             },
             "snapshot": {
               "type": "boolean",

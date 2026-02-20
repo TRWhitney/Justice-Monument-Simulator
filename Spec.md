@@ -40,8 +40,11 @@
 - `constraints` / `promises` (e.g., “must approve next”, “cannot approve for N cases”)
 
 ### Scaling formulas
-- For any numeric field marked as “scaled_by_case”: multiply by:
+- For any numeric expression object with `scaling: "case"`: multiply by:
   - `case_scale = ceil(case_index / 5)`
+- Numeric expression objects default to `scaling: "none"` when omitted.
+- For `scaling: "harbinger"`: multiply by:
+  - `harbinger_cost` (from `special_rules.harbinger.cost_expr`)
 - Harbinger coin cost:
   - `harbinger_cost = ceil(case_index / 5) * (1 + 0.25 * floor((case_index - 1) / 13))`
 
@@ -258,6 +261,10 @@ Where:
 ### Planner default: hybrid rollout
 - For the currently observed offer, evaluate each available action:
   - Apply action deterministically; where outcome has random branching, compute expected by sampling OR exact expansion for small branch sets.
+- Short-circuit recommendation without rollouts when the result is already known:
+  - game over is unavoidable for the current offer,
+  - a rule/constraint forces a single action,
+  - or one action is deterministic strict upside against deterministic neutral/downside alternatives.
 - From the resulting state, run Monte Carlo rollouts for H future cases:
   - Each rollout selects future encounters from the configured EncounterModel
   - At each simulated encounter, choose action using:

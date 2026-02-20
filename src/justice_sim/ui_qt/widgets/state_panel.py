@@ -16,7 +16,7 @@ _RESOURCE_ROWS = (
     ("pop", "Popularity", "pop.png", True, False, None),
     ("mh", "Health", "mental_health.png", True, False, None),
     ("dismissals", "Dismissals", "dismissal.png", True, False, None),
-    ("retirement_chests", "Chests", "chest.png", False, False, 28),
+    ("retirement_chests", "Chests", "chest.png", True, False, None),
 )
 _BASE_ICON_SIZE = 22
 _BASE_ICON_TEXT_WIDTH = 44

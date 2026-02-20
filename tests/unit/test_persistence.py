@@ -87,6 +87,28 @@ def test_session_log_undo():
 
 
 @pytest.mark.unit
+def test_session_log_manual_adjust_merges_consecutive():
+    log = SessionLog()
+    pre_state = GameState(
+        case_index=1, coins=1, pop=0, mh=1, dismissals=0, retirement_chests=0
+    )
+    mid_state = GameState(
+        case_index=1, coins=2, pop=0, mh=1, dismissals=0, retirement_chests=0
+    )
+    post_state = GameState(
+        case_index=1, coins=2, pop=1, mh=1, dismissals=0, retirement_chests=0
+    )
+    log.record_manual_adjust(pre_state, mid_state, RngState(1, 0))
+    log.record_manual_adjust(mid_state, post_state, RngState(1, 0))
+
+    assert len(log.entries) == 1
+    entry = log.entries[0]
+    assert entry.action == "adjust"
+    assert entry.pre_state == pre_state
+    assert entry.post_state == post_state
+
+
+@pytest.mark.unit
 def test_profile_roundtrip(tmp_path):
     profile = Profile(
         version="profile_v1",

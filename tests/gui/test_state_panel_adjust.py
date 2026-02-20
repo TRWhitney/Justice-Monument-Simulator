@@ -28,7 +28,7 @@ def test_state_panel_emits_adjust_signal():
 
 
 @pytest.mark.gui
-def test_state_panel_omits_case_and_chest_buttons():
+def test_state_panel_omits_case_buttons():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = create_app()
     panel = StatePanel()
@@ -41,11 +41,11 @@ def test_state_panel_omits_case_and_chest_buttons():
     )
     assert (
         panel.findChild(QtWidgets.QPushButton, "resource_retirement_chests_increase")
-        is None
+        is not None
     )
     assert (
         panel.findChild(QtWidgets.QPushButton, "resource_retirement_chests_decrease")
-        is None
+        is not None
     )
 
     panel.close()

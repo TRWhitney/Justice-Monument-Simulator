@@ -18,7 +18,11 @@ _RESOURCE_ICONS = {
 
 
 def format_resource_delta_html(
-    before: GameState, after: GameState, icon_size: int = 18
+    before: GameState,
+    after: GameState,
+    icon_size: int = 18,
+    *,
+    action: str | None = None,
 ) -> str:
     deltas = {
         "coins": after.coins - before.coins,
@@ -42,7 +46,11 @@ def format_resource_delta_html(
             parts.append(f"{icon_html} {html.escape(delta_text)}")
         else:
             parts.append(f"{html.escape(resource)} {html.escape(delta_text)}")
-    return "  ".join(parts) if parts else "No effect"
+    if parts:
+        return "  ".join(parts)
+    if action == "skip":
+        return "No effect (skip)"
+    return "No effect"
 
 
 def _resolve_icon_path(filename: str | None) -> Path | None:

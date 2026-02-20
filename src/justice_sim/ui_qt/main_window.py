@@ -25,6 +25,7 @@ from justice_sim.engine.reducer import (
     can_afford_action,
     is_action_blocked,
     preview_state_after_encounter_triggers,
+    skip_case,
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.engine.scoring import weights_for_preset
@@ -370,13 +371,31 @@ class _OutcomeChoiceDialog(QtWidgets.QDialog):
                 " border-radius: {panel_radius}px;"
                 " color: {fg};"
                 "}}"
+                "QFrame#outcome_dialog_panel QLabel {{"
+                " background: transparent;"
+                " color: {fg};"
+                "}}"
                 "QComboBox {{"
                 " background-color: {field_bg};"
                 " border: {border_w}px solid {border};"
                 " border-radius: {field_radius}px;"
                 " padding: {field_pad_v}px {field_pad_h}px;"
                 "}}"
+                "QComboBox QAbstractItemView {{"
+                " background-color: {field_bg};"
+                " color: {fg};"
+                " selection-background-color: {btn_hover};"
+                "}}"
                 "QComboBox::drop-down {{ border: none; }}"
+                "QSpinBox {{"
+                " background-color: {field_bg};"
+                " border: {border_w}px solid {border};"
+                " border-radius: {field_radius}px;"
+                " padding: {field_pad_v}px {field_pad_h}px;"
+                "}}"
+                "QSpinBox::up-button, QSpinBox::down-button {{"
+                " width: {field_pad_h}px;"
+                "}}"
                 "QPushButton {{"
                 " background-color: {btn_bg};"
                 " border: {border_w}px solid {border};"
@@ -416,6 +435,144 @@ class _OutcomeChoiceDialog(QtWidgets.QDialog):
 
     def _accept_choice(self) -> None:
         self._selected_index = self._combo.currentIndex()
+        self.accept()
+
+
+class _OutcomeValueDialog(QtWidgets.QDialog):
+    def __init__(
+        self,
+        title: str,
+        label: str,
+        min_value: int,
+        max_value: int,
+        *,
+        dark: bool,
+        ui_scale: float = 1.0,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._ui_scale = ui_scale
+        self._selected_value: int | None = None
+        self.setWindowFlags(
+            QtCore.Qt.WindowType.Dialog | QtCore.Qt.WindowType.FramelessWindowHint
+        )
+        self.setModal(True)
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        root_layout = QtWidgets.QVBoxLayout(self)
+        margin = scale_int(14, ui_scale)
+        root_layout.setContentsMargins(margin, margin, margin, margin)
+
+        panel = QtWidgets.QFrame()
+        panel.setObjectName("outcome_dialog_panel")
+        panel_layout = QtWidgets.QVBoxLayout(panel)
+        panel_margin = scale_int(16, ui_scale)
+        panel_layout.setContentsMargins(
+            panel_margin, panel_margin, panel_margin, panel_margin
+        )
+        panel_layout.setSpacing(scale_int(12, ui_scale))
+        root_layout.addWidget(panel)
+
+        self._shadow = QtWidgets.QGraphicsDropShadowEffect(panel)
+        self._shadow.setBlurRadius(scale_int(22, ui_scale))
+        self._shadow.setOffset(0, scale_int(5, ui_scale))
+        panel.setGraphicsEffect(self._shadow)
+
+        title_label = QtWidgets.QLabel(title)
+        title_label.setStyleSheet(
+            f"font-weight: 700; font-size: {scale_int(14, ui_scale)}px;"
+        )
+        title_label.setWordWrap(True)
+        panel_layout.addWidget(title_label)
+
+        body = QtWidgets.QLabel(label)
+        body.setWordWrap(True)
+        panel_layout.addWidget(body)
+
+        self._spin = QtWidgets.QSpinBox()
+        self._spin.setRange(min_value, max_value)
+        self._spin.setValue(min_value)
+        self._spin.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        panel_layout.addWidget(self._spin)
+
+        button_box = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(self._accept_value)
+        button_box.rejected.connect(self.reject)
+        panel_layout.addWidget(button_box)
+
+        self._apply_theme(panel, dark)
+
+    @property
+    def selected_value(self) -> int | None:
+        return self._selected_value
+
+    def _apply_theme(self, panel: QtWidgets.QFrame, dark: bool) -> None:
+        if dark:
+            palette = {
+                "panel_top": "#2e2e2e",
+                "panel_bottom": "#1f1f1f",
+                "border": "#3a3a3a",
+                "field_bg": "#262626",
+                "btn_bg": "#2c2c2c",
+                "btn_hover": "#3a3a3a",
+                "btn_pressed": "#4a4a4a",
+                "fg": "#e6e6e6",
+            }
+            self._shadow.setColor(QtGui.QColor(0, 0, 0, 190))
+        else:
+            palette = {
+                "panel_top": "#fff8ee",
+                "panel_bottom": "#efe1cc",
+                "border": "#d8d2c3",
+                "field_bg": "#ffffff",
+                "btn_bg": "#f4efe6",
+                "btn_hover": "#e5dccb",
+                "btn_pressed": "#d6c7b0",
+                "fg": "#1b1b1b",
+            }
+            self._shadow.setColor(QtGui.QColor(0, 0, 0, 120))
+        sizes = {
+            "border_w": max(1, scale_int(1, self._ui_scale)),
+            "panel_radius": scale_int(12, self._ui_scale),
+            "field_radius": scale_int(6, self._ui_scale),
+            "field_pad_v": scale_int(4, self._ui_scale),
+            "field_pad_h": scale_int(8, self._ui_scale),
+            "btn_pad_h": scale_int(10, self._ui_scale),
+        }
+        panel.setStyleSheet(
+            (
+                "QFrame#outcome_dialog_panel {{"
+                " background-color: qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+                " stop:0 {panel_top}, stop:1 {panel_bottom});"
+                " border-radius: {panel_radius}px;"
+                " color: {fg};"
+                "}}"
+                "QLabel {{ background: transparent; color: {fg}; }}"
+                "QSpinBox {{"
+                " background-color: {field_bg};"
+                " border: {border_w}px solid {border};"
+                " border-radius: {field_radius}px;"
+                " padding: {field_pad_v}px {field_pad_h}px;"
+                "}}"
+                "QSpinBox::up-button, QSpinBox::down-button {{"
+                " width: {field_pad_h}px;"
+                "}}"
+                "QPushButton {{"
+                " background-color: {btn_bg};"
+                " border: {border_w}px solid {border};"
+                " border-radius: {field_radius}px;"
+                " padding: {field_pad_v}px {btn_pad_h}px;"
+                "}}"
+                "QPushButton:hover {{ background-color: {btn_hover}; }}"
+                "QPushButton:pressed {{ background-color: {btn_pressed}; }}"
+            ).format(**palette, **sizes)
+        )
+
+    def _accept_value(self) -> None:
+        self._selected_value = self._spin.value()
         self.accept()
 
 
@@ -460,6 +617,13 @@ class GuiSession:
         self.log.record(
             pre_state, offer.id, action, self.rng.state(), new_state, random_label
         )
+        self.state = new_state
+
+    def skip(self, offer: OfferSpec | None = None) -> None:
+        pre_state = self.state
+        new_state = skip_case(self.state, self.data, self.rng)
+        offer_id = offer.id if offer else "skip"
+        self.log.record(pre_state, offer_id, "skip", self.rng.state(), new_state)
         self.state = new_state
 
     def apply_with_outcome(
@@ -531,6 +695,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._planner_progress_timer.setInterval(125)
         self._planner_progress_timer.timeout.connect(self._tick_planner_progress)
         self._planner_progress_pending = False
+        self._manual_adjust_pre_state: GameState | None = None
+        self._manual_adjust_timer = QtCore.QTimer(self)
+        self._manual_adjust_timer.setSingleShot(True)
+        self._manual_adjust_timer.setInterval(350)
+        self._manual_adjust_timer.timeout.connect(self._commit_manual_adjust_log)
         self.planner_progress_signal.connect(
             self._tick_planner_progress, QtCore.Qt.ConnectionType.QueuedConnection
         )
@@ -674,6 +843,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.approve_button = QtWidgets.QPushButton("Approve")
         self.reject_button = QtWidgets.QPushButton("Reject")
         self.dismiss_button = QtWidgets.QPushButton("Dismiss")
+        self.skip_button = QtWidgets.QPushButton("Skip")
         self.best_button = QtWidgets.QPushButton("Apply Recommended")
         self.game_over_label = QtWidgets.QLabel("Game Over")
         self.game_over_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -685,18 +855,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.approve_button.clicked.connect(lambda: self._apply_action("approve"))
         self.reject_button.clicked.connect(lambda: self._apply_action("reject"))
         self.dismiss_button.clicked.connect(lambda: self._apply_action("dismiss"))
+        self.skip_button.clicked.connect(self._skip_case)
         self.best_button.clicked.connect(self._apply_best)
 
         hotkeys = {
             "approve": "Ctrl+Shift+A",
             "reject": "Ctrl+Shift+R",
             "dismiss": "Ctrl+Shift+D",
+            "skip": "Ctrl+Shift+S",
             "best": "Ctrl+Shift+B",
             "undo": "Ctrl+Z",
         }
         self.approve_button.setText(f"Approve ({hotkeys['approve']})")
         self.reject_button.setText(f"Reject ({hotkeys['reject']})")
         self.dismiss_button.setText(f"Dismiss ({hotkeys['dismiss']})")
+        self.skip_button.setText(f"Skip ({hotkeys['skip']})")
         self.best_button.setText(f"Apply Recommended ({hotkeys['best']})")
         self._shortcuts: list[QtGui.QShortcut] = []
         self._shortcuts.append(
@@ -712,12 +885,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 hotkeys["dismiss"], lambda: self._apply_action("dismiss")
             )
         )
+        self._shortcuts.append(self._make_shortcut(hotkeys["skip"], self._skip_case))
         self._shortcuts.append(self._make_shortcut(hotkeys["best"], self._apply_best))
         self._shortcuts.append(self._make_shortcut(hotkeys["undo"], self._undo))
 
         right_column.addWidget(self.approve_button)
         right_column.addWidget(self.reject_button)
         right_column.addWidget(self.dismiss_button)
+        right_column.addWidget(self.skip_button)
         right_column.addWidget(self.best_button)
         right_column.addWidget(self.game_over_label)
 
@@ -760,7 +935,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _refresh(self) -> None:
         self._sync_auto_offer()
         self.state_panel.update_state(self.session.state)
-        self.state_panel.set_adjust_enabled(not self.session.log.entries)
+        self.state_panel.set_adjust_enabled(True)
         self.log_panel.update_log(self.session.log)
         self.offer_search.set_auto_offer_id(self._auto_offer_id)
         self.offer_search.set_show_all_visible(self._sim_mode != "full")
@@ -1648,6 +1823,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._stop_planner_progress()
 
     def _apply_action(self, action: str) -> None:
+        self._flush_manual_adjust_log()
         if not self.current_offer:
             self.toast_area.show_toast("Select an offer first.")
             return
@@ -1673,6 +1849,26 @@ class MainWindow(QtWidgets.QMainWindow):
                 pre_state,
                 self.session.state,
                 icon_size=self._resource_icon_size(),
+            )
+        )
+        self.current_recommendation = None
+        self._clear_recommendation_ui()
+        self._refresh()
+
+    def _skip_case(self) -> None:
+        self._flush_manual_adjust_log()
+        pre_state = self.session.state
+        try:
+            self.session.skip(self.current_offer)
+        except ActionNotAllowed as exc:
+            self.toast_area.show_toast(f"Skip failed: {exc}")
+            return
+        self.toast_area.show_toast(
+            format_resource_delta_html(
+                pre_state,
+                self.session.state,
+                icon_size=self._resource_icon_size(),
+                action="skip",
             )
         )
         self.current_recommendation = None
@@ -1869,12 +2065,18 @@ class MainWindow(QtWidgets.QMainWindow):
     def _prompt_random_value(
         self, title: str, label: str, min_value: int, max_value: int
     ) -> int | None:
-        value, ok = QtWidgets.QInputDialog.getInt(
-            self, title, label, min_value, min_value, max_value
+        dialog = _OutcomeValueDialog(
+            title,
+            label,
+            min_value,
+            max_value,
+            dark=self._dark_mode,
+            ui_scale=self._ui_scale_factor,
+            parent=self,
         )
-        if not ok:
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return None
-        return value
+        return dialog.selected_value
 
     def _effect_applies(self, effect: EffectSpec, state: GameState) -> bool:
         if not effect.when:
@@ -1972,11 +2174,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._auto_offer_case = case_index
 
     def _undo(self) -> None:
+        self._flush_manual_adjust_log()
         self.session.undo()
         self._refresh()
 
     def _reset_run(self) -> None:
         self._stop_planner_thread()
+        self._manual_adjust_timer.stop()
+        self._manual_adjust_pre_state = None
         self.session.reset(reseed=True)
         self.current_offer = None
         self.current_recommendation = None
@@ -2087,6 +2292,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.approve_button,
             self.reject_button,
             self.dismiss_button,
+            self.skip_button,
             self.best_button,
         ):
             button.setVisible(not game_over)
@@ -2095,6 +2301,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_button_dimmed(self.approve_button, True)
             self._set_button_dimmed(self.reject_button, True)
             self._set_button_dimmed(self.dismiss_button, True)
+            self._set_button_dimmed(self.skip_button, False)
             self._set_button_dimmed(self.best_button, True)
             return
         preview_state = self._preview_state_for_offer()
@@ -2113,6 +2320,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._action_unaffordable("dismiss", preview_state)
             or self._action_blocked_by_status("dismiss", preview_state),
         )
+        self._set_button_dimmed(self.skip_button, False)
         best_action = self._recommended_action()
         if best_action and not self.suggestion_panel.is_calculating():
             self._set_button_dimmed(
@@ -2124,8 +2332,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_button_dimmed(self.best_button, True)
 
     def _adjust_resource(self, resource: str, delta: int) -> None:
-        if self.session.log.entries:
-            return
+        if self._manual_adjust_pre_state is None:
+            self._manual_adjust_pre_state = self.session.state
         state = self.session.state
         ended = False
         end_reason = None
@@ -2181,6 +2389,24 @@ class MainWindow(QtWidgets.QMainWindow):
             self._start_planner(self.current_offer)
         else:
             self._clear_recommendation_ui()
+        self._manual_adjust_timer.start()
+        self._refresh()
+
+    def _flush_manual_adjust_log(self) -> None:
+        if self._manual_adjust_pre_state is None:
+            return
+        if self._manual_adjust_timer.isActive():
+            self._manual_adjust_timer.stop()
+        self._commit_manual_adjust_log()
+
+    def _commit_manual_adjust_log(self) -> None:
+        pre_state = self._manual_adjust_pre_state
+        if pre_state is None:
+            return
+        self._manual_adjust_pre_state = None
+        self.session.log.record_manual_adjust(
+            pre_state, self.session.state, self.session.rng.state()
+        )
         self._refresh()
 
     def _action_unaffordable(self, action: str, state: GameState | None = None) -> bool:

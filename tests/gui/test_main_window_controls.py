@@ -35,6 +35,7 @@ def test_game_over_label_shown_for_deadly_offer(data_dict_factory):
     assert window.approve_button.isHidden()
     assert window.reject_button.isHidden()
     assert window.dismiss_button.isHidden()
+    assert window.skip_button.isHidden()
     assert window.best_button.isHidden()
 
     window.close()
@@ -222,6 +223,7 @@ def test_action_buttons_dimmed_without_offer(data_factory):
     assert window.approve_button.styleSheet() == "color: #8a8a8a;"
     assert window.reject_button.styleSheet() == "color: #8a8a8a;"
     assert window.dismiss_button.styleSheet() == "color: #8a8a8a;"
+    assert window.skip_button.styleSheet() == ""
     assert window.best_button.styleSheet() == "color: #8a8a8a;"
 
     window.close()
@@ -238,9 +240,10 @@ def test_action_buttons_toast_without_offer(data_factory):
 
     initial = window.toast_area.toast_count()
     window.approve_button.click()
+    window.skip_button.click()
     window.best_button.click()
 
-    assert window.toast_area.toast_count() == initial + 2
+    assert window.toast_area.toast_count() == initial + 3
 
     window.close()
     app.quit()

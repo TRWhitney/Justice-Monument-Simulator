@@ -339,7 +339,7 @@ Export formats
 ### Main layout (single window)
 Left column: State & Controls
 - Current state panel: case, coins, pop, health, dismissals, chests
-  - `[-]` icon value `[+]` controls adjust initial conditions (except case and chests)
+  - `[-]` icon value `[+]` controls adjust values during a run (case stays fixed)
   - Default starting state: coins 5, pop 3, health 1, dismissals 0
 - Progression/profile selector + load/save buttons
 - Encounter model selector + settings button
@@ -375,19 +375,20 @@ Right column: Recommendation + actions + log
     - confidence/variance display
   - Show top 3 actions
 - Action buttons:
-  - “Apply Approve/Reject/Dismiss” (records in log)
+  - “Apply Approve/Reject/Dismiss/Skip” (records in log)
   - “Apply Recommended”
   - If no valid action remains or all actions would drop MH to 0, replace buttons with a red “Game Over” label
 - Log panel:
   - list of steps with brief summary
   - Undo button (undo last step)
   - Jump-to-step (optional)
+  - Manual state adjustments add debounced log entries that merge when consecutive
 
 ### GUI behavior
 - Planner runs when offer is selected or settings change.
 - Planner should cancel previous run if a new selection occurs (threaded).
 - Use a worker thread for planning; never block UI thread.
-- If no offer is selected, action buttons appear dimmed and clicking them prompts to select an offer first.
+- If no offer is selected, action buttons (except Skip) appear dimmed and prompt to select an offer first.
 
 ---
 
@@ -395,23 +396,27 @@ Right column: Recommendation + actions + log
 
 Command: `justice-sim`
 
-Interactive loop:
-- Render current state
-- Prompt user to select offer:
+Command-driven REPL:
+- `state` / `status` to show resources and selection
+- `search <query>` and `list` for offer discovery
   - `#npc` filtering
-  - free-text substring search
-  - show numbered list of matching cards (condensed but readable)
-- After user selects offer, compute recommendation and show:
-  - best action + metrics
-  - alternatives
-- User inputs:
-  - `a/r/d` to apply approve/reject/dismiss
-  - `best` to apply recommendation
-  - `undo` to undo
-  - `export run_state.json`
-  - `import run_state.json`
-  - `save-profile profile.json`, `load-profile profile.json`
-  - `quit`
+  - `$term` effect-only filtering
+  - `show-all on/off` to ignore offer conditions when allowed
+- `select <#>` to choose an offer; `offer` shows full details
+- `recommend` to show planner output (disabled in sim mode `none`)
+- `apply <approve|reject|dismiss|skip|best>` (plus `approve/reject/dismiss/skip/best` shorthands)
+- `undo` to revert last action
+- `log` / `log show <#>` for run history and details
+- `reset` to restart the run
+- `import <path>` / `export <path>` for run state
+- `adjust <resource> <delta>` supports coins/pop/mh/dismissals/chests mid-run
+- `save-profile <path>` / `load-profile <path>` for planner settings
+- `planner set risk|horizon|rollouts <value>` to tune the planner
+- `sim full|mid|none` to switch simulation modes:
+  - `full`: auto-roll randomness and auto-pick encounters
+  - `mid`: manual randomness with recommendations enabled
+  - `none`: manual randomness, recommendations disabled
+- `choose <#>` / `value <n>` / `cancel` to resolve manual randomness
 
 CLI must reuse the same `OfferSearch` code and `Planner` engine as GUI.
 
@@ -506,6 +511,7 @@ CLI must reuse the same `OfferSearch` code and `Planner` engine as GUI.
 - [x] Implement interactive loop with search, recommendation, apply action
 - [x] Implement undo, import/export, profile load/save
 - [x] Ensure CLI uses core engine/planner/search modules only
+- [x] Expand CLI to command-driven REPL with sim modes, show-all toggle, planner controls, and log detail
 
 ### Phase 7 — GUI (Qt)
 - [x] Implement main window layout with panels described

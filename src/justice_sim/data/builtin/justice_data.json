@@ -1835,7 +1835,7 @@
               "resource": "coins",
               "amount": {
                 "expr": "-6",
-                "scaled_by_case": true
+                "scaled_by_case": false
               }
             }
           },
@@ -2690,7 +2690,10 @@
             "type": "add_resource",
             "params": {
               "resource": "coins",
-              "amount": 1
+              "amount": {
+                "expr": "3",
+                "scaled_by_case": true
+              }
             }
           },
           {
@@ -3319,7 +3322,7 @@
             "params": {
               "resource": "coins",
               "amount": {
-                "expr": "-1",
+                "expr": "-2",
                 "scaled_by_case": true
               }
             }
@@ -3472,7 +3475,7 @@
             "params": {
               "resource": "coins",
               "amount": {
-                "expr": "-1",
+                "expr": "-3",
                 "scaled_by_case": true
               }
             }

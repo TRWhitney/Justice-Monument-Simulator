@@ -72,6 +72,38 @@ class SessionLog:
         )
         self.entries.append(entry)
 
+    def record_manual_adjust(
+        self,
+        pre_state: GameState,
+        post_state: GameState,
+        rng_state: RngState,
+        *,
+        offer_id: str = "manual_adjust",
+    ) -> None:
+        entry = LogEntry(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            pre_state=pre_state,
+            offer_id=offer_id,
+            action="adjust",
+            rng_state=rng_state,
+            post_state=post_state,
+            random_label=None,
+        )
+        if self.entries and self.entries[-1].action == "adjust":
+            last = self.entries[-1]
+            merged = LogEntry(
+                timestamp=entry.timestamp,
+                pre_state=last.pre_state,
+                offer_id=offer_id,
+                action="adjust",
+                rng_state=rng_state,
+                post_state=post_state,
+                random_label=None,
+            )
+            self.entries[-1] = merged
+            return
+        self.entries.append(entry)
+
     def undo(self) -> GameState | None:
         if not self.entries:
             return None

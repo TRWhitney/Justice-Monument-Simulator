@@ -72,6 +72,12 @@ def apply_action(
     )
 
 
+def skip_case(state: GameState, data: JusticeData, rng: Rng) -> GameState:
+    if state.ended:
+        raise ActionNotAllowed("Run has ended")
+    return advance_case(state, data, rng)
+
+
 def apply_action_with_outcome(
     state: GameState,
     offer: OfferSpec,

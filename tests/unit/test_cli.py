@@ -9,6 +9,7 @@ from justice_sim.ui_cli import screens as cli_screens
 from justice_sim.ui_cli import search as cli_search
 from justice_sim.util.search import search_offers
 from justice_sim.models.suggested_rules import SuggestedRules
+from justice_sim.models.offer import JusticeData
 
 
 @pytest.mark.unit
@@ -84,6 +85,91 @@ def test_run_session_apply_and_undo(data_factory):
     assert len(session.log.entries) == 1
     session.undo()
     assert len(session.log.entries) == 0
+
+
+@pytest.mark.unit
+def test_cli_command_search_select_apply(data_factory):
+    data = data_factory()
+    console = Console(record=True)
+    app = cli_module.CliApp(data, SuggestedRules.empty(), console=console)
+
+    assert app.handle_command("search offer")
+    assert app.search_results
+
+    assert app.handle_command("select 1")
+    assert app.current_offer is not None
+
+    assert app.handle_command("apply approve")
+    assert app.session.state.case_index == 2
+    assert len(app.session.log.entries) == 1
+
+
+@pytest.mark.unit
+def test_cli_command_skip_advances_case(data_factory):
+    data = data_factory()
+    console = Console(record=True)
+    app = cli_module.CliApp(data, SuggestedRules.empty(), console=console)
+
+    start_case = app.session.state.case_index
+    assert app.handle_command("skip")
+    assert app.session.state.case_index == start_case + 1
+    assert app.session.log.entries[-1].action == "skip"
+
+
+@pytest.mark.unit
+def test_cli_command_adjust_reset_and_sim_mode(data_factory):
+    data = data_factory()
+    console = Console(record=True)
+    app = cli_module.CliApp(data, SuggestedRules.empty(), console=console)
+
+    assert app.handle_command("adjust coins +1")
+    assert app.session.state.coins == 6
+
+    assert app.handle_command("sim none")
+    assert app.sim_mode == "none"
+
+    assert app.handle_command("planner set risk safe")
+    assert app.planner.config.risk_preset == "safe"
+
+    assert app.handle_command("reset")
+    assert app.session.state.case_index == 1
+    assert app.session.state.coins == 5
+
+
+@pytest.mark.unit
+def test_cli_manual_random_resolution_flow(data_dict_factory):
+    data_dict = data_dict_factory()
+    data_dict["offers"].append(
+        {
+            "id": "offer_random",
+            "npc_id": "npc1",
+            "title": "Random Offer",
+            "text": "Random range",
+            "actions_available": ["approve"],
+            "approve": {
+                "effects": [
+                    {
+                        "type": "random_range_resource",
+                        "params": {"resource": "coins", "min": 1, "max": 2},
+                    }
+                ]
+            },
+            "reject": {"effects": []},
+        }
+    )
+    data = JusticeData.from_dict(data_dict)
+    console = Console(record=True)
+    app = cli_module.CliApp(data, SuggestedRules.empty(), console=console)
+
+    assert app.handle_command("search random")
+    assert app.handle_command("select 1")
+    assert app.handle_command("apply approve")
+    assert app.pending_prompt is not None
+    assert app.pending_prompt.kind == "value"
+
+    assert app.handle_command("value 2")
+    assert app.pending_prompt is None
+    assert app.session.state.coins == 7
 
 
 @pytest.mark.unit

@@ -5,6 +5,7 @@ from justice_sim.engine.reducer import (
     apply_action,
     apply_action_with_outcome,
     can_afford_action,
+    skip_case,
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import EffectSpec, JusticeData, OutcomeSpec
@@ -142,6 +143,21 @@ def test_dismiss_consumes_dismissal(data_factory):
     )
     new_state, _ = apply_action(state, offer, "dismiss", data, Rng(2))
     assert new_state.dismissals == 0
+
+
+@pytest.mark.unit
+def test_skip_advances_case_without_consuming_dismissals(data_factory):
+    data = data_factory()
+    state = GameState(
+        case_index=1, coins=2, pop=1, mh=3, dismissals=2, retirement_chests=0
+    )
+    new_state = skip_case(state, data, Rng(3))
+
+    assert new_state.case_index == 2
+    assert new_state.dismissals == 2
+    assert new_state.coins == state.coins
+    assert new_state.pop == state.pop
+    assert new_state.mh == state.mh
 
 
 @pytest.mark.unit

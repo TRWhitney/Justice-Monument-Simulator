@@ -195,6 +195,9 @@ class OfferCard(QtWidgets.QFrame):
             elif self._action_filter == "dismiss":
                 outcome = result.offer.dismiss or result.offer.reject
                 summary = result.dismiss_summary or result.reject_summary
+            elif self._action_filter == "skip":
+                outcome = OutcomeSpec(effects=())
+                summary = "no effect (skip)"
             else:
                 outcome = result.offer.reject
             sections.append((self._action_filter, outcome, summary))

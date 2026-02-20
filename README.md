@@ -27,6 +27,14 @@ uv run justice-sim-gui --theme dark --ui-scale large --prompt-tour
 - Theme and UI scale persist between runs.
 - Guided tour appears once until dismissed or completed.
 
+## CLI Notes
+
+- Type `help` for commands.
+- Typical flow: `search offer`, `select 1`, `recommend`, `apply best`.
+- Use `show-all on/off` to ignore offer conditions (when allowed).
+- Switch sim modes with `sim full|mid|none` (manual randomness uses `choose`/`value`).
+- Inspect history with `log` and `log show 1`.
+
 ## Tests
 
 ```bash

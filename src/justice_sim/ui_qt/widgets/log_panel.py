@@ -75,6 +75,17 @@ class LogPanel(QtWidgets.QWidget):
         entry = item.data(QtCore.Qt.ItemDataRole.UserRole)
         if entry is None:
             return
+        if entry.action in {"skip", "adjust"}:
+            self._hover_item = item
+            self._ensure_popover_parent()
+            self._popover.update_message(
+                self._simple_action_title(entry.action),
+                self._simple_action_body(entry),
+            )
+            self._popover.move(self._popover_position(cursor_pos))
+            self._popover.show()
+            self._popover.raise_()
+            return
         offer = self._data.offers_by_id.get(entry.offer_id)
         if not offer:
             return
@@ -142,6 +153,23 @@ class LogPanel(QtWidgets.QWidget):
         npc = self._data.npcs_by_id.get(npc_id)
         return npc.name if npc else npc_id
 
+    def _simple_action_title(self, action: str) -> str:
+        if action == "skip":
+            return "Skip"
+        return "Manual adjustment"
+
+    def _simple_action_body(self, entry) -> str:
+        delta_html = format_resource_delta_html(
+            entry.pre_state,
+            entry.post_state,
+            icon_size=scale_int(_BASE_RESOURCE_ICON_SIZE, self._ui_scale, minimum=1),
+            action=entry.action,
+        )
+        case_text = f"Case {entry.pre_state.case_index} → {entry.post_state.case_index}"
+        if entry.action == "skip":
+            return f"{delta_html}<br>{case_text}"
+        return f"{delta_html}<br>State edited manually."
+
     def _build_extra_effects(
         self, entry, offer: OfferSpec
     ) -> dict[str, list[tuple[str, tuple[EffectSpec, ...], GameState]]]:
@@ -150,62 +178,69 @@ class LogPanel(QtWidgets.QWidget):
         post_state = entry.post_state
         extras: list[tuple[str, tuple[EffectSpec, ...], GameState]] = []
 
-        if (
-            pre_state.required_action
-            and action != pre_state.required_action
-            and pre_state.required_action_penalty_effects
-        ):
-            label = f"Penalty (must {pre_state.required_action})"
-            extras.append((label, pre_state.required_action_penalty_effects, pre_state))
-
-        if action == "dismiss" and pre_state.dismissals > 0:
-            extras.append(
-                (
-                    "Dismissal cost",
-                    (
-                        EffectSpec(
-                            type="add_resource",
-                            params={"resource": "dismissals", "amount": -1},
-                        ),
-                    ),
-                    pre_state,
+        if action not in {"skip", "adjust"}:
+            if (
+                pre_state.required_action
+                and action != pre_state.required_action
+                and pre_state.required_action_penalty_effects
+            ):
+                label = f"Penalty (must {pre_state.required_action})"
+                extras.append(
+                    (label, pre_state.required_action_penalty_effects, pre_state)
                 )
-            )
 
-        for trigger in self._fired_encounter_triggers(pre_state, post_state, offer):
-            extras.append(
-                (
-                    self._encounter_trigger_label(trigger, offer),
-                    trigger.effects,
-                    pre_state,
-                )
-            )
-
-        for trigger in self._fired_action_triggers(
-            pre_state, post_state, offer, action
-        ):
-            extras.append(
-                (self._action_trigger_label(trigger, offer), trigger.effects, pre_state)
-            )
-
-        if (
-            action == "approve"
-            and offer.id == self._data.special_rules.harbinger.offer_id
-            and self._data.special_rules.harbinger.on_unpaid_effects
-        ):
-            cost = resolve_expr(
-                {"expr": self._data.special_rules.harbinger.cost_expr},
-                pre_state,
-                self._data,
-            )
-            if pre_state.coins < cost:
+            if action == "dismiss" and pre_state.dismissals > 0:
                 extras.append(
                     (
-                        "Harbinger unpaid",
-                        tuple(self._data.special_rules.harbinger.on_unpaid_effects),
+                        "Dismissal cost",
+                        (
+                            EffectSpec(
+                                type="add_resource",
+                                params={"resource": "dismissals", "amount": -1},
+                            ),
+                        ),
                         pre_state,
                     )
                 )
+
+            for trigger in self._fired_encounter_triggers(pre_state, post_state, offer):
+                extras.append(
+                    (
+                        self._encounter_trigger_label(trigger, offer),
+                        trigger.effects,
+                        pre_state,
+                    )
+                )
+
+            for trigger in self._fired_action_triggers(
+                pre_state, post_state, offer, action
+            ):
+                extras.append(
+                    (
+                        self._action_trigger_label(trigger, offer),
+                        trigger.effects,
+                        pre_state,
+                    )
+                )
+
+            if (
+                action == "approve"
+                and offer.id == self._data.special_rules.harbinger.offer_id
+                and self._data.special_rules.harbinger.on_unpaid_effects
+            ):
+                cost = resolve_expr(
+                    {"expr": self._data.special_rules.harbinger.cost_expr},
+                    pre_state,
+                    self._data,
+                )
+                if pre_state.coins < cost:
+                    extras.append(
+                        (
+                            "Harbinger unpaid",
+                            tuple(self._data.special_rules.harbinger.on_unpaid_effects),
+                            pre_state,
+                        )
+                    )
 
         next_case = pre_state.case_index + 1
         for event in pre_state.scheduled_events:
@@ -427,6 +462,7 @@ class _LogEntryWidget(QtWidgets.QWidget):
                 entry.pre_state,
                 entry.post_state,
                 icon_size=scale_int(_BASE_RESOURCE_ICON_SIZE, ui_scale, minimum=1),
+                action=entry.action,
             )
         )
         label.setTextFormat(QtCore.Qt.TextFormat.RichText)
@@ -504,6 +540,25 @@ class _LogPopover(QtWidgets.QFrame):
         card.layout().activate()
         card.adjustSize()
         self._layout.addWidget(card)
+        self.adjustSize()
+
+    def update_message(self, title: str, body: str) -> None:
+        while self._layout.count():
+            item = self._layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        title_label = QtWidgets.QLabel(title)
+        title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        title_label.setStyleSheet("font-weight: 600;")
+        body_label = QtWidgets.QLabel(body)
+        body_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        body_label.setWordWrap(True)
+        body_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        body_label.setStyleSheet("padding: 0 8px 8px 8px;")
+        self._layout.addWidget(title_label)
+        self._layout.addWidget(body_label)
         self.adjustSize()
 
     def set_ui_scale(self, scale: float) -> None:

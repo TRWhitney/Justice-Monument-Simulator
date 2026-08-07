@@ -127,6 +127,8 @@ class OfferSearchWidget(QtWidgets.QWidget):
         data: JusticeData,
         state: GameState,
         parent: QtWidgets.QWidget | None = None,
+        *,
+        defer_initial_render: bool = False,
     ) -> None:
         super().__init__(parent)
         self._data = data
@@ -176,7 +178,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self.results_list.itemSelectionChanged.connect(self._on_selection)
         self.search_input.installEventFilter(self)
         self._position_show_all_toggle()
-        self.set_ui_scale(1.0)
+        self.set_ui_scale(1.0, rerender=not defer_initial_render)
 
     def _on_search_text_changed(self, text: str) -> None:
         self._on_search(text)
@@ -292,8 +294,12 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self._update_npc_filter_buttons(text)
         self._update_selection_styles()
 
-    def set_luck_weights(self, weights: UtilityWeights) -> None:
+    def set_luck_weights(
+        self, weights: UtilityWeights, *, rerender: bool = True
+    ) -> None:
         self._luck_weights = weights
+        if not rerender:
+            return
         selected_offer_id = self._selected_offer_id()
         self._on_search(
             self.search_input.text(),
@@ -416,7 +422,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
             return changed
         return False
 
-    def set_ui_scale(self, scale: float) -> None:
+    def set_ui_scale(self, scale: float, *, rerender: bool = True) -> None:
         self._ui_scale = scale
         self._npc_filter_bar.set_ui_scale(scale)
         self._npc_filter_bar.setContentsMargins(
@@ -446,12 +452,13 @@ class OfferSearchWidget(QtWidgets.QWidget):
                 )
             )
         self._apply_show_all_styles()
-        selected_offer_id = self._selected_offer_id()
-        self._on_search(
-            self.search_input.text(),
-            preserve_scroll=True,
-            selected_offer_id=selected_offer_id,
-        )
+        if rerender:
+            selected_offer_id = self._selected_offer_id()
+            self._on_search(
+                self.search_input.text(),
+                preserve_scroll=True,
+                selected_offer_id=selected_offer_id,
+            )
         self._position_show_all_toggle()
 
     def _scaled(self, value: int, *, minimum: int | None = None) -> int:

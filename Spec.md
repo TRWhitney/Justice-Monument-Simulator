@@ -395,8 +395,8 @@ Right column: Recommendation + actions + log
 
 ### GUI behavior
 - Planner runs when offer is selected or settings change.
-- Planner should cancel previous run if a new selection occurs (threaded).
-- Use a worker thread for planning; never block UI thread.
+- Planner should cancel the previous worker process if a new selection occurs.
+- Use a worker process for planning so CPU-bound simulation never blocks the UI process.
 - If no offer is selected, action buttons (except Skip) appear dimmed and prompt to select an offer first.
 
 ---
@@ -527,7 +527,7 @@ CLI must reuse the same `OfferSearch` code and `Planner` engine as GUI.
 - [x] Implement offer search widget + card list with NPC images
 - [x] Implement suggestion panel with metrics + apply buttons
 - [x] Implement session log panel + undo
-- [x] Run planner in worker thread with cancellation
+- [x] Run planner in worker process with cancellation
 - [x] Add Mid/Full encounter-luck ranking on log hover cards (`rank/possible`, red→green)
 
 ### Phase 8 — persistence

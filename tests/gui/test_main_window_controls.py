@@ -9,7 +9,6 @@ from justice_sim.engine.luck import EncounterLuck, encounter_luck_color
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
-from justice_sim.planner.rollout import ActionScore, PlannerRecommendation
 from justice_sim.ui_qt.app import create_app
 from justice_sim.ui_qt.main_window import MainWindow
 
@@ -288,50 +287,26 @@ def test_resource_adjust_debounces_planner_and_log_refresh(data_factory):
     window.current_offer = data.offers_by_id["offer1"]
     window._manual_adjust_timer.setInterval(80)
 
-    class _CountingPlanner:
-        def __init__(self, config) -> None:
-            self.config = config
-            self.calls = 0
-
-        def recommend(self, _state, offer, progress=None):
-            self.calls += 1
-            scores = tuple(
-                ActionScore(
-                    action=action,
-                    expected_utility=1.0,
-                    expected_chests=0.0,
-                    death_probability=0.0,
-                    variance=0.0,
-                )
-                for action in offer.actions_available
-            )
-            return PlannerRecommendation(
-                best_action=offer.actions_available[0], action_scores=scores
-            )
-
-    planner = _CountingPlanner(window.planner.config)
-    window.planner = planner
     window._on_offer_selected(data.offers_by_id["offer1"])
-    deadline = time.monotonic() + 1.0
-    while time.monotonic() < deadline and planner.calls < 1:
-        QtWidgets.QApplication.processEvents()
-        time.sleep(0.01)
-    baseline_calls = planner.calls
+    baseline_generation = window._planner_generation
 
     window._adjust_resource("coins", 1)
     window._adjust_resource("coins", 1)
     QtWidgets.QApplication.processEvents()
 
     assert window.session.state.coins == 7
-    assert planner.calls == baseline_calls
+    assert window._planner_generation == baseline_generation
     assert not window.session.log.entries
 
     deadline = time.monotonic() + 1.5
-    while time.monotonic() < deadline and planner.calls < baseline_calls + 1:
+    while (
+        time.monotonic() < deadline
+        and window._planner_generation < baseline_generation + 1
+    ):
         QtWidgets.QApplication.processEvents()
         time.sleep(0.01)
 
-    assert planner.calls == baseline_calls + 1
+    assert window._planner_generation == baseline_generation + 1
     assert window.session.log.entries
     assert window.session.log.entries[-1].action == "adjust"
 

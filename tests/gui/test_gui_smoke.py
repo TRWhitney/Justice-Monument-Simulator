@@ -43,3 +43,26 @@ def test_main_window_instantiates():
     assert window is not None
     window.close()
     app.quit()
+
+
+@pytest.mark.gui
+def test_main_window_renders_initial_offer_list_once(monkeypatch):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    render_count = 0
+    original_on_search = OfferSearchWidget._on_search
+
+    def counting_on_search(self, *args, **kwargs):
+        nonlocal render_count
+        render_count += 1
+        return original_on_search(self, *args, **kwargs)
+
+    monkeypatch.setattr(OfferSearchWidget, "_on_search", counting_on_search)
+
+    window = MainWindow(load_builtin_data())
+
+    assert render_count == 1
+    assert window.offer_search.results_list.count() > 0
+
+    window.close()
+    app.quit()

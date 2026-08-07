@@ -5,9 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from collections.abc import Callable
 import json
+import multiprocessing
+from multiprocessing.connection import Connection
+from multiprocessing.process import BaseProcess
 import os
 from pathlib import Path
-import threading
 import time
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -57,6 +59,7 @@ from justice_sim.planner.rollout import (
     PlannerRecommendation,
     RolloutPlanner,
 )
+from justice_sim.planner.worker import run_planner_worker
 from justice_sim.ui_qt.prefs import (
     load_tour_seen,
     load_ui_prefs,
@@ -587,10 +590,6 @@ class _OutcomeValueDialog(QtWidgets.QDialog):
         self.accept()
 
 
-class _PlannerCancelled(RuntimeError):
-    """Raised inside the planner thread when a newer request supersedes it."""
-
-
 class GuiSession:
     def __init__(self, data: JusticeData) -> None:
         self.data = data
@@ -690,9 +689,6 @@ class GuiSession:
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    planner_progress_signal = QtCore.Signal()
-    planner_progress_value_signal = QtCore.Signal(int)
-
     def __init__(
         self,
         data: JusticeData,
@@ -712,23 +708,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_offer: OfferSpec | None = None
         self.current_recommendation: PlannerRecommendation | None = None
         self._planner_generation = 0
-        self._planner_thread: threading.Thread | None = None
-        self._planner_cancel_event: threading.Event | None = None
-        self._planner_result_lock = threading.Lock()
+        self._planner_process: BaseProcess | None = None
+        self._planner_connection: Connection | None = None
+        self._planner_process_generation: int | None = None
         self._planner_result_generation: int | None = None
         self._planner_result: PlannerRecommendation | None = None
         self._planner_result_offer_id: str | None = None
         self._planner_result_state_key: str | None = None
         self._planner_result_error: str | None = None
-        self._planner_result_cancelled = False
         self._simulated_offer_scores: dict[str, dict[str, float]] = {}
-        self._planner_progress_lock = threading.Lock()
         self._planner_progress_value = 0
         self._planner_progress_total_value: int | None = None
         self._planner_progress_timer = QtCore.QTimer(self)
         self._planner_progress_timer.setInterval(125)
         self._planner_progress_timer.timeout.connect(self._tick_planner_progress)
-        self._planner_progress_pending = False
         self._manual_adjust_pre_state: GameState | None = None
         self._manual_adjust_due_at: float | None = None
         self._manual_adjust_timer_start_pending = False
@@ -736,13 +729,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._manual_adjust_timer.setSingleShot(True)
         self._manual_adjust_timer.setInterval(350)
         self._manual_adjust_timer.timeout.connect(self._finalize_manual_adjust)
-        self.planner_progress_signal.connect(
-            self._tick_planner_progress, QtCore.Qt.ConnectionType.QueuedConnection
-        )
-        self.planner_progress_value_signal.connect(
-            self._on_planner_progress_value, QtCore.Qt.ConnectionType.QueuedConnection
-        )
         self._dark_mode = False
+        self._initializing_ui = True
         self._ui_scale_mode = "auto"
         self._ui_scale_factor = 1.0
         self._theme_override = theme_override
@@ -869,8 +857,10 @@ class MainWindow(QtWidgets.QMainWindow):
         left_column.addWidget(self.toast_area)
         left_column.addStretch(1)
 
-        self.offer_search = OfferSearchWidget(data, self.session.state)
-        self.offer_search.set_luck_weights(self.planner.weights)
+        self.offer_search = OfferSearchWidget(
+            data, self.session.state, defer_initial_render=True
+        )
+        self.offer_search.set_luck_weights(self.planner.weights, rerender=False)
         self.offer_search.set_simulated_scores({}, rerender=False)
         self.offer_search.offer_selected.connect(self._on_offer_selected)
         center_column.addWidget(self.offer_search)
@@ -969,6 +959,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._sync_theme_toggle()
         self._apply_ui_scale()
+        self._initializing_ui = False
         self.title_bar.set_maximized(self.isMaximized())
         app = QtWidgets.QApplication.instance()
         if app is not None:
@@ -1086,7 +1077,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._auto_offer_id = None
             self._auto_offer_case = None
         if mode == "none":
-            self._stop_planner_thread()
+            self._stop_planner_process()
             self.current_recommendation = None
             self._clear_recommendation_ui()
         elif self.current_offer:
@@ -1113,7 +1104,7 @@ class MainWindow(QtWidgets.QMainWindow):
             app.setFont(font)
         self.title_bar.set_ui_scale(scale)
         self.state_panel.set_ui_scale(scale)
-        self.offer_search.set_ui_scale(scale)
+        self.offer_search.set_ui_scale(scale, rerender=not self._initializing_ui)
         self.log_panel.set_ui_scale(scale)
         self.toast_area.set_ui_scale(scale)
         self.tour_panel.set_ui_scale(scale)
@@ -1787,7 +1778,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if offer is None:
             self.current_offer = None
             self.current_recommendation = None
-            self._stop_planner_thread()
+            self._stop_planner_process()
             self._clear_recommendation_ui()
             self._update_action_controls()
             return
@@ -1804,7 +1795,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _start_planner(self, offer: OfferSpec) -> None:
         if self._sim_mode == "none" or self._is_game_over():
-            self._stop_planner_thread()
+            self._stop_planner_process()
             self.current_recommendation = None
             self._stop_planner_progress()
             self._clear_recommendation_ui()
@@ -1812,82 +1803,60 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         self._planner_generation += 1
         generation = self._planner_generation
-        self._stop_planner_thread()
+        self._stop_planner_process()
         planner_state = self.session.state
         planner_state_key = self._luck_state_key(planner_state)
 
-        total = self._reset_planner_progress(offer)
-        with self._planner_result_lock:
-            self._planner_result_generation = None
-            self._planner_result = None
-            self._planner_result_offer_id = None
-            self._planner_result_state_key = None
-            self._planner_result_error = None
-            self._planner_result_cancelled = False
-        cancel_event = threading.Event()
-        self._planner_cancel_event = cancel_event
-        progress_count = 0
-        progress_last_emit_time = 0.0
-
-        def progress(delta: int) -> None:
-            nonlocal progress_count, progress_last_emit_time
-            if cancel_event.is_set():
-                raise _PlannerCancelled()
-            self._increment_planner_progress(delta)
-            progress_count += delta
-            now = time.monotonic()
-            total_reached = total is not None and total > 0 and progress_count >= total
-            if total_reached or now - progress_last_emit_time >= 0.05:
-                progress_last_emit_time = now
-                if total is not None and total > 0:
-                    self.planner_progress_value_signal.emit(progress_count)
-                time.sleep(0)
-
-        def run() -> None:
-            try:
-                recommendation = self.planner.recommend(
-                    planner_state, offer, progress=progress
-                )
-            except _PlannerCancelled:
-                with self._planner_result_lock:
-                    self._planner_result_generation = generation
-                    self._planner_result_offer_id = None
-                    self._planner_result_state_key = None
-                    self._planner_result_cancelled = True
-                return
-            except Exception as exc:  # pragma: no cover - defensive UI safety
-                with self._planner_result_lock:
-                    self._planner_result_generation = generation
-                    self._planner_result_offer_id = None
-                    self._planner_result_state_key = None
-                    self._planner_result_error = str(exc)
-                return
-            with self._planner_result_lock:
-                self._planner_result_generation = generation
-                self._planner_result = recommendation
-                self._planner_result_offer_id = offer.id
-                self._planner_result_state_key = planner_state_key
-
-        thread = threading.Thread(target=run, daemon=True)
-        self._planner_thread = thread
-        thread.start()
+        self._reset_planner_progress(offer)
+        self._clear_planner_result()
+        context = multiprocessing.get_context("spawn")
+        receiver, sender = context.Pipe(duplex=False)
+        process = context.Process(
+            target=run_planner_worker,
+            args=(self.planner, planner_state, offer, sender),
+            daemon=True,
+        )
+        self._planner_connection = receiver
+        self._planner_process = process
+        self._planner_process_generation = generation
+        self._planner_result_offer_id = offer.id
+        self._planner_result_state_key = planner_state_key
+        try:
+            process.start()
+        except Exception as exc:  # pragma: no cover - defensive UI safety
+            receiver.close()
+            process.close()
+            self._planner_connection = None
+            self._planner_process = None
+            self._planner_process_generation = None
+            self._planner_result_generation = generation
+            self._planner_result_error = str(exc)
+        finally:
+            sender.close()
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        self._stop_planner_thread()
+        self._stop_planner_process()
         if self._tour_prompt is not None:
             self._tour_prompt.hide()
         super().closeEvent(event)
 
-    def _stop_planner_thread(self) -> None:
-        if not self._planner_thread:
-            return
-        if self._planner_cancel_event:
-            self._planner_cancel_event.set()
-        if isinstance(self._planner_thread, threading.Thread):
-            if self._planner_thread.is_alive():
-                self._planner_thread.join(timeout=0.2)
-        self._planner_thread = None
-        self._planner_cancel_event = None
+    def _stop_planner_process(self) -> None:
+        process = self._planner_process
+        connection = self._planner_connection
+        self._planner_process = None
+        self._planner_connection = None
+        self._planner_process_generation = None
+        if connection is not None:
+            connection.close()
+        if process is not None:
+            if process.is_alive():
+                process.terminate()
+            process.join(timeout=0.2)
+            if process.is_alive():  # pragma: no cover - OS process safety
+                process.kill()
+                process.join(timeout=0.2)
+            process.close()
+        self._clear_planner_result()
         self._stop_planner_progress()
 
     def _apply_action(self, action: str) -> None:
@@ -2331,7 +2300,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._refresh()
 
     def _reset_run(self) -> None:
-        self._stop_planner_thread()
+        self._stop_planner_process()
         self._manual_adjust_timer.stop()
         self._manual_adjust_pre_state = None
         self._manual_adjust_due_at = None
@@ -2378,60 +2347,89 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _reset_planner_progress(self, offer: OfferSpec) -> int | None:
         total = self._planner_progress_total(offer)
-        with self._planner_progress_lock:
-            self._planner_progress_value = 0
-            self._planner_progress_total_value = total
+        self._planner_progress_value = 0
+        self._planner_progress_total_value = total
         self._planner_progress_timer.start()
         return total
 
-    def _increment_planner_progress(self, delta: int) -> None:
-        with self._planner_progress_lock:
-            self._planner_progress_value += delta
-
     def _tick_planner_progress(self) -> None:
-        self._planner_progress_pending = False
-        with self._planner_progress_lock:
-            total = self._planner_progress_total_value
-            value = self._planner_progress_value
+        self._poll_planner_process()
+        total = self._planner_progress_total_value
+        value = self._planner_progress_value
         if total is not None and total > 0:
             self.suggestion_panel.update_progress(value)
         self._consume_planner_result()
 
-    def _on_planner_progress_value(self, value: int) -> None:
-        self.suggestion_panel.update_progress(value)
-
     def _stop_planner_progress(self) -> None:
         self._planner_progress_timer.stop()
-        with self._planner_progress_lock:
-            self._planner_progress_value = 0
-            self._planner_progress_total_value = None
-        self._planner_progress_pending = False
+        self._planner_progress_value = 0
+        self._planner_progress_total_value = None
 
-    def _schedule_progress_tick(self) -> None:
-        if self._planner_progress_pending:
+    def _poll_planner_process(self) -> None:
+        connection = self._planner_connection
+        process = self._planner_process
+        if connection is None or process is None:
             return
-        self._planner_progress_pending = True
-        self.planner_progress_signal.emit()
+        received_terminal_message = False
+        try:
+            while connection.poll():
+                message_type, payload = connection.recv()
+                if message_type == "progress":
+                    self._planner_progress_value += int(payload)
+                elif message_type == "result":
+                    self._planner_result = payload
+                    self._planner_result_generation = self._planner_process_generation
+                    received_terminal_message = True
+                elif message_type == "error":
+                    self._planner_result_error = str(payload)
+                    self._planner_result_generation = self._planner_process_generation
+                    received_terminal_message = True
+        except (EOFError, OSError):
+            pass
+        if not received_terminal_message and process.is_alive():
+            return
+        if not received_terminal_message and self._planner_result_generation is None:
+            self._planner_result_generation = self._planner_process_generation
+            self._planner_result_error = (
+                f"Planner worker exited with code {process.exitcode}."
+            )
+        self._finish_planner_process()
+
+    def _finish_planner_process(self) -> None:
+        process = self._planner_process
+        connection = self._planner_connection
+        self._planner_process = None
+        self._planner_connection = None
+        self._planner_process_generation = None
+        if connection is not None:
+            connection.close()
+        if process is not None:
+            process.join(timeout=0.05)
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=0.1)
+            if process.is_alive():  # pragma: no cover - OS process safety
+                process.kill()
+                process.join(timeout=0.1)
+            process.close()
+
+    def _clear_planner_result(self) -> None:
+        self._planner_result_generation = None
+        self._planner_result = None
+        self._planner_result_offer_id = None
+        self._planner_result_state_key = None
+        self._planner_result_error = None
 
     def _consume_planner_result(self) -> None:
-        with self._planner_result_lock:
-            generation = self._planner_result_generation
-            recommendation = self._planner_result
-            offer_id = self._planner_result_offer_id
-            state_key = self._planner_result_state_key
-            error = self._planner_result_error
-            cancelled = self._planner_result_cancelled
-            self._planner_result_generation = None
-            self._planner_result = None
-            self._planner_result_offer_id = None
-            self._planner_result_state_key = None
-            self._planner_result_error = None
-            self._planner_result_cancelled = False
-        if generation is None or generation != self._planner_generation:
+        generation = self._planner_result_generation
+        if generation is None:
             return
-        if cancelled:
-            self._stop_planner_progress()
-            self._update_action_controls()
+        recommendation = self._planner_result
+        offer_id = self._planner_result_offer_id
+        state_key = self._planner_result_state_key
+        error = self._planner_result_error
+        self._clear_planner_result()
+        if generation != self._planner_generation:
             return
         if error:
             self.current_recommendation = None
@@ -2500,7 +2498,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _adjust_resource(self, resource: str, delta: int) -> None:
         if not self._manual_adjust_timer.isActive():
-            self._stop_planner_thread()
+            self._stop_planner_process()
         if self._manual_adjust_pre_state is None:
             self._manual_adjust_pre_state = self.session.state
         state = self.session.state

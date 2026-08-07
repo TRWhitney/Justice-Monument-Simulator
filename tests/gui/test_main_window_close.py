@@ -1,5 +1,5 @@
+import multiprocessing
 import os
-import threading
 import time
 
 import pytest
@@ -18,14 +18,16 @@ def test_main_window_closes_with_active_planner(data_factory):
     app = create_app()
     data = data_factory()
     window = MainWindow(data)
-    thread = threading.Thread(target=_sleep_worker, daemon=True)
-    thread.start()
-    assert thread.is_alive()
-    window._planner_thread = thread
+    context = multiprocessing.get_context("spawn")
+    process = context.Process(target=_sleep_worker, daemon=True)
+    process.start()
+    assert process.is_alive()
+    window._planner_process = process
 
     window.close()
     app.processEvents()
 
-    assert window._planner_thread is None or not window._planner_thread.is_alive()
+    assert window._planner_process is None
+    assert process._closed
 
     app.quit()

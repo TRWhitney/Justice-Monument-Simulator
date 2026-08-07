@@ -31,8 +31,7 @@ def test_weighted_encounter_model_respects_modifiers(data_factory):
 
 
 @pytest.mark.unit
-def test_learned_encounter_model_updates_counts_and_imports(data_factory):
-    data = data_factory()
+def test_learned_encounter_model_updates_counts_and_imports():
     model = LearnedEncounterModel()
     model.update_from_log({"offer_id": "offer1"})
     model.update_from_log({"offer_id": "offer1"})

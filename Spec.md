@@ -261,24 +261,19 @@ Where:
 ### Planner default: hybrid rollout
 - For the currently observed offer, evaluate each available action:
   - Apply action deterministically; where outcome has random branching, compute expected by sampling OR exact expansion for small branch sets.
-- Short-circuit recommendation without rollouts when the result is already known:
-  - game over is unavoidable for the current offer,
-  - a rule/constraint forces a single action,
-  - or one action is deterministic strict upside against deterministic neutral/downside alternatives.
+- Short-circuit recommendation without rollouts only when every current action is terminal. Nonterminal actions always receive horizon-based metrics, including when a rule constrains the recommendation to one action.
 - From the resulting state, run Monte Carlo rollouts for H future cases:
   - Each rollout selects future encounters from the configured EncounterModel
-  - At each simulated encounter, choose action using:
-    - either a fast heuristic policy, or
-    - a smaller nested rollout (optional), or
-    - “1-step greedy” with safety constraints
-- Aggregate expected utility and expected chests; recommend action with highest expected utility (or highest expected chests if configured).
+  - Alternative current actions use common random-number streams so their comparison is not dominated by unrelated encounter samples.
+  - At each simulated encounter, use a 1-step greedy policy with safety constraints. Explicit random branches are compared by expected immediate utility; effects that cannot be expanded use a small sample mean.
+- Aggregate expected utility, expected chests, death probability, variance, and a 95% utility confidence interval; recommend the eligible action with highest expected utility.
 
 ### Defaults (reasonable)
-- Horizon H = 20 cases
-- Rollouts per action = 5000
+- Horizon H = 12 cases
+- Rollouts per action = 200
 - RNG seed configurable; default random seed each session, but log it for reproducibility
 - Adaptive option:
-  - if top two actions within epsilon, increase rollouts to 20000
+  - if the top two utility estimates overlap within their sampling uncertainty, increase to 400 rollouts per action
 
 ### Performance requirements
 - Recommendation should complete in < 1 second on a typical desktop for default settings (best-effort)
@@ -347,6 +342,7 @@ Export formats
 Left column: State & Controls
 - Current state panel: case, coins, pop, health, dismissals, chests
   - `[-]` icon value `[+]` controls adjust values during a run (case stays fixed)
+  - Holding `[-]`/`[+]` steadily adjusts the value, with repeat speed increasing over hold duration
   - Default starting state: coins 5, pop 3, health 1, dismissals 0
 - Progression/profile selector + load/save buttons
 - Encounter model selector + settings button
@@ -366,6 +362,7 @@ Center: Offer selection
     - offer title/text
     - approve/reject summary text (rendered from effects)
   - Optional “Show all offers” toggle inside the search bar ignores conditions
+  - NPC quick-filter button row ends with a circle-slash clear button that clears the current filter and is dimmed only when no filter is active
 - Results list:
   - each row displays “card”:
     - NPC image
@@ -374,6 +371,7 @@ Center: Offer selection
     - Approve summary line + Reject summary line (icons ok but optional)
   - When no search filter is active, show encounter-luck rank suffix next to deal name: `<npc>: <title> (<rank>/<possible>)`
   - If “Show All” is enabled with no search filter, rank pool is all offers; otherwise rank pool is currently available offers
+  - Ranking uses hybrid scoring: one-step utility baseline, blended with planner simulation utility when available for a state/offer
 - Select result sets “current observed offer”
 
 Right column: Recommendation + actions + log
@@ -386,6 +384,7 @@ Right column: Recommendation + actions + log
 - Action buttons:
   - “Apply Approve/Reject/Dismiss/Skip” (records in log)
   - “Apply Recommended”
+  - Below “Apply Recommended”, show run-level deal-luck indicator (color-coded red→green) aggregated from logged deal rankings
   - If no valid action remains or all actions would drop MH to 0, replace buttons with a red “Game Over” label
 - Log panel:
   - list of steps with brief summary

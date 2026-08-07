@@ -69,3 +69,6 @@ uv run python scripts/validate_schema.py \
   --instance src/justice_sim/data/builtin/suggested_rules.json \
   --format
 ```
+
+Known questions that the available public data cannot settle are tracked in
+[Justice Monument Data: Open Questions](docs/justice-data-open-questions.md).

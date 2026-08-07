@@ -22,6 +22,7 @@ from justice_sim.engine.effects import (
     resolve_expr,
     resolve_probability,
 )
+from justice_sim.engine.luck import EncounterLuck, rank_encounter_offer
 from justice_sim.engine.reducer import (
     ActionNotAllowed,
     apply_action,
@@ -357,13 +358,25 @@ class RunSession:
             retirement_chests=0,
         )
 
-    def apply(self, offer: OfferSpec, action: str) -> None:
+    def apply(
+        self,
+        offer: OfferSpec,
+        action: str,
+        *,
+        encounter_luck: EncounterLuck | None = None,
+    ) -> None:
         pre_state = self.state
         new_state, random_label = apply_action(
             self.state, offer, action, self.data, self.rng
         )
         self.log.record(
-            pre_state, offer.id, action, self.rng.state(), new_state, random_label
+            pre_state,
+            offer.id,
+            action,
+            self.rng.state(),
+            new_state,
+            random_label,
+            encounter_luck,
         )
         self.state = new_state
 
@@ -380,6 +393,8 @@ class RunSession:
         action: str,
         outcome: OutcomeSpec,
         random_label: str | None,
+        *,
+        encounter_luck: EncounterLuck | None = None,
     ) -> None:
         pre_state = self.state
         new_state, chosen_label = apply_action_with_outcome(
@@ -392,7 +407,13 @@ class RunSession:
             random_label=random_label,
         )
         self.log.record(
-            pre_state, offer.id, action, self.rng.state(), new_state, chosen_label
+            pre_state,
+            offer.id,
+            action,
+            self.rng.state(),
+            new_state,
+            chosen_label,
+            encounter_luck,
         )
         self.state = new_state
 
@@ -772,9 +793,12 @@ class CliApp:
             self.console.print("Game over. No viable actions.")
             return
         pre_state = self.session.state
+        encounter_luck = self._current_offer_luck(pre_state, self.current_offer)
         try:
             if self.sim_mode == "full":
-                self.session.apply(self.current_offer, action)
+                self.session.apply(
+                    self.current_offer, action, encounter_luck=encounter_luck
+                )
             else:
                 outcome = _select_outcome(self.current_offer, action)
                 resolver = ManualOutcomeResolver(outcome, self.session.state, self.data)
@@ -789,6 +813,7 @@ class CliApp:
                     action,
                     resolver.resolved_outcome(),
                     resolver.random_label,
+                    encounter_luck=encounter_luck,
                 )
         except ActionNotAllowed as exc:
             self.console.print(f"Action failed: {exc}")
@@ -1067,12 +1092,14 @@ class CliApp:
                 return
             offer, action = offer_action
             pre_state = self.session.state
+            encounter_luck = self._current_offer_luck(pre_state, offer)
             try:
                 self.session.apply_with_outcome(
                     offer,
                     action,
                     resolver.resolved_outcome(),
                     resolver.random_label,
+                    encounter_luck=encounter_luck,
                 )
             except ActionNotAllowed as exc:
                 self.console.print(f"Action failed: {exc}")
@@ -1080,6 +1107,22 @@ class CliApp:
             self._after_action(pre_state, action=action)
             return
         self._show_pending_prompt()
+
+    def _current_offer_luck(
+        self, state: GameState, offer: OfferSpec | None
+    ) -> EncounterLuck | None:
+        if self.sim_mode not in {"mid", "full"}:
+            return None
+        if offer is None:
+            return None
+        return rank_encounter_offer(
+            state,
+            offer.id,
+            self.data,
+            self.encounter_model,
+            weights=self.planner.weights,
+            rng_state=self.session.rng.state(),
+        )
 
     def _show_pending_prompt(self) -> None:
         prompt = self.pending_prompt

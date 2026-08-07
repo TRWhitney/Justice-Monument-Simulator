@@ -6,7 +6,7 @@ from PySide6 import QtCore, QtWidgets
 
 from justice_sim.engine.rng import RngState
 from justice_sim.models.state import GameState
-from justice_sim.persistence.logs import SessionLog
+from justice_sim.persistence.logs import EncounterLuck, SessionLog
 from justice_sim.ui_qt.app import create_app
 from justice_sim.ui_qt.widgets.log_panel import LogPanel
 from justice_sim.ui_qt.widgets.resource_delta import format_resource_delta_html
@@ -50,6 +50,49 @@ def test_log_panel_shows_delta_and_popover(data_factory):
     QtCore.QCoreApplication.sendEvent(panel.log_list.viewport(), leave_event)
     app.processEvents()
     assert not panel._popover.isVisible()
+
+    panel.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_log_panel_popover_shows_luck_ranking(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    panel = LogPanel(data)
+
+    pre_state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    post_state = replace(pre_state, coins=2)
+    log = SessionLog()
+    log.record(
+        pre_state,
+        "offer1",
+        "approve",
+        RngState(seed=0, draws=0),
+        post_state,
+        encounter_luck=EncounterLuck(rank=2, total=5),
+    )
+
+    panel.update_log(log)
+    panel.show()
+    app.processEvents()
+
+    item = panel.log_list.item(0)
+    panel.log_list.itemEntered.emit(item)
+    app.processEvents()
+
+    luck_label = panel._popover.findChild(QtWidgets.QLabel, "encounter_luck_label")
+    assert luck_label is not None
+    assert "2/5" in luck_label.text()
+    assert "color:" in luck_label.text()
 
     panel.close()
     app.quit()

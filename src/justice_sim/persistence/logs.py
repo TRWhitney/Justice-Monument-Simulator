@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from justice_sim.engine.luck import EncounterLuck
 from justice_sim.engine.rng import RngState
 from justice_sim.models.state import GameState
 from justice_sim.persistence.runs import deserialize_state, serialize_state
@@ -20,6 +21,7 @@ class LogEntry:
     rng_state: RngState
     post_state: GameState
     random_label: str | None = None
+    encounter_luck: EncounterLuck | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -30,6 +32,9 @@ class LogEntry:
             "rng_state": {"seed": self.rng_state.seed, "draws": self.rng_state.draws},
             "post_state": serialize_state(self.post_state),
             "random_label": self.random_label,
+            "encounter_luck": (
+                self.encounter_luck.to_dict() if self.encounter_luck else None
+            ),
         }
 
     @staticmethod
@@ -45,6 +50,11 @@ class LogEntry:
             ),
             post_state=deserialize_state(payload["post_state"]),
             random_label=payload.get("random_label"),
+            encounter_luck=(
+                EncounterLuck.from_dict(payload["encounter_luck"])
+                if isinstance(payload.get("encounter_luck"), dict)
+                else None
+            ),
         )
 
 
@@ -60,6 +70,7 @@ class SessionLog:
         rng_state: RngState,
         post_state: GameState,
         random_label: str | None = None,
+        encounter_luck: EncounterLuck | None = None,
     ) -> None:
         entry = LogEntry(
             timestamp=datetime.now(timezone.utc).isoformat(),
@@ -69,6 +80,7 @@ class SessionLog:
             rng_state=rng_state,
             post_state=post_state,
             random_label=random_label,
+            encounter_luck=encounter_luck,
         )
         self.entries.append(entry)
 
@@ -88,6 +100,7 @@ class SessionLog:
             rng_state=rng_state,
             post_state=post_state,
             random_label=None,
+            encounter_luck=None,
         )
         if self.entries and self.entries[-1].action == "adjust":
             last = self.entries[-1]
@@ -99,6 +112,7 @@ class SessionLog:
                 rng_state=rng_state,
                 post_state=post_state,
                 random_label=None,
+                encounter_luck=None,
             )
             self.entries[-1] = merged
             return

@@ -372,6 +372,8 @@ Center: Offer selection
     - NPC name
     - Offer title + offer text
     - Approve summary line + Reject summary line (icons ok but optional)
+  - When no search filter is active, show encounter-luck rank suffix next to deal name: `<npc>: <title> (<rank>/<possible>)`
+  - If “Show All” is enabled with no search filter, rank pool is all offers; otherwise rank pool is currently available offers
 - Select result sets “current observed offer”
 
 Right column: Recommendation + actions + log
@@ -390,6 +392,7 @@ Right column: Recommendation + actions + log
   - Undo button (undo last step)
   - Jump-to-step (optional)
   - Manual state adjustments add debounced log entries that merge when consecutive
+  - Hover card shows encounter luck ranking as `<rank>/<possible>` with red→green color based on closeness to best
 
 ### GUI behavior
 - Planner runs when offer is selected or settings change.
@@ -526,6 +529,7 @@ CLI must reuse the same `OfferSearch` code and `Planner` engine as GUI.
 - [x] Implement suggestion panel with metrics + apply buttons
 - [x] Implement session log panel + undo
 - [x] Run planner in worker thread with cancellation
+- [x] Add Mid/Full encounter-luck ranking on log hover cards (`rank/possible`, red→green)
 
 ### Phase 8 — persistence
 - [x] Implement profile save/load (progression + settings)

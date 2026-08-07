@@ -12,6 +12,7 @@ from justice_sim.models.state import (
     StatusEffect,
 )
 from justice_sim.persistence.logs import SessionLog
+from justice_sim.engine.luck import EncounterLuck
 from justice_sim.persistence.profiles import Profile, load_profile, save_profile
 from justice_sim.persistence.runs import (
     RunState,
@@ -120,3 +121,26 @@ def test_profile_roundtrip(tmp_path):
     loaded = load_profile(path)
     assert loaded.progression["level"] == 2
     assert loaded.planner_settings["horizon_cases"] == 5
+
+
+@pytest.mark.unit
+def test_session_log_roundtrip_preserves_encounter_luck():
+    log = SessionLog()
+    state = GameState(
+        case_index=1, coins=5, pop=3, mh=1, dismissals=0, retirement_chests=0
+    )
+    post_state = GameState(
+        case_index=2, coins=7, pop=3, mh=1, dismissals=0, retirement_chests=0
+    )
+    log.record(
+        state,
+        "offer1",
+        "approve",
+        RngState(1, 0),
+        post_state,
+        encounter_luck=EncounterLuck(rank=2, total=6),
+    )
+
+    reloaded = SessionLog.from_list(log.to_list())
+    assert len(reloaded.entries) == 1
+    assert reloaded.entries[0].encounter_luck == EncounterLuck(rank=2, total=6)

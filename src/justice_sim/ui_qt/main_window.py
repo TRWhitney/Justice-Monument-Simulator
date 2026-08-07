@@ -12,6 +12,7 @@ import time
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from justice_sim.engine.encounter import UniformEncounterModel, select_encounter
+from justice_sim.engine.luck import EncounterLuck, rank_encounter_offer
 from justice_sim.engine.effects import (
     MAIN_RESOURCES,
     NON_NEGATIVE_RESOURCES,
@@ -609,13 +610,25 @@ class GuiSession:
             retirement_chests=0,
         )
 
-    def apply(self, offer: OfferSpec, action: str) -> None:
+    def apply(
+        self,
+        offer: OfferSpec,
+        action: str,
+        *,
+        encounter_luck: EncounterLuck | None = None,
+    ) -> None:
         pre_state = self.state
         new_state, random_label = apply_action(
             self.state, offer, action, self.data, self.rng
         )
         self.log.record(
-            pre_state, offer.id, action, self.rng.state(), new_state, random_label
+            pre_state,
+            offer.id,
+            action,
+            self.rng.state(),
+            new_state,
+            random_label,
+            encounter_luck,
         )
         self.state = new_state
 
@@ -632,6 +645,8 @@ class GuiSession:
         action: str,
         outcome: OutcomeSpec,
         random_label: str | None,
+        *,
+        encounter_luck: EncounterLuck | None = None,
     ) -> None:
         pre_state = self.state
         new_state, chosen_label = apply_action_with_outcome(
@@ -644,7 +659,13 @@ class GuiSession:
             random_label=random_label,
         )
         self.log.record(
-            pre_state, offer.id, action, self.rng.state(), new_state, chosen_label
+            pre_state,
+            offer.id,
+            action,
+            self.rng.state(),
+            new_state,
+            chosen_label,
+            encounter_luck,
         )
         self.state = new_state
 
@@ -834,6 +855,7 @@ class MainWindow(QtWidgets.QMainWindow):
         left_column.addStretch(1)
 
         self.offer_search = OfferSearchWidget(data, self.session.state)
+        self.offer_search.set_luck_weights(self.planner.weights)
         self.offer_search.offer_selected.connect(self._on_offer_selected)
         center_column.addWidget(self.offer_search)
 
@@ -1835,9 +1857,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.toast_area.show_toast("Select an offer first.")
             return
         pre_state = self.session.state
+        encounter_luck = self._current_offer_luck(pre_state)
         try:
             if self._sim_mode == "full":
-                self.session.apply(self.current_offer, action)
+                self.session.apply(
+                    self.current_offer,
+                    action,
+                    encounter_luck=encounter_luck,
+                )
             else:
                 outcome = self._select_outcome(self.current_offer, action)
                 resolved = self._resolve_outcome_randomness(outcome)
@@ -1846,7 +1873,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     return
                 resolved_outcome, random_label = resolved
                 self.session.apply_with_outcome(
-                    self.current_offer, action, resolved_outcome, random_label
+                    self.current_offer,
+                    action,
+                    resolved_outcome,
+                    random_label,
+                    encounter_luck=encounter_luck,
                 )
         except ActionNotAllowed as exc:
             self.toast_area.show_toast(f"{action.title()} failed: {exc}")
@@ -1861,6 +1892,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_recommendation = None
         self._clear_recommendation_ui()
         self._refresh()
+
+    def _current_offer_luck(self, state: GameState) -> EncounterLuck | None:
+        if self._sim_mode not in {"mid", "full"}:
+            return None
+        if not self.current_offer:
+            return None
+        return rank_encounter_offer(
+            state,
+            self.current_offer.id,
+            self.data,
+            self.encounter_model,
+            weights=self.planner.weights,
+            rng_state=self.session.rng.state(),
+        )
 
     def _skip_case(self) -> None:
         self._flush_manual_adjust_log()
@@ -2207,6 +2252,7 @@ class MainWindow(QtWidgets.QMainWindow):
             risk_preset=self.risk_combo.currentText(),
         )
         self.planner.weights = weights_for_preset(self.planner.config.risk_preset)
+        self.offer_search.set_luck_weights(self.planner.weights)
         self.planner.reset_cache()
         if self._sim_mode == "none":
             self.current_recommendation = None

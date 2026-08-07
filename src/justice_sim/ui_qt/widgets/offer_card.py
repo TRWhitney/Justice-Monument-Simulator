@@ -48,6 +48,8 @@ class OfferCard(QtWidgets.QFrame):
         effect_highlight_terms: Sequence[str] | None = None,
         npc_highlight: str | None = None,
         action_filter: str | None = None,
+        title_override: str | None = None,
+        title_html_override: str | None = None,
         extra_effects: Mapping[
             str, Sequence[tuple[str, Sequence[EffectSpec], GameState]]
         ]
@@ -62,6 +64,8 @@ class OfferCard(QtWidgets.QFrame):
         self._effect_highlight_terms = list(effect_highlight_terms or [])
         self._npc_highlight = npc_highlight
         self._action_filter = action_filter
+        self._title_override = title_override
+        self._title_html_override = title_html_override
         self._extra_effects = extra_effects or {}
         self._ui_scale = ui_scale
         self.setObjectName("offer_card")
@@ -163,10 +167,16 @@ class OfferCard(QtWidgets.QFrame):
 
     def _build_offer_panel(self, result: OfferSearchResult) -> QtWidgets.QWidget:
         title = _WrappingLabel()
+        title.setObjectName("offer_title_label")
         title.setStyleSheet("font-weight: 600;")
         title.setWordWrap(True)
         title.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        _set_label_text(title, result.offer.title, self._highlight_terms)
+        if self._title_html_override is not None and not self._highlight_terms:
+            title.setTextFormat(QtCore.Qt.TextFormat.RichText)
+            title.setText(self._title_html_override)
+        else:
+            title_text = self._title_override or result.offer.title
+            _set_label_text(title, title_text, self._highlight_terms)
 
         text = _WrappingLabel()
         text.setWordWrap(True)

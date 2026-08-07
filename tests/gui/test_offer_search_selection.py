@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from PySide6 import QtWidgets
 
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
@@ -137,6 +138,104 @@ def test_offer_search_clears_selection_when_filter_changes(data_factory):
 
     assert widget.results_list.currentRow() == -1
     assert emitted == [None]
+
+    widget.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_offer_search_shows_ranking_suffix_when_unfiltered(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=5,
+        pop=3,
+        mh=1,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    widget = OfferSearchWidget(data, state)
+    widget.resize(500, 320)
+    widget.show()
+    widget.update_state(state)
+    app.processEvents()
+
+    item = widget.results_list.item(0)
+    card = widget.results_list.itemWidget(item)
+    assert card is not None
+    title_label = card.findChild(QtWidgets.QLabel, "offer_title_label")
+    assert title_label is not None
+    title_text = title_label.text()
+    assert '(<span style="color:' in title_text
+    assert "</span>)" in title_text
+
+    widget.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_offer_search_hides_ranking_suffix_when_filtered(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=5,
+        pop=3,
+        mh=1,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    widget = OfferSearchWidget(data, state)
+    widget.resize(500, 320)
+    widget.show()
+    widget.search_input.setText("offer")
+    app.processEvents()
+
+    item = widget.results_list.item(0)
+    card = widget.results_list.itemWidget(item)
+    assert card is not None
+    title_label = card.findChild(QtWidgets.QLabel, "offer_title_label")
+    assert title_label is not None
+    title_text = title_label.text()
+    assert "(" not in title_text
+    assert ")" not in title_text
+    assert '<span style="color:' not in title_text
+
+    widget.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_offer_search_show_all_uses_all_offer_rank_pool(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=5,
+        pop=3,
+        mh=1,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    widget = OfferSearchWidget(data, state)
+    widget.resize(500, 320)
+    widget.show()
+    widget.show_all_toggle.setChecked(True)
+    app.processEvents()
+
+    assert widget.results_list.count() == len(data.offers)
+    item = widget.results_list.item(0)
+    card = widget.results_list.itemWidget(item)
+    assert card is not None
+    title_label = card.findChild(QtWidgets.QLabel, "offer_title_label")
+    assert title_label is not None
+    title_text = title_label.text()
+    assert "/5" in title_text
+    assert '(<span style="color:' in title_text
 
     widget.close()
     app.quit()

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from justice_sim.engine.encounter import (
@@ -9,6 +11,12 @@ from justice_sim.engine.encounter import (
     eligible_harbinger_offers,
 )
 from justice_sim.engine.effects import resolve_probability
+from justice_sim.engine.luck import (
+    EncounterLuck,
+    encounter_luck_color,
+    encounter_offer_rankings,
+)
+from justice_sim.engine.scoring import UtilityWeights
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
 from justice_sim.ui_qt.widgets.offer_card import OfferCard
@@ -131,6 +139,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self._auto_offer_id: str | None = None
         self._show_all_restore_state = False
         self._ui_scale = 1.0
+        self._luck_weights = UtilityWeights()
 
         layout = QtWidgets.QVBoxLayout(self)
         self.search_input = QtWidgets.QLineEdit()
@@ -213,9 +222,23 @@ class OfferSearchWidget(QtWidgets.QWidget):
         )
         blocker = QtCore.QSignalBlocker(self.results_list)
         npc_query, terms, effect_terms = parse_search_query(text)
+        unfiltered_view = self._is_unfiltered_view(npc_query, terms, effect_terms)
         eligible_ids = self._eligible_offer_ids()
+        ranking_offer_ids = eligible_ids
         if self.show_all_toggle.isChecked() and not self._is_offer_locked():
             eligible_ids = None
+            ranking_offer_ids = {offer.id for offer in self._data.offers}
+        rankings = (
+            encounter_offer_rankings(
+                self._state,
+                self._data,
+                self._encounter_model,
+                weights=self._luck_weights,
+                candidate_offer_ids=ranking_offer_ids,
+            )
+            if unfiltered_view
+            else {}
+        )
         self._results = search_offers(
             text, self._data, self._state, eligible_offer_ids=eligible_ids
         )
@@ -223,6 +246,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self.results_list.clear()
         for result in self._results:
             item = QtWidgets.QListWidgetItem()
+            luck = rankings.get(result.offer.id)
             card = OfferCard(
                 self._data,
                 result,
@@ -230,6 +254,11 @@ class OfferSearchWidget(QtWidgets.QWidget):
                 highlight_terms=highlight_terms,
                 effect_highlight_terms=effect_terms,
                 npc_highlight=npc_query.replace("_", " ") if npc_query else None,
+                title_html_override=self._ranked_title_html(
+                    result.npc_name,
+                    result.offer.title,
+                    luck,
+                ),
                 ui_scale=self._ui_scale,
             )
             item.setSizeHint(card.sizeHint())
@@ -255,6 +284,15 @@ class OfferSearchWidget(QtWidgets.QWidget):
             self._on_selection()
         self._update_npc_filter_buttons(text)
         self._update_selection_styles()
+
+    def set_luck_weights(self, weights: UtilityWeights) -> None:
+        self._luck_weights = weights
+        selected_offer_id = self._selected_offer_id()
+        self._on_search(
+            self.search_input.text(),
+            preserve_scroll=True,
+            selected_offer_id=selected_offer_id,
+        )
 
     def _on_selection(self) -> None:
         row = self.results_list.currentRow()
@@ -642,3 +680,26 @@ class OfferSearchWidget(QtWidgets.QWidget):
             card.style().unpolish(card)
             card.style().polish(card)
             card.update()
+
+    def _is_unfiltered_view(
+        self, npc_query: str | None, terms: list[str], effect_terms: list[str]
+    ) -> bool:
+        if self._forced_filter:
+            return False
+        if self.search_input.text().strip():
+            return False
+        return npc_query is None and not terms and not effect_terms
+
+    def _ranked_title_html(
+        self, npc_name: str, title: str, luck: EncounterLuck | None
+    ) -> str | None:
+        if luck is None:
+            return None
+        prefix = f"{npc_name}: {title} ("
+        color = encounter_luck_color(luck.rank, luck.total)
+        rank_html = (
+            f'<span style="color: {color}; font-weight: 700;">'
+            f"{luck.rank}/{luck.total}"
+            "</span>"
+        )
+        return f"{html.escape(prefix)}{rank_html})"

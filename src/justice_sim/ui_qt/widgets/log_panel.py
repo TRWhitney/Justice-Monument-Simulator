@@ -5,9 +5,10 @@ from __future__ import annotations
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from justice_sim.engine.effects import resolve_expr
+from justice_sim.engine.luck import encounter_luck_color
 from justice_sim.models.offer import EffectSpec, JusticeData, OfferSpec
 from justice_sim.models.state import ActionTrigger, EncounterTrigger, GameState
-from justice_sim.persistence.logs import SessionLog
+from justice_sim.persistence.logs import EncounterLuck, SessionLog
 from justice_sim.ui_qt.widgets.offer_card import OfferCard
 from justice_sim.ui_qt.widgets.resource_delta import format_resource_delta_html
 from justice_sim.ui_qt.ui_scale import scale_int
@@ -105,7 +106,11 @@ class LogPanel(QtWidgets.QWidget):
         self._ensure_popover_parent()
         extra_effects = self._build_extra_effects(entry, offer)
         self._popover.update_card(
-            result, entry.pre_state, entry.action, extra_effects=extra_effects
+            result,
+            entry.pre_state,
+            entry.action,
+            extra_effects=extra_effects,
+            encounter_luck=entry.encounter_luck,
         )
         self._popover.move(self._popover_position(cursor_pos))
         self._popover.show()
@@ -520,6 +525,7 @@ class _LogPopover(QtWidgets.QFrame):
         action: str,
         extra_effects: dict[str, list[tuple[str, tuple[EffectSpec, ...], GameState]]]
         | None = None,
+        encounter_luck: EncounterLuck | None = None,
     ) -> None:
         while self._layout.count():
             item = self._layout.takeAt(0)
@@ -527,6 +533,15 @@ class _LogPopover(QtWidgets.QFrame):
             if widget is not None:
                 widget.setParent(None)
                 widget.deleteLater()
+        if encounter_luck is not None:
+            luck_label = QtWidgets.QLabel(
+                _format_encounter_luck_html(encounter_luck.rank, encounter_luck.total)
+            )
+            luck_label.setObjectName("encounter_luck_label")
+            luck_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+            luck_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
+            luck_label.setStyleSheet("font-weight: 600; padding: 8px 8px 0 8px;")
+            self._layout.addWidget(luck_label)
         card = OfferCard(
             self._data,
             result,
@@ -573,3 +588,11 @@ _BASE_SHADOW_BLUR = 26
 _BASE_SHADOW_OFFSET_Y = 6
 _BASE_POPOVER_RADIUS = 10
 _LOG_POPOVER_WIDTH = 520
+
+
+def _format_encounter_luck_html(rank: int, total: int) -> str:
+    color = encounter_luck_color(rank, total)
+    return (
+        "Deal luck: "
+        f'<span style="color: {color}; font-weight: 700;">{rank}/{total}</span>'
+    )

@@ -8,7 +8,7 @@ from typing import Mapping
 from justice_sim.engine.effects import resolve_probability
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData, OfferSpec
-from justice_sim.models.state import EncounterModifier, GameState
+from justice_sim.models.state import EncounterModifier, EncounterOverride, GameState
 from justice_sim.util import expr as expr_util
 
 
@@ -133,6 +133,37 @@ def select_encounter(
     return encounter_model.sample_encounter(state, data, rng)
 
 
+def possible_encounter_offers(
+    state: GameState, data: JusticeData, encounter_model: EncounterModel
+) -> list[str]:
+    if state.ended:
+        return []
+    forced_offer = _forced_encounter_for_case(state)
+    if forced_offer:
+        return [forced_offer]
+
+    harbinger_rule = data.special_rules.harbinger
+    harbinger_case = state.case_index % harbinger_rule.cadence_modulus == 0
+    override_possible, deterministic_override = _possible_override_encounters(
+        state, data, harbinger_case
+    )
+    possible = set(override_possible)
+    if deterministic_override:
+        return sorted(possible)
+
+    if harbinger_case:
+        grateful_rule = data.special_rules.gratefulbinger
+        if grateful_rule:
+            probability = _evaluate_gratefulbinger_probability(state, data)
+            if probability > 0:
+                possible.add(grateful_rule.offer_id)
+        possible.update(eligible_harbinger_offers(state, data))
+        return sorted(possible)
+
+    possible.update(encounter_model.eligible_offers(state, data))
+    return sorted(possible)
+
+
 def consume_forced_encounter(state: GameState, offer_id: str) -> GameState:
     from dataclasses import replace
 
@@ -192,6 +223,49 @@ def _override_encounter_for_case(
             if offers:
                 return rng.choice(offers)
     return None
+
+
+def _possible_override_encounters(
+    state: GameState, data: JusticeData, harbinger_case: bool
+) -> tuple[set[str], bool]:
+    possible: set[str] = set()
+    ordered = sorted(
+        enumerate(state.encounter_overrides),
+        key=lambda item: (-item[1].priority, item[0]),
+    )
+    for _, override in ordered:
+        if harbinger_case and not override.allow_harbinger:
+            continue
+        candidates = _override_candidate_offer_ids(override, state, data)
+        if not candidates:
+            continue
+        if override.probability is None:
+            possible.update(candidates)
+            return possible, True
+        probability = resolve_probability(override.probability, state, data)
+        if probability <= 0:
+            continue
+        possible.update(candidates)
+        if probability >= 1:
+            return possible, True
+    return possible, False
+
+
+def _override_candidate_offer_ids(
+    override: EncounterOverride, state: GameState, data: JusticeData
+) -> list[str]:
+    if override.offer_id:
+        offer = data.offers_by_id.get(override.offer_id)
+        if offer and _is_offer_eligible(offer, state, data):
+            return [override.offer_id]
+        return []
+    if not override.npc_id:
+        return []
+    return [
+        offer.id
+        for offer in data.offers
+        if offer.npc_id == override.npc_id and _is_offer_eligible(offer, state, data)
+    ]
 
 
 def _evaluate_gratefulbinger_probability(state: GameState, data: JusticeData) -> float:

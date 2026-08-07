@@ -62,10 +62,11 @@
       "constraints": [
         {
           "action": "approve",
-          "mode": "require"
+          "mode": "require",
+          "when": "mh <= 2"
         }
       ],
-      "notes": "Community consensus is to approve unless unaffordable."
+      "notes": "Require the Popularity-for-chest trade only at low Mental Health, where paired simulations found its safety value. At 3+ Mental Health, leave the chest-versus-Popularity choice to planner rollouts."
     },
     {
       "id": "head_honcho_hedgefund_timing",

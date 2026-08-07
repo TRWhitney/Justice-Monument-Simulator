@@ -111,3 +111,9 @@ def test_simulation_refined_suggested_rules_are_loaded():
     assert [(rule.action, rule.amount, rule.when) for rule in biases] == [
         ("approve", 1.0, "coins >= case_scale + harbinger_cost")
     ]
+
+    chest_heist = _offer(data, "Reanimated Hand: Chest Heist")
+    constraints = rules.constraints_for_offer(chest_heist.id)
+    assert [(rule.action, rule.mode, rule.when) for rule in constraints] == [
+        ("approve", "require", "mh <= 2")
+    ]

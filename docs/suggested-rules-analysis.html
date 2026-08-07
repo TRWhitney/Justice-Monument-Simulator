@@ -59,7 +59,9 @@
           three cases to two. A later ablation audit removed three inherited
           Vercel-era hard constraints that degraded configured-horizon utility
           and survival: Timmy Stinky/Poopy approval, Scripticus Promise Me before
-          Harbinger, and Honcho Life Insurance above 1 Mental Health.
+          Harbinger, and Honcho Life Insurance above 1 Mental Health. A subsequent
+          conditional-state audit narrowed Chest Heist's required approval to
+          states at 2 or less Mental Health.
         </p>
       </div>
 
@@ -514,6 +516,99 @@
         </p>
       </div>
 
+      <h2>Conditional-state and interaction audit</h2>
+      <p>
+        A fourth pass tested the remaining conditional and interaction backlog.
+        It began with 18 implementable candidates from the default start, then
+        forced rare counters, flags, resource balances, and Harbinger phases
+        through three or more paired state scenarios each. It separately
+        stress-tested 16 dormant-rule or per-offer ablations, all 105 two-rule
+        ablations among the 15 retained rules, six skewed NPC encounter
+        distributions, and the application's full 200-rollout recommendation
+        path. Screening winners were retested across balanced, safe, and greedy
+        scoring and over both 12 and 60 cases.
+      </p>
+
+      <h3>Rejected conditional candidates</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Candidate</th>
+            <th>Strongest decisive evidence</th>
+            <th>Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Third-Timmy-rejection hard guard</td><td>-1.211 targeted utility; -0.0550 chests</td><td>Reject</td></tr>
+          <tr><td>Third-Timmy-rejection soft guard</td><td>-3.439 utility; +0.81 pp deaths</td><td>Reject</td></tr>
+          <tr><td>Life Insurance chest-only prohibition</td><td>-0.651 default utility; +0.55 pp deaths</td><td>Reject</td></tr>
+          <tr><td>Bored Loan after Harbinger</td><td>-0.711 targeted utility; -0.0494 chests</td><td>Reject</td></tr>
+          <tr><td>Bored Bet high-Popularity protection</td><td>-2.442 utility; +0.50 pp deaths</td><td>Reject</td></tr>
+          <tr><td>Timmy Block before Ice Cream IV</td><td>-9.622 utility; +4.33 pp deaths</td><td>Reject</td></tr>
+          <tr><td>Humble Lesson with Never Uncool floor</td><td>-3.246 utility; -0.1289 chests</td><td>Reject</td></tr>
+          <tr><td>Reaper restriction only at 1 Mental Health</td><td>+4.413 at 12 cases, but -39.890 and +18.00 pp deaths at 60</td><td>Reject</td></tr>
+          <tr><td>Above the Law floor emergency</td><td>+1.943 at 12 cases, but +1.52 pp deaths at 60</td><td>Reject</td></tr>
+          <tr><td>Pop Futures near-Harbinger retunes</td><td>Targeted gains reversed slightly in default-start confirmation</td><td>Reject</td></tr>
+          <tr><td>Chest Magnet tighter guards or weaker bias</td><td>Tighter guards lost uniform utility and chests; half bias changed no outcomes</td><td>Keep current</td></tr>
+          <tr><td>Scripticus affordability, Ghost floor, Gamble low baseline, and Magic imbalance</td><td>No changed default or targeted outcomes</td><td>Redundant</td></tr>
+          <tr><td>Sanity Flip split at exactly 1 and 2 Mental Health</td><td>Utility interval crossed zero; no aggregate safety change</td><td>Inconclusive</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The 105 pairwise ablations produced no removal pair whose utility
+        confidence interval excluded zero. The largest estimates were the
+        already-known Chest Heist and Vitality chest-versus-safety tradeoffs, so
+        no multi-rule removal advanced. The full recommendation check also found
+        that the planner already approved Above the Law in most emergency-floor
+        states; adding a bias did not change sampled action counts.
+      </p>
+
+      <h3>Accepted Chest Heist refinement</h3>
+      <p>
+        Skewing encounters toward Reanimated Hand, Honcho, Retirement Chester,
+        Fizarre Drink, Timmy, and other ruled NPCs exposed Chest Heist's blanket
+        approval requirement as overly broad. Removing it entirely gained chests
+        but retained the previously measured default-start death tradeoff. The
+        safe boundary was to require approval only when <code>mh &lt;= 2</code>;
+        above two health, the rollout planner chooses whether one chest is worth
+        the case-scaled Popularity reward.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Paired 12-case confirmation</th>
+            <th>Utility change (95% CI)</th>
+            <th>Chest change (95% CI)</th>
+            <th>Death change</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Uniform balanced, 8,000 seeds</td><td>+0.0384 (+0.0191 to +0.0577)</td><td>+0.0022 (+0.0012 to +0.0033)</td><td>0.00 pp</td></tr>
+          <tr><td>Uniform safe, 8,000 seeds</td><td>+0.0373 (+0.0182 to +0.0564)</td><td>+0.0022 (+0.0012 to +0.0033)</td><td>0.00 pp</td></tr>
+          <tr><td>Uniform greedy, 8,000 seeds</td><td>+0.0384 (+0.0193 to +0.0575)</td><td>+0.0022 (+0.0012 to +0.0033)</td><td>0.00 pp</td></tr>
+          <tr><td>Hand-heavy, 4,000 seeds</td><td>+0.0521 (+0.0190 to +0.0852)</td><td>+0.0032 (+0.0014 to +0.0051)</td><td>0.00 pp</td></tr>
+          <tr><td>Honcho-heavy, 4,000 seeds</td><td>+0.0393 (+0.0141 to +0.0645)</td><td>+0.0027 (+0.0011 to +0.0044)</td><td>0.00 pp</td></tr>
+          <tr><td>Chester-heavy, 4,000 seeds</td><td>+0.0359 (+0.0128 to +0.0590)</td><td>+0.0027 (+0.0011 to +0.0044)</td><td>0.00 pp</td></tr>
+        </tbody>
+      </table>
+      <p>
+        At 60 cases, utility, chest, death, and progress intervals all included
+        zero, establishing neither a persistent gain nor a regression. In the
+        exact full-planner check, the inherited rule forced approval at all 15
+        healthy-state recommendations even though approval scored 12 to 17
+        utility below rejection. The refined rule selected rejection in all 15,
+        while preserving required approval at the low-health states responsible
+        for the earlier safety benefit.
+      </p>
+      <div class="callout">
+        <p>
+          Conditional audit decision: narrow Chest Heist's required approval to
+          <code>mh &lt;= 2</code>. No other conditional addition, retune, rule
+          combination, or encounter-weight stress candidate met both the utility
+          and safety thresholds.
+        </p>
+      </div>
+
       <h2>Simulation reliability correction</h2>
       <p>
         Before accepting the data result, two rollout edge cases were corrected:
@@ -529,8 +624,8 @@
         Results depend on the simulator's uniform encounter assumption and the
         uncertain probabilities documented in the data open-questions report.
         They should be rerun if observed encounter weights or unresolved outcome
-        probabilities change. The new condition uses the existing whitelisted
-        expression evaluator; it adds no dynamic evaluation or external input
+        probabilities change. The added conditions use the existing whitelisted
+        expression evaluator; they add no dynamic evaluation or external input
         path.
       </p>
     </main>

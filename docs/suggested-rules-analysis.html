@@ -175,18 +175,121 @@
         </li>
       </ul>
 
-      <h2>Alternatives considered</h2>
+      <h2>Follow-up trial ledger</h2>
       <p>
-        Screening covered every existing rule by leave-one-out ablation and
-        tested additions for Humble Lesson, Crypto Drip, Student Loans, Kitchen
-        Loan, Bored Bean's Loan, Ghost's Scare Permit, Above the Law, and Timmy
-        Block. It also tested narrower Timmy, Promise Me, Reaper Contract,
-        Vitality Trade, and Chest Heist policies. Delayed-loan requirements and
-        hard Chest Magnet requirements reduced outcomes in screening. Existing
-        rule removals were either neutral or showed chest/safety tradeoffs whose
-        intervals did not support replacing the current guidance, so they were
-        retained.
+        A second pass trialed the remaining proposals independently from high to
+        low priority. Screening used 700 paired seeds, a 60-case cap, the default
+        starting state, and balanced utility. The table values are candidate
+        minus current-policy means; screening deltas are directional evidence,
+        not confirmation intervals.
       </p>
+
+      <h3>High-priority trials</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Candidate</th>
+            <th>Utility</th>
+            <th>Chests</th>
+            <th>Death</th>
+            <th>Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Third Fizarre approval, +1 bias</td><td>0.000</td><td>0.000</td><td>0.00 pp</td><td>Redundant</td></tr>
+          <tr><td>Third Fizarre approval, +2 bias</td><td>0.000</td><td>0.000</td><td>0.00 pp</td><td>Redundant</td></tr>
+          <tr><td>Guarded Crypto Drip, +1 bias</td><td>+0.202</td><td>+0.010</td><td>0.00 pp</td><td>Confirm</td></tr>
+          <tr><td>Guarded Crypto Drip, +3 bias</td><td>+0.317</td><td>+0.011</td><td>0.00 pp</td><td>Confirm</td></tr>
+          <tr><td>Guarded Student Loans, +1 bias</td><td>-0.083</td><td>-0.003</td><td>0.00 pp</td><td>Reject</td></tr>
+          <tr><td>Guarded Student Loans, +3 bias</td><td>+0.104</td><td>-0.001</td><td>-0.14 pp</td><td>Mixed</td></tr>
+          <tr><td>Guarded Kitchen Loan, +1 bias</td><td>+0.053</td><td>-0.004</td><td>-0.14 pp</td><td>Mixed</td></tr>
+          <tr><td>Guarded Kitchen Loan, +3 bias</td><td>+0.001</td><td>-0.006</td><td>-0.14 pp</td><td>Reject</td></tr>
+          <tr><td>Retirement Gamble spending penalty, -3</td><td>-0.369</td><td>-0.014</td><td>0.00 pp</td><td>Reject</td></tr>
+          <tr><td>Retirement Gamble spending penalty, -8</td><td>-0.304</td><td>-0.011</td><td>0.00 pp</td><td>Reject</td></tr>
+          <tr><td>Forbid Bored Bet's second rejection</td><td>-0.568</td><td>-0.006</td><td>+0.29 pp</td><td>Reject</td></tr>
+          <tr><td>Also discourage dismissing Bored Bet</td><td>-0.568</td><td>-0.006</td><td>+0.29 pp</td><td>Reject</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Medium-priority trials</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Candidate</th>
+            <th>Utility</th>
+            <th>Chests</th>
+            <th>Death</th>
+            <th>Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Chest Heist required below 5 Popularity</td><td>-0.018</td><td>+0.021</td><td>+0.29 pp</td><td>Safety tradeoff</td></tr>
+          <tr><td>Chest Heist required below 10 Popularity</td><td>-0.033</td><td>+0.001</td><td>0.00 pp</td><td>Reject</td></tr>
+          <tr><td>Chest Heist required below 20 Popularity</td><td>-0.135</td><td>-0.004</td><td>0.00 pp</td><td>Reject</td></tr>
+          <tr><td>Chest Heist soft +5 below 10 Popularity</td><td>-1.323</td><td>-0.013</td><td>+0.43 pp</td><td>Reject</td></tr>
+          <tr><td>Vitality forbidden only at 2 Mental Health</td><td>+0.146</td><td>+0.007</td><td>0.00 pp</td><td>Confirm</td></tr>
+          <tr><td>Vitality forbidden at 2 near Harbinger</td><td>+0.233</td><td>+0.013</td><td>0.00 pp</td><td>Confirm</td></tr>
+          <tr><td>Remove Vitality restriction</td><td>+0.055</td><td>+0.014</td><td>+0.14 pp</td><td>Safety tradeoff</td></tr>
+          <tr><td>Reaper restriction only when solvent</td><td>+0.012</td><td>0.000</td><td>0.00 pp</td><td>Neutral</td></tr>
+          <tr><td>Reaper restriction above 2 dismissals</td><td>-0.181</td><td>0.000</td><td>+0.14 pp</td><td>Reject</td></tr>
+          <tr><td>Remove Reaper restriction</td><td>+0.147</td><td>+0.003</td><td>0.00 pp</td><td>Confirm</td></tr>
+          <tr><td>Forbid Timmy rejection after one, at 1 MH</td><td>-0.903</td><td>-0.034</td><td>0.00 pp</td><td>Reject</td></tr>
+          <tr><td>Timmy rejection bias -3 after one, at 1 MH</td><td>+0.055</td><td>-0.003</td><td>-0.14 pp</td><td>Mixed</td></tr>
+          <tr><td>Magic Rupie solvency rescue</td><td>0.000</td><td>0.000</td><td>0.00 pp</td><td>Redundant</td></tr>
+          <tr><td>Pop Buyout solvency rescue</td><td>0.000</td><td>0.000</td><td>0.00 pp</td><td>Redundant</td></tr>
+          <tr><td>Dismissal Sale reserve</td><td>+0.001</td><td>0.000</td><td>0.00 pp</td><td>Redundant</td></tr>
+          <tr><td>Brain for Sale guarded +1 bias</td><td>+0.062</td><td>+0.003</td><td>0.00 pp</td><td>Confirm</td></tr>
+          <tr><td>Brain for Sale guarded +3 bias</td><td>+0.035</td><td>+0.001</td><td>0.00 pp</td><td>Reject</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Low-priority trials</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Candidate family</th>
+            <th>Observed result</th>
+            <th>Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Grumblo Double Dip, +1 and +3 guarded biases</td><td>No changed outcomes</td><td>Redundant</td></tr>
+          <tr><td>Grumblo Mystery Gift, +1 and +3 guarded biases</td><td>No changed outcomes</td><td>Redundant</td></tr>
+          <tr><td>Chest Flip empty-bank and low-bank biases</td><td>No changed outcomes</td><td>Redundant</td></tr>
+          <tr><td>Coin Flip reserve +1</td><td>No changed outcomes</td><td>Redundant</td></tr>
+          <tr><td>Coin Flip low-bank -1</td><td>-0.359 utility, -0.014 chests</td><td>Reject</td></tr>
+          <tr><td>Vibe Check +1</td><td>+0.242 utility, no chest change</td><td>Confirm</td></tr>
+          <tr><td>Billionaire Chester require approval</td><td>No changed outcomes</td><td>Redundant</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Confirmation and state sensitivity</h3>
+      <p>
+        Five candidates advanced to 2,500 paired 60-case runs. Crypto Drip,
+        Brain for Sale, Vibe Check, and Reaper removal all had confidence
+        intervals spanning zero for both utility and chest yield. Dynamic
+        Vitality produced +0.0116 chests (95% CI +0.0029 to +0.0203), but its
+        utility interval crossed zero and mean ending case fell by 0.0668.
+      </p>
+      <p>
+        Vitality also improved the default 12-case result by +0.0072 chests and
+        +0.1275 utility, with both intervals above zero. It failed the required
+        state-sensitivity check: from a healthy early-run state, allowing the
+        trade at 3+, 4+, or 5+ Mental Health raised deaths by 3.58, 1.83, and
+        1.25 percentage points respectively. The most conservative 5+ version
+        reduced safe-preset utility by 2.1024 (95% CI -4.1065 to -0.0982) and
+        raised deaths by 1.38 percentage points. Because suggested rules are
+        shared across starting states and risk presets, the existing Vitality
+        restriction remains.
+      </p>
+      <div class="callout">
+        <p>
+          Follow-up decision: no additional suggested rules were accepted. The
+          current dataset remains the Pareto-safe choice among the trialed
+          variants; apparent default-state gains either vanished under
+          confirmation or produced a measurable safety regression elsewhere.
+        </p>
+      </div>
 
       <h2>Simulation reliability correction</h2>
       <p>

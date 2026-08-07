@@ -50,7 +50,7 @@
   <body>
     <main>
       <h1>Suggested Rules Simulation Analysis</h1>
-      <p>Last run: 2026-08-06</p>
+      <p>Last run: 2026-08-07</p>
 
       <div class="callout">
         <p>
@@ -288,6 +288,119 @@
           current dataset remains the Pareto-safe choice among the trialed
           variants; apparent default-state gains either vanished under
           confirmation or produced a measurable safety regression elsewhere.
+        </p>
+      </div>
+
+      <h2>Exploratory discovery pass</h2>
+      <p>
+        A third pass deliberately searched beyond the earlier proposals. It
+        screened a +3 approval preference and a +3 rejection preference for
+        every one of the 73 ordinary offers (146 variants), including the 48
+        ordinary offers with no existing suggested rule. It separately tested
+        dismissal preferences, resource-policy rules spanning multiple offers,
+        all 12 Harbinger and Gratefulbinger offers, and portfolios of individually
+        weak rules. Screening used paired seeds and promoted apparent gains to
+        larger independent comparisons; no screening result was accepted on its
+        own.
+      </p>
+
+      <h3>Broad action search</h3>
+      <p>
+        The 250-seed, 40-case sweep surfaced Coin Flip rejection, Crypto Drip
+        approval, Bored Loan approval, Ghost Scare rejection, IOU rejection,
+        No School approval, Student rejection, Lost Coins rejection, Dirty
+        Handshake rejection, Magic Rupie rejection, and Pop Swap approval as the
+        largest unfamiliar signals. Ten leading variants were rerun over 1,000
+        paired 60-case seeds. Nine had utility intervals spanning zero or moved
+        in the opposite direction. Pop Swap was the largest remaining estimate
+        at +0.4898 utility, but its wide 95% interval (-0.3908 to +1.3704) did
+        not establish an improvement.
+      </p>
+      <p>
+        No School was the closest state-independent idea. Approval biases from
+        +1 through +5 behaved nearly identically over 1,200 paired 60-case runs;
+        the +1 result was +0.401 utility with a 95% interval of -0.016 to
+        +0.818. At the configured 12-case horizon and 4,000 paired seeds, that
+        same rule instead reduced utility by 0.1370 (95% CI -0.2663 to -0.0077)
+        and raised death probability by 0.10 percentage points (95% CI +0.002
+        to +0.198 percentage points). Coin-reserve and Timmy-counter guards were
+        also harmful or behaviorally redundant, so the family was rejected.
+      </p>
+
+      <h3>Rules outside the existing design vocabulary</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Exploration</th>
+            <th>Variants tested</th>
+            <th>Evidence</th>
+            <th>Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Dismiss as a strategic action</td>
+            <td>Positive and negative biases across all ordinary offers</td>
+            <td>Almost no policy changes at +/-3; extreme +10 signals did not replicate plausibly</td>
+            <td>Reject</td>
+          </tr>
+          <tr>
+            <td>Health-recovery policy</td>
+            <td>Prefer offers that can restore Mental Health</td>
+            <td>+0.1958 utility; 95% CI -0.1445 to +0.5362</td>
+            <td>Inconclusive</td>
+          </tr>
+          <tr>
+            <td>Popularity buffer</td>
+            <td>Avoid losses and seek gains below reserve thresholds</td>
+            <td>All variants were neutral-to-negative; intervals included zero</td>
+            <td>Reject</td>
+          </tr>
+          <tr>
+            <td>Coin solvency rescue</td>
+            <td>Prefer coin gains when below the next Harbinger reserve</td>
+            <td>-0.6678 utility; no established survival gain</td>
+            <td>Reject</td>
+          </tr>
+          <tr>
+            <td>Dismissal acquisition</td>
+            <td>Prefer offers awarding dismissals</td>
+            <td>No material policy or outcome change</td>
+            <td>Redundant</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Special encounters and rule interactions</h3>
+      <p>
+        Approval, rejection, and dismissal preferences were screened across all
+        Harbinger and Gratefulbinger offers. Rent Due approval was the only
+        material lead: requiring payment when coins covered three times the
+        current Harbinger cost produced +0.3968 utility over 1,800 paired
+        60-case runs, but its 95% interval (-0.0189 to +0.8124) crossed zero.
+        At 3,000 paired 12-case seeds it was slightly negative (-0.0722 utility;
+        95% CI -0.1740 to +0.0296). Mental Health, dismissal, and soft-preference
+        guards made it neutral or worse. Shark Attack and Busted Bills variants
+        also failed confirmation.
+      </p>
+      <p>
+        Five weak candidates were then combined into long-term, safety,
+        Crypto-plus-Rent, No-School-plus-Rent, and all-five portfolios. Only
+        No-School-plus-Rent cleared zero for long-run utility: +0.4808 (95% CI
+        +0.0256 to +0.9360) over 1,500 paired 60-case seeds, while its chest,
+        death, and ending-case intervals all included zero. The required
+        4,000-seed, 12-case check reversed the result to -0.2062 utility (95% CI
+        -0.3573 to -0.0551), again without an established chest or survival
+        benefit.
+      </p>
+      <div class="callout">
+        <p>
+          Exploratory decision: retain the current suggested-rules dataset
+          unchanged. The broad search found useful hypotheses, but every novel
+          candidate either disappeared under paired confirmation, conflicted
+          with the configured horizon, was redundant with the planner, or
+          introduced a resource or safety tradeoff without a reliable primary
+          outcome gain.
         </p>
       </div>
 

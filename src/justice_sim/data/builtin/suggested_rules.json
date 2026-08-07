@@ -5,20 +5,6 @@
   },
   "rules": [
     {
-      "id": "timmy_stinky_poopy_approve",
-      "offer_ids": [
-        "little_timmy_hewwo_owo_can_u_tell_everyone_they_are_s_239bb3fb",
-        "little_timmy_your_a_big_poopy_head_fr_fr_you_stink_da_f73c88ad"
-      ],
-      "constraints": [
-        {
-          "action": "approve",
-          "mode": "require"
-        }
-      ],
-      "notes": "Rejecting worsens the Timmy/Harbinger interaction; community consensus is to approve if possible."
-    },
-    {
       "id": "timmy_ice_cream_prefer_approve",
       "offer_ids": [
         "little_timmy_musical_theme_plays_ooh_ohh_teh_ice_cwea_6f685625",
@@ -131,20 +117,6 @@
       "notes": "Only reject when far ahead of the coin curve."
     },
     {
-      "id": "head_honcho_life_insurance_low_mh",
-      "offer_ids": [
-        "head_honcho_of_big_biz_llc_you_aren_t_looking_too_well_my_friend_pe_82709538"
-      ],
-      "constraints": [
-        {
-          "action": "approve",
-          "mode": "forbid",
-          "when": "mh > 1"
-        }
-      ],
-      "notes": "Never approve unless on 1 health."
-    },
-    {
       "id": "head_honcho_reaper_contract_dismissals",
       "offer_ids": [
         "head_honcho_of_big_biz_llc_greetings_are_you_interested_in_making_s_cba0f9d6"
@@ -171,20 +143,6 @@
         }
       ],
       "notes": "Avoid approving when the three-case approval lock would still be active on a Harbinger case."
-    },
-    {
-      "id": "scripticus_promise_me_next_harbinger",
-      "offer_ids": [
-        "scripticus_hey_it_s_me_everyone_s_favorite_wiggly_p_39c2f421"
-      ],
-      "constraints": [
-        {
-          "action": "approve",
-          "mode": "forbid",
-          "when": "harbinger_in == 1"
-        }
-      ],
-      "notes": "Never approve if the next case is Harbinger."
     },
     {
       "id": "cool_bird_sanity_flip_low_health",

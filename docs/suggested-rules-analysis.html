@@ -56,10 +56,10 @@
         <p>
           Outcome: add a guarded soft preference for Fizarre Drink: Chest Magnet
           and narrow Mister Bribe: Approval Lock's Harbinger safety window from
-          three cases to two. Together they increase expected Retirement Chests
-          and balanced utility in paired simulations. The measured death-rate
-          difference includes zero, so the experiment does not establish a
-          survival improvement or regression.
+          three cases to two. A later ablation audit removed three inherited
+          Vercel-era hard constraints that degraded configured-horizon utility
+          and survival: Timmy Stinky/Poopy approval, Scripticus Promise Me before
+          Harbinger, and Honcho Life Insurance above 1 Mental Health.
         </p>
       </div>
 
@@ -395,12 +395,122 @@
       </p>
       <div class="callout">
         <p>
-          Exploratory decision: retain the current suggested-rules dataset
-          unchanged. The broad search found useful hypotheses, but every novel
-          candidate either disappeared under paired confirmation, conflicted
-          with the configured horizon, was redundant with the planner, or
-          introduced a resource or safety tradeoff without a reliable primary
-          outcome gain.
+          Exploratory decision: accept no novel rule. The broad search found
+          useful hypotheses, but every new candidate either disappeared under
+          paired confirmation, conflicted with the configured horizon, was
+          redundant with the planner, or introduced a resource or safety
+          tradeoff without a reliable primary outcome gain.
+        </p>
+      </div>
+
+      <h2>Inherited-rule ablation audit</h2>
+      <p>
+        All 18 rules present after the earlier refinement were tested by removing
+        exactly one rule from the current policy and replaying identical seeds.
+        The initial screen used 700 paired 60-case runs; every rule was then
+        tested over 3,000 paired runs at the configured 12-case horizon. Positive
+        values below mean that removing the inherited rule improved balanced
+        utility. Apparent degraders were confirmed over 5,000 paired seeds under
+        balanced, safe, and greedy scoring. Dormant means the ablation did not
+        change a terminal outcome in the configured-horizon screen; it does not
+        prove that the rule can never activate.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Inherited rule</th>
+            <th>12-case utility after removal</th>
+            <th>Observed tradeoff</th>
+            <th>Decision</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Timmy Stinky/Poopy approval</td><td>+0.7624</td><td>Removal also improved chests, deaths, and progress</td><td>Remove</td></tr>
+          <tr><td>Timmy Ice Cream preference</td><td>0.0000</td><td>Dormant</td><td>Keep</td></tr>
+          <tr><td>Reanimated Hand Bail Me Out</td><td>0.0000</td><td>Dormant</td><td>Keep</td></tr>
+          <tr><td>Reanimated Hand Waive Fine</td><td>-0.0689</td><td>Interval crossed zero</td><td>Keep</td></tr>
+          <tr><td>Reanimated Hand Chest Heist</td><td>+0.0971</td><td>Removal raised deaths and ended runs earlier</td><td>Keep</td></tr>
+          <tr><td>Honcho Hedgefund timing</td><td>0.0000</td><td>Dormant at 12 cases; removal trended worse at 60</td><td>Keep</td></tr>
+          <tr><td>Honcho 15-Day Return curve</td><td>0.0000</td><td>Dormant</td><td>Keep</td></tr>
+          <tr><td>Honcho Pop Futures curve</td><td>-0.1330</td><td>Interval crossed zero</td><td>Keep</td></tr>
+          <tr><td>Honcho Life Insurance restriction</td><td>+0.3675</td><td>Removal reduced deaths and improved progress</td><td>Remove</td></tr>
+          <tr><td>Honcho Reaper dismissal limit</td><td>+0.0131</td><td>Interval crossed zero</td><td>Keep</td></tr>
+          <tr><td>Mister Bribe Approval Lock window</td><td>-21.9022</td><td>Removal lost chests, raised deaths, and ended runs earlier</td><td>Keep</td></tr>
+          <tr><td>Scripticus Promise Me restriction</td><td>+0.6249</td><td>Removal also improved chests, deaths, and progress</td><td>Remove</td></tr>
+          <tr><td>Cool Bird Sanity Flip preference</td><td>0.0000</td><td>One path changed but aggregate metrics did not</td><td>Keep</td></tr>
+          <tr><td>Fizarre Drink general preference</td><td>+0.0355</td><td>Interval crossed zero</td><td>Keep</td></tr>
+          <tr><td>Fizarre Drink Chest Magnet preference</td><td>-0.0251</td><td>Removal lost 0.0877 expected chests</td><td>Keep</td></tr>
+          <tr><td>Retirement Chester Vitality restriction</td><td>+0.0757</td><td>Removal gained chests but did not improve survival</td><td>Keep</td></tr>
+          <tr><td>Retirement Chester Double Dip preference</td><td>0.0000</td><td>Dormant</td><td>Keep</td></tr>
+          <tr><td>Retirement Chester Jackpot Boost preference</td><td>0.0000</td><td>Dormant</td><td>Keep</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Confirmed removals</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Rule removed, 5,000 paired 12-case seeds</th>
+            <th>Balanced utility (95% CI)</th>
+            <th>Safe utility (95% CI)</th>
+            <th>Greedy utility (95% CI)</th>
+            <th>Death change</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Timmy Stinky/Poopy approval</td>
+            <td>+0.590 (+0.344 to +0.836)</td>
+            <td>+0.852 (+0.498 to +1.206)</td>
+            <td>+0.423 (+0.249 to +0.596)</td>
+            <td>-0.26 pp</td>
+          </tr>
+          <tr>
+            <td>Scripticus Promise Me restriction</td>
+            <td>+0.585 (+0.337 to +0.833)</td>
+            <td>+0.814 (+0.459 to +1.168)</td>
+            <td>+0.387 (+0.226 to +0.548)</td>
+            <td>-0.38 pp</td>
+          </tr>
+          <tr>
+            <td>Honcho Life Insurance restriction</td>
+            <td>+0.322 (+0.118 to +0.526)</td>
+            <td>+0.478 (+0.181 to +0.776)</td>
+            <td>+0.203 (+0.072 to +0.334)</td>
+            <td>-0.30 pp</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Timmy's result came entirely from Stinky Heads, where forced approval
+        loses one case-scaled Popularity while rejection gains one. The Poopy
+        Head constraint was behaviorally redundant, so the combined inherited
+        rule was removed rather than retaining unsupported guidance. Promise Me
+        awards case-scaled coins and forces the next approval; immediately before
+        Harbinger that obligation usually aligns with paying Harbinger, making
+        the blanket prohibition counterproductive. The Life Insurance constraint
+        prevented the planner from selecting a temporary four-health buffer at
+        any health above one even when rollout evidence favored it. Removing the
+        hard constraint leaves the choice to simulated action scoring, while the
+        delayed repayment trigger remains encoded in the resulting state.
+      </p>
+      <p>
+        Removing all three together was confirmed over 8,000 paired 12-case
+        seeds. Balanced utility increased by 1.4524 (95% CI +1.1427 to +1.7622),
+        expected chests increased by 0.0069 (+0.0036 to +0.0102), death
+        probability fell by 0.84 percentage points (-1.06 to -0.62), and mean
+        ending case increased by 0.0286 (+0.0208 to +0.0364). Safe and greedy
+        utility also improved. At 60 cases, the combined removal retained a
+        +1.0372 utility improvement (95% CI +0.3235 to +1.7510) and a 0.33
+        percentage-point death reduction (95% CI -0.61 to -0.06).
+      </p>
+      <div class="callout">
+        <p>
+          Ablation decision: remove the three degrading inherited constraints
+          and retain the other 15 rules. Chest Heist and Vitality were not
+          removed merely to gain chests because their ablations did not establish
+          a survival improvement; prior state-sensitivity evidence also found a
+          Vitality safety regression.
         </p>
       </div>
 

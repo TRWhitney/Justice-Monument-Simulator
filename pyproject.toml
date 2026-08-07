@@ -3,6 +3,8 @@ name = "justicemonumentsimulator"
 version = "0.1.0"
 description = "Idleon Justice Monument simulator with CLI and Qt GUI."
 readme = "README.md"
+license = "Unlicense"
+license-files = ["UNLICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "coverage>=7.6.0",

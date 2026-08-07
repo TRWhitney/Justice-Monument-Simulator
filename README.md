@@ -75,3 +75,8 @@ Known questions that the available public data cannot settle are tracked in
 The simulation methodology and evidence behind the tuned recommendation rules
 are recorded in
 [Suggested Rules Simulation Analysis](docs/suggested-rules-analysis.html).
+
+## License
+
+This project is released into the public domain under the
+[Unlicense](UNLICENSE).

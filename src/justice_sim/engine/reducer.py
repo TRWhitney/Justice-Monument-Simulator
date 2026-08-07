@@ -9,6 +9,7 @@ from justice_sim.engine.effects import (
     advance_case,
     apply_effects,
     apply_outcome,
+    outcome_additive_resource_cost,
     resolve_expr,
     resolve_probability,
 )
@@ -101,6 +102,7 @@ def _apply_action_with_outcome(
 ) -> tuple[GameState, str | None]:
     if state.ended or state.mh <= 0:
         raise ActionNotAllowed("Run has ended")
+    encounter_overrides_at_start = state.encounter_overrides
     updated = _apply_encounter_triggers(state, offer, data, rng)
     if updated.ended or updated.mh <= 0:
         raise ActionNotAllowed("Run has ended")
@@ -132,7 +134,7 @@ def _apply_action_with_outcome(
     updated = _apply_chain(updated, offer, action, data, rng)
     updated = consume_forced_encounter(updated, offer.id)
     updated = _increment_action_counters(updated, offer, action)
-    updated = _consume_encounter_overrides(updated, offer)
+    updated = _consume_encounter_overrides(updated, offer, encounter_overrides_at_start)
     updated = advance_case(updated, data, rng)
     return updated, random_label
 
@@ -295,7 +297,7 @@ def _apply_chain(
             continue
         if step.probability is not None:
             probability = resolve_probability(step.probability, state, data)
-            if rng.random() > probability:
+            if rng.random() >= probability:
                 continue
         forced.append(
             ForcedEncounter(
@@ -344,9 +346,7 @@ def _apply_harbinger_unpaid_penalty(
         return updated
     if action != "approve":
         return updated
-    cost = resolve_expr(
-        {"expr": data.special_rules.harbinger.cost_expr}, previous, data
-    )
+    cost = outcome_additive_resource_cost(previous, offer.approve, "coins", data)
     if previous.coins >= cost:
         return updated
     if data.special_rules.harbinger.on_unpaid_effects:
@@ -402,11 +402,19 @@ def _apply_action_triggers(
     return current
 
 
-def _consume_encounter_overrides(state: GameState, offer: OfferSpec) -> GameState:
+def _consume_encounter_overrides(
+    state: GameState,
+    offer: OfferSpec,
+    encounter_overrides_at_start: tuple[EncounterOverride, ...],
+) -> GameState:
     if not state.encounter_overrides:
         return state
+    existing_ids = {id(override) for override in encounter_overrides_at_start}
     remaining: list[EncounterOverride] = []
     for override in state.encounter_overrides:
+        if id(override) not in existing_ids:
+            remaining.append(override)
+            continue
         if override.offer_id and override.offer_id != offer.id:
             remaining.append(override)
             continue

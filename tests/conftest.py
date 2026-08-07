@@ -80,7 +80,13 @@ def build_data_dict(
                     "effects": [
                         {
                             "type": "add_resource",
-                            "params": {"resource": "coins", "amount": -1},
+                            "params": {
+                                "resource": "coins",
+                                "amount": {
+                                    "expr": "-1",
+                                    "scaling": "harbinger",
+                                },
+                            },
                         }
                     ]
                 },

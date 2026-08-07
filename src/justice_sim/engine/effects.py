@@ -129,7 +129,7 @@ def _apply_random(
     rng = rng or Rng(0)
     if isinstance(random_spec, BernoulliSpec):
         probability = resolve_probability(random_spec.p, state, data)
-        if rng.random() <= probability:
+        if rng.random() < probability:
             return apply_effects(state, random_spec.then_effects, data, rng), "then"
         return apply_effects(state, random_spec.else_effects, data, rng), "else"
 
@@ -537,7 +537,7 @@ def coerce_resource_value(
     if floor is not None and new_value < floor:
         new_value = floor
     if resource in MAIN_RESOURCES:
-        new_value = math.ceil(new_value)
+        new_value = math.floor(new_value + 0.5)
     return new_value
 
 
@@ -610,6 +610,26 @@ def resolve_probability(prob_spec: Any, state: GameState, data: JusticeData) -> 
             value = value / 100.0
         return float(value)
     raise ValueError("Unsupported probability format")
+
+
+def outcome_additive_resource_cost(
+    state: GameState,
+    outcome: OutcomeSpec,
+    resource: str,
+    data: JusticeData,
+) -> float:
+    """Return the rounded cost from deterministic additive effects on a resource."""
+    delta = 0.0
+    for effect in outcome.effects:
+        if effect.type != "add_resource":
+            continue
+        if effect.params.get("resource") != resource:
+            continue
+        if effect.when and not _predicate_allows(effect.when, state, data):
+            continue
+        delta += resolve_expr(effect.params.get("amount"), state, data)
+    rounded_delta = math.floor(delta + 0.5)
+    return float(max(0, -rounded_delta))
 
 
 def _build_numeric_context(

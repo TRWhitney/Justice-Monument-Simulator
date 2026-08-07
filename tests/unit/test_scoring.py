@@ -1,7 +1,7 @@
 import pytest
 
 from justice_sim.engine.scoring import UtilityWeights, utility
-from justice_sim.models.offer import EffectSpec
+from justice_sim.models.offer import EffectSpec, JusticeData
 from justice_sim.models.state import GameState, ScheduledEvent, StatusEffect
 
 
@@ -183,3 +183,30 @@ def test_gratefulbinger_probability_scales_insolvency_penalty(data_factory):
     )
 
     assert utility(state, data, weights) == pytest.approx(-8.0)
+
+
+@pytest.mark.unit
+def test_insolvency_penalty_uses_full_base_harbinger_cost(data_dict_factory):
+    data_dict = data_dict_factory(cost_expr="5", include_grateful=False)
+    harbinger = next(
+        offer for offer in data_dict["offers"] if offer["id"] == "harbinger_offer"
+    )
+    harbinger["approve"]["effects"][0]["params"]["amount"] = {
+        "expr": "-4",
+        "scaling": "harbinger",
+    }
+    data = JusticeData.from_dict(data_dict)
+    weights = UtilityWeights(
+        w_chests=0.0,
+        w_death=0.0,
+        w_low_mh=0.0,
+        w_insolvency=10.0,
+        w_resources=0.0,
+        w_dismissals=0.0,
+        w_progress=0.0,
+    )
+    state = GameState(
+        case_index=5, coins=10, pop=0, mh=2, dismissals=0, retirement_chests=0
+    )
+
+    assert utility(state, data, weights) == -10.0

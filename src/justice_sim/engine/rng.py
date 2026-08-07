@@ -51,7 +51,7 @@ class Rng:
         cumulative = 0.0
         for item, weight in choices:
             cumulative += weight
-            if threshold <= cumulative:
+            if threshold < cumulative:
                 return item
         return choices[-1][0]
 

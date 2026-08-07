@@ -3,11 +3,12 @@ import pytest
 from justice_sim.engine.effects import (
     advance_case,
     apply_effects,
+    apply_outcome,
     resolve_expr,
     resolve_probability,
 )
 from justice_sim.engine.rng import Rng
-from justice_sim.models.offer import EffectSpec
+from justice_sim.models.offer import BernoulliSpec, EffectSpec, OutcomeSpec
 from justice_sim.models.state import GameState
 from justice_sim.util.validation import build_minimal_data
 
@@ -29,7 +30,7 @@ def test_apply_add_set_clamp_effects():
 
 
 @pytest.mark.unit
-def test_main_resources_round_up_to_whole_numbers():
+def test_main_resources_round_scaled_values_to_nearest_whole_numbers():
     data = build_minimal_data()
     state = GameState(
         case_index=1, coins=1, pop=1, mh=1, dismissals=1, retirement_chests=1
@@ -47,11 +48,68 @@ def test_main_resources_round_up_to_whole_numbers():
         ),
     ]
     new_state = apply_effects(state, effects, data)
-    assert new_state.coins == 2
-    assert new_state.pop == 2
-    assert new_state.mh == 2
-    assert new_state.retirement_chests == 2
+    assert new_state.coins == 1
+    assert new_state.pop == 1
+    assert new_state.mh == 1
+    assert new_state.retirement_chests == 1
     assert new_state.dismissals == 1
+
+
+@pytest.mark.unit
+def test_main_resource_losses_round_to_nearest_whole_number():
+    data = build_minimal_data()
+    state = GameState(
+        case_index=1, coins=10, pop=10, mh=3, dismissals=0, retirement_chests=0
+    )
+
+    new_state = apply_effects(
+        state,
+        [
+            EffectSpec(
+                type="add_resource",
+                params={"resource": "coins", "amount": -2.6},
+            ),
+            EffectSpec(
+                type="add_resource",
+                params={"resource": "pop", "amount": -3.9},
+            ),
+        ],
+        data,
+    )
+
+    assert new_state.coins == 7
+    assert new_state.pop == 6
+
+
+@pytest.mark.unit
+def test_zero_probability_bernoulli_uses_else_branch_at_zero_roll():
+    class ZeroRng:
+        @staticmethod
+        def random():
+            return 0.0
+
+    data = build_minimal_data()
+    state = GameState(
+        case_index=1, coins=0, pop=0, mh=3, dismissals=0, retirement_chests=0
+    )
+    outcome = OutcomeSpec(
+        random=BernoulliSpec(
+            type="bernoulli",
+            p=0.0,
+            then_effects=(
+                EffectSpec(
+                    type="add_resource",
+                    params={"resource": "coins", "amount": 10},
+                ),
+            ),
+            else_effects=(),
+        )
+    )
+
+    new_state, label = apply_outcome(state, outcome, data, ZeroRng())
+
+    assert new_state.coins == 0
+    assert label == "else"
 
 
 @pytest.mark.unit

@@ -231,6 +231,12 @@ Minimum built-in effect types:
 - `end_run` (game over)
 - `noop`
 
+Main-resource results are rounded to the nearest whole number using the same
+tie behavior as JavaScript `Math.round`. Probability checks use the half-open
+rule `roll < probability`, so a 0% event cannot occur on a zero RNG roll.
+Encounter overrides created by the current action become eligible on later
+cases and are not consumed by the action that creates them.
+
 ### Predicates
 Use a safe mini-language (NOT eval):
 - comparison ops: == != < <= > >=
@@ -257,6 +263,8 @@ Where:
 - risk slider modifies weights:
   - “Safe”: high w_death, high w_insolvency
   - “Greedy”: lower penalties, higher w_resources
+- Harbinger solvency compares coins with the full configured coin cost of the
+  base Harbinger offer, including its offer-specific coefficient.
 
 ### Planner default: hybrid rollout
 - For the currently observed offer, evaluate each available action:

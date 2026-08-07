@@ -52,6 +52,18 @@ def test_harbinger_injection_keeps_harbinger_when_roll_is_high():
 
 
 @pytest.mark.unit
+def test_zero_probability_gratefulbinger_does_not_replace_harbinger():
+    data = build_minimal_data()
+    state = GameState(
+        case_index=5, coins=0, pop=0, mh=3, dismissals=0, retirement_chests=0
+    )
+
+    offer_id = select_encounter(state, data, UniformEncounterModel(), FixedRng(0.0))
+
+    assert offer_id == data.special_rules.harbinger.offer_id
+
+
+@pytest.mark.unit
 def test_harbinger_selects_from_pool_when_defined(data_dict_factory):
     data_dict = data_dict_factory()
     data_dict["offers"].append(
@@ -120,6 +132,30 @@ def test_encounter_override_probability_controls_activation(data_dict_factory):
     hit_rng = ChoiceLastRng(0.1)
     offer_id = select_encounter(state, data, encounter_model, hit_rng)
     assert offer_id == "offer1"
+
+
+@pytest.mark.unit
+def test_zero_probability_override_does_not_activate_at_zero_roll(
+    data_dict_factory,
+):
+    data = JusticeData.from_dict(data_dict_factory())
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+        encounter_overrides=(
+            EncounterOverride(offer_id="offer1", remaining_uses=1, probability=0.0),
+        ),
+    )
+
+    offer_id = select_encounter(
+        state, data, UniformEncounterModel(), ChoiceLastRng(0.0)
+    )
+
+    assert offer_id == "timmy_offer"
 
 
 @pytest.mark.unit

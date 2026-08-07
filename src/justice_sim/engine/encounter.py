@@ -118,7 +118,7 @@ def select_encounter(
         grateful_rule = data.special_rules.gratefulbinger
         if grateful_rule:
             probability = _evaluate_gratefulbinger_probability(state, data)
-            if rng.random() <= probability:
+            if rng.random() < probability:
                 return grateful_rule.offer_id
         return _select_harbinger_offer(state, data, rng)
 
@@ -198,7 +198,7 @@ def _override_encounter_for_case(
             continue
         if override.probability is not None:
             probability = resolve_probability(override.probability, state, data)
-            if rng.random() > probability:
+            if rng.random() >= probability:
                 continue
         if override.offer_id:
             offer = data.offers_by_id.get(override.offer_id)

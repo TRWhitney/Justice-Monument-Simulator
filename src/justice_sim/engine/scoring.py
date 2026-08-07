@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from justice_sim.engine.effects import advance_case, resolve_expr, resolve_probability
+from justice_sim.engine.effects import (
+    advance_case,
+    outcome_additive_resource_cost,
+    resolve_expr,
+    resolve_probability,
+)
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
@@ -85,9 +90,15 @@ def _next_harbinger_risk(state: GameState, data: JusticeData) -> float:
         and "cannot_dismiss_harbinger" not in projected.statuses
     ):
         return 0.0
-    cost = resolve_expr(
-        {"expr": data.special_rules.harbinger.cost_expr}, projected, data
-    )
+    base_harbinger = data.offers_by_id.get(data.special_rules.harbinger.offer_id)
+    if base_harbinger is None:
+        cost = resolve_expr(
+            {"expr": data.special_rules.harbinger.cost_expr}, projected, data
+        )
+    else:
+        cost = outcome_additive_resource_cost(
+            projected, base_harbinger.approve, "coins", data
+        )
     if projected.coins >= cost:
         return 0.0
 

@@ -1,5 +1,6 @@
 import pytest
 
+from justice_sim.config import load_builtin_data
 from justice_sim.engine.reducer import (
     ActionNotAllowed,
     apply_action,
@@ -217,6 +218,78 @@ def test_harbinger_unpaid_penalty_applies(data_dict_factory):
     )
     new_state, _ = apply_action(state, offer, "approve", data, Rng(4))
     assert new_state.mh == 2
+
+
+@pytest.mark.unit
+def test_harbinger_unpaid_penalty_uses_full_offer_cost(data_dict_factory):
+    data_dict = data_dict_factory(cost_expr="5")
+    harbinger = next(
+        offer for offer in data_dict["offers"] if offer["id"] == "harbinger_offer"
+    )
+    harbinger["approve"]["effects"][0]["params"]["amount"] = {
+        "expr": "-4",
+        "scaling": "harbinger",
+    }
+    data_dict["special_rules"]["harbinger"]["on_unpaid_effects"] = [
+        {"type": "add_resource", "params": {"resource": "mh", "amount": -1}}
+    ]
+    data = JusticeData.from_dict(data_dict)
+    state = GameState(
+        case_index=5, coins=10, pop=0, mh=3, dismissals=0, retirement_chests=0
+    )
+
+    new_state, _ = apply_action(
+        state, data.offers_by_id["harbinger_offer"], "approve", data, Rng(4)
+    )
+
+    assert new_state.coins == 0
+    assert new_state.mh == 2
+
+
+@pytest.mark.unit
+def test_new_encounter_override_is_not_consumed_by_creating_action():
+    data = load_builtin_data()
+    offer = next(
+        offer for offer in data.offers if offer.title == "Bored Bean: The Loan"
+    )
+    state = GameState(
+        case_index=1,
+        coins=10,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+
+    new_state, _ = apply_action(state, offer, "approve", data, Rng(5))
+
+    assert [override.label for override in new_state.encounter_overrides] == [
+        "bean_loan_return"
+    ]
+
+
+@pytest.mark.unit
+def test_approval_lock_counts_acceptance_as_first_of_three_days():
+    data = load_builtin_data()
+    offer = next(
+        offer for offer in data.offers if offer.title == "Mister Bribe: Approval Lock"
+    )
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+
+    day_two, _ = apply_action(state, offer, "approve", data, Rng(6))
+    day_three = skip_case(day_two, data, Rng(6))
+    day_four = skip_case(day_three, data, Rng(6))
+
+    assert day_two.statuses["cannot_approve"].remaining_cases == 2
+    assert day_three.statuses["cannot_approve"].remaining_cases == 1
+    assert "cannot_approve" not in day_four.statuses
 
 
 @pytest.mark.unit

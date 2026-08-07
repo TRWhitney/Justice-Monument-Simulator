@@ -1,6 +1,30 @@
+import builtins
+
 import pytest
 
 from justice_sim.util import expr as expr_util
+
+
+@pytest.mark.unit
+def test_expression_compilation_is_reused_for_matching_contexts(monkeypatch):
+    ctx = expr_util.build_numeric_context({"coins": 2}, {})
+    original_compile = builtins.compile
+    compile_calls = 0
+
+    def counting_compile(*args, **kwargs):
+        nonlocal compile_calls
+        compile_calls += 1
+        return original_compile(*args, **kwargs)
+
+    expr_util._compile_expr_cached.cache_clear()
+    monkeypatch.setattr(builtins, "compile", counting_compile)
+
+    assert expr_util.evaluate_numeric("coins + 1", ctx) == 3
+    first_evaluation_calls = compile_calls
+    assert expr_util.evaluate_numeric("coins + 1", ctx) == 3
+
+    assert first_evaluation_calls > 0
+    assert compile_calls == first_evaluation_calls
 
 
 @pytest.mark.unit

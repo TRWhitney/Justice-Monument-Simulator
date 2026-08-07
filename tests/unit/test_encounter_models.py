@@ -1,5 +1,6 @@
 import pytest
 
+from justice_sim.engine import encounter as encounter_module
 from justice_sim.engine.encounter import (
     LearnedEncounterModel,
     UniformEncounterModel,
@@ -9,6 +10,37 @@ from justice_sim.engine.encounter import (
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.models.state import EncounterModifier, ForcedEncounter, GameState
+
+
+@pytest.mark.unit
+def test_regular_encounter_scan_builds_harbinger_exclusions_once(
+    data_factory, monkeypatch
+):
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=2,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    original = encounter_module._harbinger_offer_ids
+    calls = 0
+
+    def counting_harbinger_offer_ids(current_data):
+        nonlocal calls
+        calls += 1
+        return original(current_data)
+
+    monkeypatch.setattr(
+        encounter_module, "_harbinger_offer_ids", counting_harbinger_offer_ids
+    )
+
+    offers = UniformEncounterModel().eligible_offers(state, data)
+
+    assert offers == ["offer1", "offer2", "timmy_offer"]
+    assert calls == 1
 
 
 @pytest.mark.unit

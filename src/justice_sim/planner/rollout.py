@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from math import isfinite, sqrt
 from statistics import mean, variance
-import time
 from typing import Callable
 
 
@@ -300,7 +299,6 @@ class RolloutPlanner:
         utilities: list[float] = []
         chests: list[float] = []
         deaths = 0
-        yield_counter = 0
         for rollout_index in range(rollout_start, rollout_start + rollouts):
             rng = self.rng.spawn(rollout_index)
             try:
@@ -318,9 +316,6 @@ class RolloutPlanner:
                 deaths += 1
             if progress:
                 progress(1)
-            yield_counter += 1
-            if yield_counter % 25 == 0:
-                time.sleep(0)
         if not utilities:
             return ActionScore(
                 action=action,
@@ -346,7 +341,7 @@ class RolloutPlanner:
 
     def _simulate_future(self, state: GameState, rng: Rng, remaining: int) -> GameState:
         current = state
-        for step in range(remaining):
+        for _ in range(remaining):
             if current.ended or current.mh <= 0:
                 break
             offer_id = select_encounter(current, self.data, self.encounter_model, rng)
@@ -357,8 +352,6 @@ class RolloutPlanner:
                 current, _ = apply_action(current, offer, action, self.data, rng)
             except ActionNotAllowed:
                 break
-            if step % 5 == 0:
-                time.sleep(0)
         return current
 
     def _select_action(self, state: GameState, offer: OfferSpec, rng: Rng) -> str:

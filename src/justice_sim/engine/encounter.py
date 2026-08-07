@@ -28,11 +28,7 @@ class EncounterModel:
 @dataclass
 class UniformEncounterModel(EncounterModel):
     def eligible_offers(self, state: GameState, data: JusticeData) -> list[str]:
-        offers = []
-        for offer in data.offers:
-            if _is_offer_eligible(offer, state, data):
-                offers.append(offer.id)
-        return offers
+        return _eligible_regular_offer_ids(self, state, data)
 
     def sample_encounter(self, state: GameState, data: JusticeData, rng: Rng) -> str:
         offers = self.eligible_offers(state, data)
@@ -47,9 +43,7 @@ class WeightedEncounterModel(EncounterModel):
     offer_weights: Mapping[str, float] = field(default_factory=dict)
 
     def eligible_offers(self, state: GameState, data: JusticeData) -> list[str]:
-        return [
-            offer.id for offer in data.offers if _is_offer_eligible(offer, state, data)
-        ]
+        return _eligible_regular_offer_ids(self, state, data)
 
     def sample_encounter(self, state: GameState, data: JusticeData, rng: Rng) -> str:
         offers = self.eligible_offers(state, data)
@@ -73,9 +67,7 @@ class LearnedEncounterModel(EncounterModel):
     counts: Mapping[str, float] = field(default_factory=dict)
 
     def eligible_offers(self, state: GameState, data: JusticeData) -> list[str]:
-        return [
-            offer.id for offer in data.offers if _is_offer_eligible(offer, state, data)
-        ]
+        return _eligible_regular_offer_ids(self, state, data)
 
     def sample_encounter(self, state: GameState, data: JusticeData, rng: Rng) -> str:
         offers = self.eligible_offers(state, data)
@@ -303,6 +295,27 @@ def _is_offer_eligible(offer: OfferSpec, state: GameState, data: JusticeData) ->
     return _is_offer_eligible_internal(offer, state, data, allow_harbinger=False)
 
 
+def _eligible_regular_offer_ids(
+    encounter_model: EncounterModel, state: GameState, data: JusticeData
+) -> list[str]:
+    cached = getattr(encounter_model, "_regular_offer_candidates_cache", None)
+    if cached is None or cached[0] is not data:
+        excluded_offer_ids = _harbinger_offer_ids(data)
+        if data.special_rules.gratefulbinger:
+            excluded_offer_ids.add(data.special_rules.gratefulbinger.offer_id)
+        candidates = tuple(
+            offer for offer in data.offers if offer.id not in excluded_offer_ids
+        )
+        cached = (data, candidates)
+        setattr(encounter_model, "_regular_offer_candidates_cache", cached)
+    candidates = cached[1]
+    return [
+        offer.id
+        for offer in candidates
+        if not offer.conditions or _offer_conditions_allow(offer, state)
+    ]
+
+
 def _is_offer_eligible_internal(
     offer: OfferSpec,
     state: GameState,
@@ -318,8 +331,10 @@ def _is_offer_eligible_internal(
             and offer.id == data.special_rules.gratefulbinger.offer_id
         ):
             return False
-    if not offer.conditions:
-        return True
+    return _offer_conditions_allow(offer, state)
+
+
+def _offer_conditions_allow(offer: OfferSpec, state: GameState) -> bool:
     for predicate in offer.conditions:
         if isinstance(predicate, str):
             ctx = expr_util.build_predicate_context(

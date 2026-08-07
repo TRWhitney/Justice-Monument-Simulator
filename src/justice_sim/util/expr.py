@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
+from functools import lru_cache
+from types import CodeType
 from typing import Any, Callable, Mapping
 
 
@@ -89,24 +91,35 @@ def _validate_node(
     raise ExprError(f"Disallowed expression node: {type(node).__name__}")
 
 
-def _compile_expr(expr: str, ctx: ExprContext) -> ast.Expression:
+@lru_cache(maxsize=1024)
+def _compile_expr_cached(
+    expr: str,
+    allowed_names: frozenset[str],
+    allowed_funcs: frozenset[str],
+) -> CodeType:
     try:
         parsed = ast.parse(expr, mode="eval")
     except SyntaxError as exc:  # pragma: no cover - tested via validate_predicate
         raise ExprError("Malformed expression") from exc
 
-    allowed_names = set(ctx.variables.keys())
-    allowed_funcs = set(ctx.functions.keys())
-    _validate_node(parsed, allowed_names, allowed_funcs)
-    return parsed
+    _validate_node(parsed, set(allowed_names), set(allowed_funcs))
+    return compile(parsed, "<expr>", "eval")
+
+
+def _compile_expr(expr: str, ctx: ExprContext) -> CodeType:
+    return _compile_expr_cached(
+        expr,
+        frozenset(ctx.variables),
+        frozenset(ctx.functions),
+    )
 
 
 def evaluate(expr: str, ctx: ExprContext) -> Any:
-    parsed = _compile_expr(expr, ctx)
+    compiled = _compile_expr(expr, ctx)
     safe_globals = {"__builtins__": {}}
     safe_locals = dict(ctx.variables)
     safe_locals.update(ctx.functions)
-    return eval(compile(parsed, "<expr>", "eval"), safe_globals, safe_locals)
+    return eval(compiled, safe_globals, safe_locals)
 
 
 def evaluate_numeric(expr: str, ctx: ExprContext) -> float:

@@ -163,7 +163,7 @@ def build_predicate_context(
     retirement_chests: float,
     flags: set[str],
     statuses: set[str],
-    counters: Mapping[str, int],
+    counters: Mapping[str, float],
     extra_vars: Mapping[str, Any] | None = None,
 ) -> ExprContext:
     variables: dict[str, Any] = {

@@ -1,6 +1,6 @@
 import pytest
 
-from justice_sim.config import load_builtin_data
+from justice_sim.config import load_builtin_data, load_builtin_suggested_rules
 
 
 def _offer(data, title):
@@ -78,9 +78,11 @@ def test_confirmed_builtin_durations_and_notes_are_accurate():
     )
     assert status.duration_cases == 3
     assert not status.params.get("data", {}).get("starts_next_case", False)
+    assert approval_lock.notes is not None
     assert "acceptance counts as the first" in approval_lock.notes.lower()
 
     gratefulbinger = _offer(data, "Gratefulbinger: Thank-You")
+    assert gratefulbinger.notes is not None
     assert "(40*POP)/(POP+20)" in gratefulbinger.notes
 
     for title in (
@@ -88,4 +90,24 @@ def test_confirmed_builtin_durations_and_notes_are_accurate():
         "Harbinger: Stream Crash",
         "Harbinger: Coma Crash",
     ):
-        assert "0 Popularity" not in _offer(data, title).notes
+        offer = _offer(data, title)
+        assert offer.notes is not None
+        assert "0 Popularity" not in offer.notes
+
+
+@pytest.mark.unit
+def test_simulation_refined_suggested_rules_are_loaded():
+    data = load_builtin_data()
+    rules = load_builtin_suggested_rules(data)
+
+    approval_lock = _offer(data, "Mister Bribe: Approval Lock")
+    constraints = rules.constraints_for_offer(approval_lock.id)
+    assert [(rule.action, rule.mode, rule.when) for rule in constraints] == [
+        ("approve", "forbid", "harbinger_in >= 1 and harbinger_in <= 2")
+    ]
+
+    chest_magnet = _offer(data, "Fizarre Drink: Chest Magnet")
+    biases = rules.biases_for_offer(chest_magnet.id)
+    assert [(rule.action, rule.amount, rule.when) for rule in biases] == [
+        ("approve", 1.0, "coins >= case_scale + harbinger_cost")
+    ]

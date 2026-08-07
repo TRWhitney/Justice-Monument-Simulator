@@ -72,3 +72,6 @@ uv run python scripts/validate_schema.py \
 
 Known questions that the available public data cannot settle are tracked in
 [Justice Monument Data: Open Questions](docs/justice-data-open-questions.md).
+The simulation methodology and evidence behind the tuned recommendation rules
+are recorded in
+[Suggested Rules Simulation Analysis](docs/suggested-rules-analysis.html).

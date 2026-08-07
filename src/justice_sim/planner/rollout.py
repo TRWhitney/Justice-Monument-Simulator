@@ -25,7 +25,14 @@ from justice_sim.engine.reducer import (
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.engine.scoring import utility, weights_for_preset
-from justice_sim.models.offer import EffectSpec, JusticeData, OfferSpec, OutcomeSpec
+from justice_sim.models.offer import (
+    BernoulliSpec,
+    CategoricalSpec,
+    EffectSpec,
+    JusticeData,
+    OfferSpec,
+    OutcomeSpec,
+)
 from justice_sim.models.state import GameState
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.planner.cache import ValueCache
@@ -347,6 +354,11 @@ class RolloutPlanner:
             offer_id = select_encounter(current, self.data, self.encounter_model, rng)
             current = consume_forced_encounter(current, offer_id)
             offer = self.data.offers_by_id[offer_id]
+            triggered = preview_state_after_encounter_triggers(
+                current, offer, self.data, Rng.from_state(rng.state())
+            )
+            if triggered.ended or triggered.mh <= 0:
+                return triggered
             action = self._select_action(current, offer, rng)
             try:
                 current, _ = apply_action(current, offer, action, self.data, rng)
@@ -355,7 +367,7 @@ class RolloutPlanner:
         return current
 
     def _select_action(self, state: GameState, offer: OfferSpec, rng: Rng) -> str:
-        actions = self._apply_action_constraints(state, offer, offer.actions_available)
+        actions = self._eligible_actions(state, offer)
         best_action = actions[0]
         best_value = float("-inf")
         action_biases = self._biases_for_offer(state, offer)
@@ -389,7 +401,17 @@ class RolloutPlanner:
             for action in constrained_actions
             if self._action_is_possible(state, offer, action)
         )
-        return possible_actions or constrained_actions
+        possible_base_actions = tuple(
+            action
+            for action in base_actions
+            if self._action_is_possible(state, offer, action)
+        )
+        return (
+            possible_actions
+            or possible_base_actions
+            or constrained_actions
+            or base_actions
+        )
 
     def _expected_action_value(
         self, state: GameState, offer: OfferSpec, action: str, rng: Rng
@@ -441,14 +463,14 @@ class RolloutPlanner:
         branch_effects: list[tuple[tuple[EffectSpec, ...], float]]
         if outcome.random is None:
             branch_effects = [((), 1.0)]
-        elif hasattr(outcome.random, "then_effects"):
+        elif isinstance(outcome.random, BernoulliSpec):
             probability = resolve_probability(outcome.random.p, state, self.data)
             probability = min(1.0, max(0.0, probability))
             branch_effects = [
                 (tuple(outcome.random.then_effects), probability),
                 (tuple(outcome.random.else_effects), 1.0 - probability),
             ]
-        elif hasattr(outcome.random, "choices"):
+        elif isinstance(outcome.random, CategoricalSpec):
             total_weight = sum(choice.weight for choice in outcome.random.choices)
             if total_weight <= 0:
                 return None

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Suggested Rules Simulation Analysis</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+        line-height: 1.5;
+      }
+      body {
+        margin: 0 auto;
+        max-width: 76rem;
+        padding: 2rem;
+      }
+      h1,
+      h2 {
+        line-height: 1.2;
+      }
+      table {
+        border-collapse: collapse;
+        display: block;
+        overflow-x: auto;
+        width: 100%;
+      }
+      th,
+      td {
+        border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+        padding: 0.5rem 0.7rem;
+        text-align: right;
+        white-space: nowrap;
+      }
+      th:first-child,
+      td:first-child {
+        text-align: left;
+      }
+      code {
+        background: color-mix(in srgb, currentColor 10%, transparent);
+        border-radius: 0.25rem;
+        padding: 0.1rem 0.25rem;
+      }
+      .callout {
+        border-left: 0.3rem solid #4d8ed8;
+        padding: 0.2rem 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Suggested Rules Simulation Analysis</h1>
+      <p>Last run: 2026-08-06</p>
+
+      <div class="callout">
+        <p>
+          Outcome: add a guarded soft preference for Fizarre Drink: Chest Magnet
+          and narrow Mister Bribe: Approval Lock's Harbinger safety window from
+          three cases to two. Together they increase expected Retirement Chests
+          and balanced utility in paired simulations. The measured death-rate
+          difference includes zero, so the experiment does not establish a
+          survival improvement or regression.
+        </p>
+      </div>
+
+      <h2>Method</h2>
+      <p>
+        The experiment used the built-in Justice dataset, uniform eligible-offer
+        selection, the balanced utility preset, and the application's standard
+        starting state: case 1, 5 Court Coins, 3 Popularity, 1 Mental Health, no
+        dismissals, and no Retirement Chests. Each old/new comparison used the
+        same integer seeds, beginning at zero. Reported confidence intervals are
+        normal-approximation 95% intervals over paired per-seed differences.
+      </p>
+      <p>
+        Runs exercised the planner's future-policy simulation directly. The
+        12-case experiment matches the configured lookahead horizon; the 60-case
+        experiment checks whether the effect persists beyond that horizon. This
+        is model evidence, not a claim about the game's unknown real encounter
+        distribution.
+      </p>
+
+      <h2>Final comparison</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>12 cases, 5,000 paired seeds</th>
+            <th>Prior</th>
+            <th>Refined</th>
+            <th>Paired change (95% CI)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Expected balanced utility</td>
+            <td>-58.0336</td>
+            <td>-56.4727</td>
+            <td>+1.5609 (+0.9155 to +2.2062)</td>
+          </tr>
+          <tr>
+            <td>Expected Retirement Chests</td>
+            <td>1.1100</td>
+            <td>1.1962</td>
+            <td>+0.0862 (+0.0725 to +0.0999)</td>
+          </tr>
+          <tr>
+            <td>Death probability</td>
+            <td>39.40%</td>
+            <td>39.48%</td>
+            <td>+0.08 pp (-0.41 to +0.57)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <table>
+        <thead>
+          <tr>
+            <th>60 cases, 3,000 paired seeds</th>
+            <th>Prior</th>
+            <th>Refined</th>
+            <th>Paired change (95% CI)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Expected balanced utility</td>
+            <td>-114.7574</td>
+            <td>-112.5405</td>
+            <td>+2.2170 (+1.3055 to +3.1285)</td>
+          </tr>
+          <tr>
+            <td>Expected Retirement Chests</td>
+            <td>1.8673</td>
+            <td>1.9947</td>
+            <td>+0.1273 (+0.0927 to +0.1619)</td>
+          </tr>
+          <tr>
+            <td>Death probability</td>
+            <td>98.53%</td>
+            <td>98.63%</td>
+            <td>+0.10 pp (-0.15 to +0.35)</td>
+          </tr>
+          <tr>
+            <td>Mean ending case</td>
+            <td>19.9697</td>
+            <td>19.7603</td>
+            <td>-0.2093 (-0.3866 to -0.0321)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The refined rules improve the primary objective by 7.8% over 12 cases
+        and 6.8% over 60 cases. The small reduction in mean ending case is a real
+        tradeoff in the 60-case sample; balanced utility still improves because
+        the additional chest yield outweighs it under the configured scoring
+        weights.
+      </p>
+
+      <h2>Accepted changes</h2>
+      <ul>
+        <li>
+          <strong>Chest Magnet:</strong> a +1 approval bias applies only when
+          <code>coins &gt;= case_scale + harbinger_cost</code>. The small bias
+          recognizes the value of the next three Retirement Chester encounters,
+          while the reserve condition and soft preference let rollout evidence
+          reject unsafe purchases. Hard-requiring approval and a +5 bias were
+          tested but rejected as unnecessarily aggressive.
+        </li>
+        <li>
+          <strong>Approval Lock:</strong> approving is forbidden only when
+          <code>harbinger_in</code> is one or two. Acceptance is already the first
+          of the three lock cases, so a lock taken three cases before Harbinger
+          expires in time. With seed 123 and the default planner, case 2 changed
+          from reject to approve while case 3 remained reject.
+        </li>
+      </ul>
+
+      <h2>Alternatives considered</h2>
+      <p>
+        Screening covered every existing rule by leave-one-out ablation and
+        tested additions for Humble Lesson, Crypto Drip, Student Loans, Kitchen
+        Loan, Bored Bean's Loan, Ghost's Scare Permit, Above the Law, and Timmy
+        Block. It also tested narrower Timmy, Promise Me, Reaper Contract,
+        Vitality Trade, and Chest Heist policies. Delayed-loan requirements and
+        hard Chest Magnet requirements reduced outcomes in screening. Existing
+        rule removals were either neutral or showed chest/safety tradeoffs whose
+        intervals did not support replacing the current guidance, so they were
+        retained.
+      </p>
+
+      <h2>Simulation reliability correction</h2>
+      <p>
+        Before accepting the data result, two rollout edge cases were corrected:
+        an encounter-triggered death is now returned as the terminal state, and
+        constraints fall back when they leave no feasible action. Focused unit
+        tests cover both cases. Candidate comparisons above were rerun only after
+        these corrections, preventing dead-end policies from appearing safer
+        than they are.
+      </p>
+
+      <h2>Limits and security</h2>
+      <p>
+        Results depend on the simulator's uniform encounter assumption and the
+        uncertain probabilities documented in the data open-questions report.
+        They should be rerun if observed encounter weights or unresolved outcome
+        probabilities change. The new condition uses the existing whitelisted
+        expression evaluator; it adds no dynamic evaluation or external input
+        path.
+      </p>
+    </main>
+  </body>
+</html>

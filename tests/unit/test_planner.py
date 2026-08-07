@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 
 from justice_sim.config import load_data
-from justice_sim.models.offer import JusticeData
-from justice_sim.models.state import GameState
+from justice_sim.models.offer import EffectSpec, JusticeData
+from justice_sim.models.state import EncounterTrigger, ForcedEncounter, GameState
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.engine.scoring import UtilityWeights
 from justice_sim.engine.rng import Rng
@@ -487,6 +487,82 @@ def test_rollout_stops_immediately_at_zero_mh(data_factory):
     terminal = planner._simulate_future(dead, Rng(5), remaining=3)
 
     assert terminal == dead
+
+
+@pytest.mark.unit
+def test_rollout_returns_death_caused_by_encounter_trigger(data_factory):
+    data = data_factory()
+    planner = RolloutPlanner.from_defaults(data, seed=1)
+    state = GameState(
+        case_index=1,
+        coins=5,
+        pop=3,
+        mh=1,
+        dismissals=0,
+        retirement_chests=0,
+        forced_encounters=(ForcedEncounter(1, "offer1"),),
+        encounter_triggers=(
+            EncounterTrigger(
+                offer_id="offer1",
+                effects=(
+                    EffectSpec(
+                        type="add_resource",
+                        params={"resource": "mh", "amount": -1},
+                    ),
+                ),
+                remaining_uses=1,
+            ),
+        ),
+    )
+
+    terminal = planner._simulate_future(state, Rng(5), remaining=1)
+
+    assert terminal.mh == 0
+
+
+@pytest.mark.unit
+def test_future_policy_ignores_constraint_when_it_leaves_no_possible_action(
+    data_dict_factory,
+):
+    data_dict = data_dict_factory()
+    offer_dict = data_dict["offers"][0]
+    offer_dict["actions_available"] = ["approve", "reject", "dismiss"]
+    offer_dict["approve"] = {
+        "effects": [
+            {
+                "type": "add_resource",
+                "params": {"resource": "coins", "amount": -10},
+            }
+        ]
+    }
+    offer_dict["reject"] = {"effects": []}
+    offer_dict["dismiss"] = {"effects": []}
+    data = JusticeData.from_dict(data_dict)
+    rules = SuggestedRules.from_dict(
+        {
+            "version": "suggested_rules",
+            "rules": [
+                {
+                    "id": "forbid_only_possible_action",
+                    "offer_ids": ["offer1"],
+                    "constraints": [{"action": "reject", "mode": "forbid"}],
+                }
+            ],
+        }
+    )
+    planner = RolloutPlanner.from_defaults(data, suggested_rules=rules)
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=3,
+        mh=1,
+        dismissals=0,
+        retirement_chests=0,
+    )
+
+    action = planner._select_action(state, data.offers_by_id["offer1"], Rng(5))
+
+    assert action == "reject"
 
 
 @pytest.mark.unit

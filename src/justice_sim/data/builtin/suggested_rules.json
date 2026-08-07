@@ -1,7 +1,7 @@
 {
   "version": "suggested_rules",
   "metadata": {
-    "notes": "Community best-practice biases for specific offers. Biases are soft preferences; constraints are hard rules."
+    "notes": "Community best-practice and simulation-calibrated guidance for specific offers. Biases are soft preferences; constraints are hard rules."
   },
   "rules": [
     {
@@ -167,10 +167,10 @@
         {
           "action": "approve",
           "mode": "forbid",
-          "when": "harbinger_in >= 1 and harbinger_in <= 3"
+          "when": "harbinger_in >= 1 and harbinger_in <= 2"
         }
       ],
-      "notes": "Never approve close to a Harbinger case."
+      "notes": "Avoid approving when the three-case approval lock would still be active on a Harbinger case."
     },
     {
       "id": "scripticus_promise_me_next_harbinger",
@@ -215,6 +215,20 @@
         }
       ],
       "notes": "Prefer approving Fizarre deals (excluding Chest Magnet)."
+    },
+    {
+      "id": "fizarre_drink_chest_magnet_prefer_approve",
+      "offer_ids": [
+        "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_5cd95449"
+      ],
+      "biases": [
+        {
+          "action": "approve",
+          "amount": 1,
+          "when": "coins >= case_scale + harbinger_cost"
+        }
+      ],
+      "notes": "A modest preference values the next three Retirement Chester encounters when buying the drink preserves the next Harbinger payment."
     },
     {
       "id": "retirement_chester_vitality_trade_health",

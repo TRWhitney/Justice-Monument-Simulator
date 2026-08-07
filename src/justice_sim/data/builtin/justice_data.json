@@ -1900,13 +1900,6 @@
             }
           },
           {
-            "type": "add_resource",
-            "params": {
-              "resource": "pop",
-              "amount": 2
-            }
-          },
-          {
             "type": "add_encounter_trigger",
             "params": {
               "label": "head_honcho_life_insurance",
@@ -1947,7 +1940,15 @@
         ]
       },
       "reject": {
-        "effects": []
+        "effects": [
+          {
+            "type": "add_resource",
+            "params": {
+              "resource": "pop",
+              "amount": 2
+            }
+          }
+        ]
       },
       "notes": "Sets all currencies except dismisals to 1",
       "dismiss": {
@@ -2747,10 +2748,7 @@
           {
             "type": "add_status",
             "params": {
-              "status": "cannot_approve",
-              "data": {
-                "starts_next_case": true
-              }
+              "status": "cannot_approve"
             },
             "duration_cases": 3
           }
@@ -2759,7 +2757,7 @@
       "reject": {
         "effects": []
       },
-      "notes": "Blocks approvals for the next 3 cases",
+      "notes": "Blocks approvals for 3 days; acceptance counts as the first day",
       "dismiss": {
         "effects": []
       }
@@ -2781,7 +2779,7 @@
             "params": {
               "resource": "coins",
               "amount": {
-                "expr": "5",
+                "expr": "7",
                 "scaling": "case"
               }
             }
@@ -3187,7 +3185,7 @@
             "params": {
               "resource": "coins",
               "amount": {
-                "expr": "-6",
+                "expr": "-10",
                 "scaling": "case"
               }
             }
@@ -3426,7 +3424,7 @@
             "params": {
               "resource": "coins",
               "amount": {
-                "expr": "-1",
+                "expr": "-2",
                 "scaling": "case"
               }
             }
@@ -3770,7 +3768,7 @@
                   "params": {
                     "resource": "coins",
                     "amount": {
-                      "expr": "3",
+                      "expr": "2.5",
                       "scaling": "case",
                       "snapshot": true
                     }
@@ -3820,13 +3818,6 @@
                 "expr": "3",
                 "scaling": "case"
               }
-            }
-          },
-          {
-            "type": "add_resource",
-            "params": {
-              "resource": "pop",
-              "amount": -1
             }
           },
           {
@@ -3955,7 +3946,7 @@
           }
         ]
       },
-      "notes": "Has a (40*POPPOP+20) % chance to arrive every harbinger case",
+      "notes": "Has a (40*POP)/(POP+20)% chance to arrive every Harbinger case",
       "dismiss": {
         "effects": []
       }
@@ -4229,7 +4220,7 @@
               "resource": "pop",
               "amount": {
                 "expr": "-1",
-                "scaling": "harbinger"
+                "scaling": "case"
               }
             }
           },
@@ -4315,7 +4306,7 @@
           }
         ]
       },
-      "notes": "[ENGINE] Harbinger cost uses scaling=harbinger with special_rules.harbinger.cost_expr. Only happens if you have 0 Popularity.",
+      "notes": "[ENGINE] Harbinger cost uses scaling=harbinger with special_rules.harbinger.cost_expr.",
       "dismiss": {
         "effects": []
       }
@@ -4355,7 +4346,7 @@
           }
         ]
       },
-      "notes": "[ENGINE] Harbinger cost uses scaling=harbinger with special_rules.harbinger.cost_expr. Only happens if you have 0 Popularity.",
+      "notes": "[ENGINE] Harbinger cost uses scaling=harbinger with special_rules.harbinger.cost_expr.",
       "dismiss": {
         "effects": []
       }
@@ -4458,7 +4449,7 @@
           }
         ]
       },
-      "notes": "[ENGINE] Harbinger cost uses scaling=harbinger with special_rules.harbinger.cost_expr. Only happens if you have 0 Popularity.",
+      "notes": "[ENGINE] Harbinger cost uses scaling=harbinger with special_rules.harbinger.cost_expr.",
       "dismiss": {
         "effects": []
       }

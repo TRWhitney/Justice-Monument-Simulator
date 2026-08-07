@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from justice_sim.engine.effects import resolve_expr
+from justice_sim.engine.effects import advance_case, resolve_expr, resolve_probability
+from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
 
@@ -47,9 +48,9 @@ def weights_for_preset(preset: str) -> UtilityWeights:
 
 
 def utility(state: GameState, data: JusticeData, weights: UtilityWeights) -> float:
-    death_penalty = 1.0 if state.mh <= 0 else 0.0
+    death_penalty = 1.0 if state.ended or state.mh <= 0 else 0.0
     low_mh_penalty = max(0.0, weights.mh_threshold - state.mh)
-    insolvency_penalty = 1.0 if _next_harbinger_unpayable(state, data) else 0.0
+    insolvency_penalty = _next_harbinger_risk(state, data)
     resources_score = state.coins + state.pop
 
     return (
@@ -63,35 +64,43 @@ def utility(state: GameState, data: JusticeData, weights: UtilityWeights) -> flo
     )
 
 
-def _next_harbinger_unpayable(state: GameState, data: JusticeData) -> bool:
-    if state.dismissals > 0 and "cannot_dismiss_harbinger" not in state.statuses:
-        return False
+def _next_harbinger_risk(state: GameState, data: JusticeData) -> float:
+    """Estimate the unavoidable base-Harbinger risk from known state transitions."""
+    if state.ended or state.mh <= 0:
+        return 0.0
     modulus = data.special_rules.harbinger.cadence_modulus
+    if modulus <= 0:
+        return 0.0
     remainder = state.case_index % modulus
     offset = 0 if remainder == 0 else modulus - remainder
-    next_case = state.case_index + offset
-    if state.case_index != next_case:
-        temp_state = GameState(
-            case_index=next_case,
-            coins=state.coins,
-            pop=state.pop,
-            mh=state.mh,
-            dismissals=state.dismissals,
-            retirement_chests=state.retirement_chests,
-            flags=state.flags,
-            statuses=state.statuses,
-            scheduled_events=state.scheduled_events,
-            encounter_modifiers=state.encounter_modifiers,
-            forced_encounters=state.forced_encounters,
-            required_action=state.required_action,
-            required_action_penalty_effects=state.required_action_penalty_effects,
-            counters=state.counters,
-            ended=state.ended,
-            end_reason=state.end_reason,
-        )
-    else:
-        temp_state = state
+    projected = state
+    projection_rng = Rng(0)
+    for _ in range(offset):
+        projected = advance_case(projected, data, projection_rng)
+        if projected.ended or projected.mh <= 0:
+            return 0.0
+
+    if (
+        projected.dismissals > 0
+        and "cannot_dismiss_harbinger" not in projected.statuses
+    ):
+        return 0.0
     cost = resolve_expr(
-        {"expr": data.special_rules.harbinger.cost_expr}, temp_state, data
+        {"expr": data.special_rules.harbinger.cost_expr}, projected, data
     )
-    return state.coins < cost
+    if projected.coins >= cost:
+        return 0.0
+
+    grateful_probability = 0.0
+    grateful_rule = data.special_rules.gratefulbinger
+    if grateful_rule:
+        grateful_probability = resolve_probability(
+            {
+                "expr": grateful_rule.replace_harbinger_probability_expr,
+                "format": grateful_rule.format,
+            },
+            projected,
+            data,
+        )
+    grateful_probability = min(1.0, max(0.0, grateful_probability))
+    return 1.0 - grateful_probability

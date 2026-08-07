@@ -161,6 +161,25 @@ def test_skip_advances_case_without_consuming_dismissals(data_factory):
 
 
 @pytest.mark.unit
+def test_actions_and_skips_are_blocked_after_mh_reaches_zero(data_factory):
+    data = data_factory()
+    offer = data.offers_by_id["offer1"]
+    dead = GameState(
+        case_index=1,
+        coins=5,
+        pop=3,
+        mh=0,
+        dismissals=1,
+        retirement_chests=0,
+    )
+
+    with pytest.raises(ActionNotAllowed, match="Run has ended"):
+        apply_action(dead, offer, "approve", data, Rng(1))
+    with pytest.raises(ActionNotAllowed, match="Run has ended"):
+        skip_case(dead, data, Rng(1))
+
+
+@pytest.mark.unit
 def test_dismiss_not_allowed_with_override(data_dict_factory):
     data_dict = data_dict_factory()
     data_dict["offers"][0]["allow_insufficient_funds"] = True

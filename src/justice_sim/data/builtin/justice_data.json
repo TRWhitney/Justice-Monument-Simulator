@@ -10,8 +10,8 @@
     "planner_defaults": {
       "horizon_cases": 12,
       "rollouts_per_action": 200,
-      "adaptive_rollouts": false,
-      "adaptive_rollouts_max": 1000,
+      "adaptive_rollouts": true,
+      "adaptive_rollouts_max": 400,
       "risk_preset": "balanced"
     }
   },

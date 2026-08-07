@@ -60,7 +60,7 @@ def render_recommendation(
 ) -> None:
     table = Table(title="Recommendation")
     table.add_column("Action")
-    table.add_column("Expected Utility")
+    table.add_column("Expected Utility (95% CI)")
     table.add_column("Expected Chests")
     table.add_column("Death Prob")
     for score in sorted(
@@ -68,7 +68,7 @@ def render_recommendation(
     ):
         table.add_row(
             score.action,
-            f"{score.expected_utility:.2f}",
+            f"{score.expected_utility:.2f} ± {score.confidence_half_width:.2f}",
             f"{score.expected_chests:.2f}",
             f"{score.death_probability:.2f}",
         )

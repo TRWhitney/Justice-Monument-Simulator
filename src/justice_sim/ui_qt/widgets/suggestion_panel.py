@@ -40,7 +40,9 @@ class SuggestionPanel(QtWidgets.QWidget):
         )
         self.best_label.setText(f"Best: {recommendation.best_action}")
         self.metrics_label.setText(
-            f"Utility {best.expected_utility:.2f} | Chests {best.expected_chests:.2f} | Death {best.death_probability:.2f}"
+            f"Utility {best.expected_utility:.2f} ± "
+            f"{best.confidence_half_width:.2f} (95% CI) | "
+            f"Chests {best.expected_chests:.2f} | Death {best.death_probability:.2f}"
         )
         self.last_action = recommendation.best_action
         self.set_calculating(False)

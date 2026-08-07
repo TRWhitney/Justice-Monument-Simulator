@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Iterable
 
 from justice_sim.engine.effects import (
     NON_NEGATIVE_RESOURCES,
@@ -16,7 +15,6 @@ from justice_sim.engine.effects import (
 from justice_sim.engine.encounter import consume_forced_encounter
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import (
-    ChainStep,
     EffectSpec,
     JusticeData,
     OfferSpec,
@@ -54,7 +52,7 @@ def preview_state_after_encounter_triggers(
     state: GameState, offer: OfferSpec, data: JusticeData, rng: Rng
 ) -> GameState:
     """Return the state after applying encounter triggers for the offer."""
-    if state.ended:
+    if state.ended or state.mh <= 0:
         return state
     return _apply_encounter_triggers(state, offer, data, rng)
 
@@ -73,7 +71,7 @@ def apply_action(
 
 
 def skip_case(state: GameState, data: JusticeData, rng: Rng) -> GameState:
-    if state.ended:
+    if state.ended or state.mh <= 0:
         raise ActionNotAllowed("Run has ended")
     return advance_case(state, data, rng)
 
@@ -101,10 +99,10 @@ def _apply_action_with_outcome(
     rng: Rng,
     random_label_override: str | None,
 ) -> tuple[GameState, str | None]:
-    if state.ended:
+    if state.ended or state.mh <= 0:
         raise ActionNotAllowed("Run has ended")
     updated = _apply_encounter_triggers(state, offer, data, rng)
-    if updated.ended:
+    if updated.ended or updated.mh <= 0:
         raise ActionNotAllowed("Run has ended")
     if action not in offer.actions_available:
         raise ActionNotAllowed(f"Action '{action}' not available")

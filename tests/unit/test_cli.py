@@ -32,11 +32,15 @@ def test_cli_render_helpers(data_factory):
                 expected_utility=1.0,
                 expected_chests=1.0,
                 death_probability=0.0,
-                variance=0.0,
+                variance=4.0,
+                sample_count=25,
             ),
         ),
     )
     cli_render.render_recommendation(console, recommendation)
+    output = console.export_text()
+    assert "Expected Utility (95% CI)" in output
+    assert "1.00 ± 0.78" in output
 
 
 @pytest.mark.unit

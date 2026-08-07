@@ -31,8 +31,10 @@ class Rng:
         return self._random.random()
 
     def randint(self, a: int, b: int) -> int:
-        self._draws += 1
-        return self._random.randint(a, b)
+        if b < a:
+            raise ValueError("Empty range for randint")
+        span = b - a + 1
+        return a + min(int(self.random() * span), span - 1)
 
     def choice(self, seq: Iterable[Any]) -> Any:
         seq_list = list(seq)

@@ -239,3 +239,50 @@ def test_offer_search_show_all_uses_all_offer_rank_pool(data_factory):
 
     widget.close()
     app.quit()
+
+
+@pytest.mark.gui
+def test_offer_search_clear_filter_button_clears_and_dims(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    state = GameState(
+        case_index=1,
+        coins=5,
+        pop=3,
+        mh=1,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    widget = OfferSearchWidget(data, state)
+    widget.resize(500, 320)
+    widget.show()
+    widget.update_state(state)
+    app.processEvents()
+
+    clear_button = widget._clear_npc_filter_button
+    assert clear_button is not None
+    assert widget._npc_filter_bar._buttons[-1] is clear_button
+
+    first_npc_button = next(iter(widget._npc_buttons.values()))
+    assert clear_button.iconSize() == first_npc_button.iconSize()
+    assert clear_button.size() == first_npc_button.size()
+
+    clear_effect = widget._clear_npc_filter_effect
+    assert clear_effect is not None
+    assert clear_effect.opacity() == 0.25
+
+    first_npc_button.click()
+    app.processEvents()
+
+    assert widget.search_input.text().startswith("#")
+    assert clear_effect.opacity() == 1.0
+
+    clear_button.click()
+    app.processEvents()
+
+    assert widget.search_input.text() == ""
+    assert clear_effect.opacity() == 0.25
+
+    widget.close()
+    app.quit()

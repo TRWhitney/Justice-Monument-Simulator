@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from collections.abc import Callable
+import json
 import os
 from pathlib import Path
 import threading
@@ -12,7 +13,11 @@ import time
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from justice_sim.engine.encounter import UniformEncounterModel, select_encounter
-from justice_sim.engine.luck import EncounterLuck, rank_encounter_offer
+from justice_sim.engine.luck import (
+    EncounterLuck,
+    encounter_luck_color,
+    rank_encounter_offer,
+)
 from justice_sim.engine.effects import (
     MAIN_RESOURCES,
     NON_NEGATIVE_RESOURCES,
@@ -41,7 +46,12 @@ from justice_sim.models.offer import (
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.models.state import GameState
 from justice_sim.persistence.logs import SessionLog
-from justice_sim.persistence.runs import RunState, load_run_state, save_run_state
+from justice_sim.persistence.runs import (
+    RunState,
+    load_run_state,
+    save_run_state,
+    serialize_state,
+)
 from justice_sim.planner.rollout import (
     PlannerConfig,
     PlannerRecommendation,
@@ -707,8 +717,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self._planner_result_lock = threading.Lock()
         self._planner_result_generation: int | None = None
         self._planner_result: PlannerRecommendation | None = None
+        self._planner_result_offer_id: str | None = None
+        self._planner_result_state_key: str | None = None
         self._planner_result_error: str | None = None
         self._planner_result_cancelled = False
+        self._simulated_offer_scores: dict[str, dict[str, float]] = {}
         self._planner_progress_lock = threading.Lock()
         self._planner_progress_value = 0
         self._planner_progress_total_value: int | None = None
@@ -717,6 +730,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._planner_progress_timer.timeout.connect(self._tick_planner_progress)
         self._planner_progress_pending = False
         self._manual_adjust_pre_state: GameState | None = None
+        self._manual_adjust_due_at: float | None = None
+        self._manual_adjust_timer_start_pending = False
         self._manual_adjust_timer = QtCore.QTimer(self)
         self._manual_adjust_timer.setSingleShot(True)
         self._manual_adjust_timer.setInterval(350)
@@ -856,6 +871,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.offer_search = OfferSearchWidget(data, self.session.state)
         self.offer_search.set_luck_weights(self.planner.weights)
+        self.offer_search.set_simulated_scores({}, rerender=False)
         self.offer_search.offer_selected.connect(self._on_offer_selected)
         center_column.addWidget(self.offer_search)
 
@@ -867,6 +883,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dismiss_button = QtWidgets.QPushButton("Dismiss")
         self.skip_button = QtWidgets.QPushButton("Skip")
         self.best_button = QtWidgets.QPushButton("Apply Recommended")
+        self.run_luck_label = QtWidgets.QLabel()
+        self.run_luck_label.setObjectName("run_luck_label")
+        self.run_luck_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.run_luck_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         self.game_over_label = QtWidgets.QLabel("Game Over")
         self.game_over_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.game_over_label.setStyleSheet(
@@ -916,6 +936,7 @@ class MainWindow(QtWidgets.QMainWindow):
         right_column.addWidget(self.dismiss_button)
         right_column.addWidget(self.skip_button)
         right_column.addWidget(self.best_button)
+        right_column.addWidget(self.run_luck_label)
         right_column.addWidget(self.game_over_label)
 
         self.log_panel = LogPanel(data)
@@ -959,6 +980,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.state_panel.update_state(self.session.state)
         self.state_panel.set_adjust_enabled(True)
         self.log_panel.update_log(self.session.log)
+        self._update_run_luck_indicator()
+        self.offer_search.set_simulated_scores(
+            self._simulated_scores_for_state(self.session.state),
+            rerender=False,
+        )
         self.offer_search.set_auto_offer_id(self._auto_offer_id)
         self.offer_search.set_show_all_visible(self._sim_mode != "full")
         self.offer_search.update_state(self.session.state, preserve_scroll=True)
@@ -1100,6 +1126,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.game_over_label.setStyleSheet(
             "color: #b00020; font-weight: 700; "
             f"font-size: {self._scaled(18, minimum=1)}px;"
+        )
+        self.run_luck_label.setStyleSheet(
+            f"font-size: {self._scaled(12, minimum=1)}px; padding: {self._scaled(2)}px;"
         )
         self._apply_theme(self._dark_mode)
         self._update_scale_toggle_visuals()
@@ -1784,11 +1813,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self._planner_generation += 1
         generation = self._planner_generation
         self._stop_planner_thread()
+        planner_state = self.session.state
+        planner_state_key = self._luck_state_key(planner_state)
 
         total = self._reset_planner_progress(offer)
         with self._planner_result_lock:
             self._planner_result_generation = None
             self._planner_result = None
+            self._planner_result_offer_id = None
+            self._planner_result_state_key = None
             self._planner_result_error = None
             self._planner_result_cancelled = False
         cancel_event = threading.Event()
@@ -1813,21 +1846,27 @@ class MainWindow(QtWidgets.QMainWindow):
         def run() -> None:
             try:
                 recommendation = self.planner.recommend(
-                    self.session.state, offer, progress=progress
+                    planner_state, offer, progress=progress
                 )
             except _PlannerCancelled:
                 with self._planner_result_lock:
                     self._planner_result_generation = generation
+                    self._planner_result_offer_id = None
+                    self._planner_result_state_key = None
                     self._planner_result_cancelled = True
                 return
             except Exception as exc:  # pragma: no cover - defensive UI safety
                 with self._planner_result_lock:
                     self._planner_result_generation = generation
+                    self._planner_result_offer_id = None
+                    self._planner_result_state_key = None
                     self._planner_result_error = str(exc)
                 return
             with self._planner_result_lock:
                 self._planner_result_generation = generation
                 self._planner_result = recommendation
+                self._planner_result_offer_id = offer.id
+                self._planner_result_state_key = planner_state_key
 
         thread = threading.Thread(target=run, daemon=True)
         self._planner_thread = thread
@@ -1905,7 +1944,68 @@ class MainWindow(QtWidgets.QMainWindow):
             self.encounter_model,
             weights=self.planner.weights,
             rng_state=self.session.rng.state(),
+            simulated_scores=self._simulated_scores_for_state(state),
         )
+
+    def _luck_state_key(self, state: GameState) -> str:
+        return json.dumps(serialize_state(state), sort_keys=True, separators=(",", ":"))
+
+    def _simulated_scores_for_state(self, state: GameState) -> dict[str, float]:
+        key = self._luck_state_key(state)
+        return dict(self._simulated_offer_scores.get(key, {}))
+
+    def _record_simulated_offer_score(
+        self,
+        state_key: str,
+        offer_id: str,
+        recommendation: PlannerRecommendation,
+    ) -> None:
+        if not recommendation.action_scores:
+            return
+        best = max(
+            recommendation.action_scores,
+            key=lambda score: score.expected_utility,
+        )
+        if best.expected_utility == float("-inf"):
+            return
+        state_scores = dict(self._simulated_offer_scores.get(state_key, {}))
+        state_scores[offer_id] = best.expected_utility
+        self._simulated_offer_scores[state_key] = state_scores
+
+    def _update_run_luck_indicator(self) -> None:
+        overall = self._overall_luck_score()
+        if overall is None:
+            self.run_luck_label.setText(
+                'Run deal luck: <span style="color: #8a8a8a;">n/a</span>'
+            )
+            return
+        score, rated_count = overall
+        percent = int(round(score * 100))
+        virtual_total = 100
+        virtual_rank = int(round((1.0 - score) * (virtual_total - 1))) + 1
+        virtual_rank = max(1, min(virtual_rank, virtual_total))
+        color = encounter_luck_color(virtual_rank, virtual_total)
+        self.run_luck_label.setText(
+            "Run deal luck: "
+            f'<span style="color: {color}; font-weight: 700;">{percent}%</span> '
+            f"({rated_count} deals)"
+        )
+
+    def _overall_luck_score(self) -> tuple[float, int] | None:
+        scores: list[float] = []
+        for entry in self.session.log.entries:
+            luck = entry.encounter_luck
+            if luck is None or luck.total <= 0:
+                continue
+            if luck.total <= 1:
+                scores.append(1.0)
+                continue
+            clamped_rank = max(1, min(luck.rank, luck.total))
+            score = (luck.total - clamped_rank) / (luck.total - 1)
+            scores.append(score)
+        if not scores:
+            return None
+        return (sum(scores) / len(scores), len(scores))
 
     def _skip_case(self) -> None:
         self._flush_manual_adjust_log()
@@ -2234,9 +2334,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._stop_planner_thread()
         self._manual_adjust_timer.stop()
         self._manual_adjust_pre_state = None
+        self._manual_adjust_due_at = None
+        self._manual_adjust_timer_start_pending = False
         self.session.reset(reseed=True)
         self.current_offer = None
         self.current_recommendation = None
+        self._simulated_offer_scores.clear()
         self._auto_offer_id = None
         self._auto_offer_case = None
         self.offer_search.clear_selection()
@@ -2253,6 +2356,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.planner.weights = weights_for_preset(self.planner.config.risk_preset)
         self.offer_search.set_luck_weights(self.planner.weights)
+        self._simulated_offer_scores.clear()
         self.planner.reset_cache()
         if self._sim_mode == "none":
             self.current_recommendation = None
@@ -2313,10 +2417,14 @@ class MainWindow(QtWidgets.QMainWindow):
         with self._planner_result_lock:
             generation = self._planner_result_generation
             recommendation = self._planner_result
+            offer_id = self._planner_result_offer_id
+            state_key = self._planner_result_state_key
             error = self._planner_result_error
             cancelled = self._planner_result_cancelled
             self._planner_result_generation = None
             self._planner_result = None
+            self._planner_result_offer_id = None
+            self._planner_result_state_key = None
             self._planner_result_error = None
             self._planner_result_cancelled = False
         if generation is None or generation != self._planner_generation:
@@ -2334,6 +2442,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self._update_action_controls()
             return
         if recommendation:
+            if offer_id and state_key:
+                self._record_simulated_offer_score(state_key, offer_id, recommendation)
+                self.offer_search.set_simulated_scores(
+                    self._simulated_scores_for_state(self.session.state),
+                    rerender=False,
+                )
             self.current_recommendation = recommendation
             self.suggestion_panel.update_recommendation(recommendation)
             self._stop_planner_progress()
@@ -2443,6 +2557,23 @@ class MainWindow(QtWidgets.QMainWindow):
             self._clear_recommendation_ui()
         self.state_panel.update_state(self.session.state)
         self._update_action_controls()
+        self._schedule_manual_adjust_finalize()
+
+    def _schedule_manual_adjust_finalize(self) -> None:
+        if self._manual_adjust_timer.isActive():
+            self._manual_adjust_timer.stop()
+        self._manual_adjust_due_at = None
+        if self._manual_adjust_timer_start_pending:
+            return
+        self._manual_adjust_timer_start_pending = True
+        QtCore.QTimer.singleShot(0, self._start_manual_adjust_timer)
+
+    def _start_manual_adjust_timer(self) -> None:
+        self._manual_adjust_timer_start_pending = False
+        if self._manual_adjust_pre_state is None:
+            return
+        interval_seconds = max(0.0, self._manual_adjust_timer.interval() / 1000.0)
+        self._manual_adjust_due_at = time.monotonic() + interval_seconds
         self._manual_adjust_timer.start()
 
     def _flush_manual_adjust_log(self) -> None:
@@ -2450,9 +2581,17 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         if self._manual_adjust_timer.isActive():
             self._manual_adjust_timer.stop()
+        self._manual_adjust_due_at = None
+        self._manual_adjust_timer_start_pending = False
         self._commit_manual_adjust_log()
 
     def _finalize_manual_adjust(self) -> None:
+        if self._manual_adjust_due_at is not None:
+            remaining = self._manual_adjust_due_at - time.monotonic()
+            if remaining > 0:
+                self._manual_adjust_timer.start(max(1, int(remaining * 1000)))
+                return
+        self._manual_adjust_due_at = None
         if not self._commit_manual_adjust_log():
             return
         self._refresh()
@@ -2471,6 +2610,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if pre_state is None:
             return False
         self._manual_adjust_pre_state = None
+        self._manual_adjust_due_at = None
+        self._manual_adjust_timer_start_pending = False
         self.session.log.record_manual_adjust(
             pre_state, self.session.state, self.session.rng.state()
         )
@@ -2563,5 +2704,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.session.state = run_state.state
         self.session.rng = Rng.from_state(run_state.rng_state)
         self.session.log = SessionLog.from_list(run_state.log)
+        self._simulated_offer_scores.clear()
         self.current_recommendation = None
         self._refresh()

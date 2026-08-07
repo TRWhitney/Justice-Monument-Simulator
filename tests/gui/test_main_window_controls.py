@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 from PySide6 import QtWidgets
 
+from justice_sim.engine.luck import EncounterLuck, encounter_luck_color
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
@@ -333,6 +334,51 @@ def test_resource_adjust_debounces_planner_and_log_refresh(data_factory):
     assert planner.calls == baseline_calls + 1
     assert window.session.log.entries
     assert window.session.log.entries[-1].action == "adjust"
+
+    window.close()
+    app.quit()
+
+
+@pytest.mark.gui
+def test_run_luck_indicator_aggregates_logged_deal_luck(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    window = MainWindow(data)
+
+    assert "n/a" in window.run_luck_label.text().lower()
+
+    offer = data.offers_by_id["offer1"]
+    pre_one = GameState(
+        case_index=1, coins=5, pop=3, mh=1, dismissals=0, retirement_chests=0
+    )
+    post_one = replace(pre_one, case_index=2)
+    pre_two = post_one
+    post_two = replace(pre_two, case_index=3)
+
+    window.session.log.record(
+        pre_one,
+        offer.id,
+        "approve",
+        window.session.rng.state(),
+        post_one,
+        encounter_luck=EncounterLuck(rank=1, total=5),
+    )
+    window.session.log.record(
+        pre_two,
+        offer.id,
+        "reject",
+        window.session.rng.state(),
+        post_two,
+        encounter_luck=EncounterLuck(rank=5, total=5),
+    )
+
+    window._refresh()
+    expected_color = encounter_luck_color(51, 100)
+    text = window.run_luck_label.text()
+    assert "50%" in text
+    assert "(2 deals)" in text
+    assert expected_color in text
 
     window.close()
     app.quit()

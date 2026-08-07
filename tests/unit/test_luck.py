@@ -106,3 +106,37 @@ def test_rank_encounter_offer_forced_encounter(data_factory):
     assert luck is not None
     assert luck.rank == 1
     assert luck.total == 1
+
+
+@pytest.mark.unit
+def test_rank_encounter_offer_hybrid_uses_simulated_scores_when_available(data_factory):
+    data = data_factory()
+    state = GameState(
+        case_index=1, coins=5, pop=3, mh=1, dismissals=0, retirement_chests=0
+    )
+    model = UniformEncounterModel()
+    weights = weights_for_preset("balanced")
+
+    no_sim = rank_encounter_offer(
+        state,
+        "offer2",
+        data,
+        model,
+        weights=weights,
+        rng_state=RngState(seed=3, draws=0),
+    )
+    with_sim = rank_encounter_offer(
+        state,
+        "offer2",
+        data,
+        model,
+        weights=weights,
+        rng_state=RngState(seed=3, draws=0),
+        simulated_scores={"offer2": -1000.0},
+        simulated_weight=1.0,
+    )
+
+    assert no_sim is not None
+    assert with_sim is not None
+    assert no_sim.rank == 1
+    assert with_sim.rank > no_sim.rank

@@ -24,6 +24,7 @@ _BASE_BUTTON_WIDTH = 36
 _BASE_VALUE_MIN_WIDTH = 48
 _BASE_ROW_SPACING = 6
 _BASE_PANEL_SPACING = 4
+_HOLD_INITIAL_REPEAT_DELAY_MS = 320
 
 
 class _ResourceRow(QtWidgets.QWidget):
@@ -47,16 +48,19 @@ class _ResourceRow(QtWidgets.QWidget):
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(_BASE_ROW_SPACING)
         self._layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        self._hold_timer = QtCore.QTimer(self)
+        self._hold_timer.setSingleShot(True)
+        self._hold_timer.timeout.connect(self._on_hold_timeout)
+        self._hold_delta: int | None = None
+        self._hold_button: QtWidgets.QPushButton | None = None
+        self._hold_elapsed = QtCore.QElapsedTimer()
 
         self.decrease_button: QtWidgets.QPushButton | None = None
         self._left_spacer: QtWidgets.QSpacerItem | None = None
         if adjustable:
             self.decrease_button = QtWidgets.QPushButton("-")
             self.decrease_button.setObjectName(f"resource_{resource}_decrease")
-            _make_bold(self.decrease_button)
-            self.decrease_button.clicked.connect(
-                lambda: self.adjusted.emit(self._resource, -1)
-            )
+            self._configure_adjust_button(self.decrease_button, -1)
             self._layout.addWidget(self.decrease_button)
         else:
             self._left_spacer = QtWidgets.QSpacerItem(
@@ -82,10 +86,7 @@ class _ResourceRow(QtWidgets.QWidget):
         if adjustable:
             self.increase_button = QtWidgets.QPushButton("+")
             self.increase_button.setObjectName(f"resource_{resource}_increase")
-            _make_bold(self.increase_button)
-            self.increase_button.clicked.connect(
-                lambda: self.adjusted.emit(self._resource, 1)
-            )
+            self._configure_adjust_button(self.increase_button, 1)
 
         self._layout.addWidget(self.icon_label)
         self._layout.addWidget(self.value_label)
@@ -162,10 +163,42 @@ class _ResourceRow(QtWidgets.QWidget):
         self.value_label.setText(f"{value:g}")
 
     def set_adjust_enabled(self, enabled: bool) -> None:
+        if not enabled:
+            self._stop_hold_adjust()
         if self.decrease_button:
             self.decrease_button.setEnabled(enabled)
         if self.increase_button:
             self.increase_button.setEnabled(enabled)
+
+    def _configure_adjust_button(
+        self, button: QtWidgets.QPushButton, delta: int
+    ) -> None:
+        _make_bold(button)
+        button.pressed.connect(lambda d=delta, b=button: self._start_hold_adjust(d, b))
+        button.released.connect(self._stop_hold_adjust)
+
+    def _start_hold_adjust(self, delta: int, button: QtWidgets.QPushButton) -> None:
+        if not button.isEnabled():
+            return
+        self._hold_delta = delta
+        self._hold_button = button
+        self.adjusted.emit(self._resource, delta)
+        self._hold_elapsed.start()
+        self._hold_timer.start(_HOLD_INITIAL_REPEAT_DELAY_MS)
+
+    def _stop_hold_adjust(self) -> None:
+        self._hold_timer.stop()
+        self._hold_delta = None
+        self._hold_button = None
+
+    def _on_hold_timeout(self) -> None:
+        if self._hold_delta is None or self._hold_button is None:
+            return
+        if not self._hold_button.isDown():
+            self._stop_hold_adjust()
+            return
+        self.adjusted.emit(self._resource, self._hold_delta)
+        self._hold_timer.start(_repeat_interval_ms(self._hold_elapsed.elapsed()))
 
 
 class StatePanel(QtWidgets.QWidget):
@@ -233,3 +266,13 @@ def _make_bold(widget: QtWidgets.QWidget) -> None:
     font = widget.font()
     font.setBold(True)
     widget.setFont(font)
+
+
+def _repeat_interval_ms(elapsed_ms: int) -> int:
+    if elapsed_ms < 700:
+        return 200
+    if elapsed_ms < 1500:
+        return 130
+    if elapsed_ms < 3000:
+        return 85
+    return 55

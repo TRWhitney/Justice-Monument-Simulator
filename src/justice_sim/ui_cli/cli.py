@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import json
 from pathlib import Path
 import shlex
 from typing import Literal
@@ -43,7 +44,12 @@ from justice_sim.models.state import ActionTrigger, EncounterTrigger, GameState
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.persistence.logs import LogEntry, SessionLog
 from justice_sim.persistence.profiles import Profile, load_profile, save_profile
-from justice_sim.persistence.runs import RunState, load_run_state, save_run_state
+from justice_sim.persistence.runs import (
+    RunState,
+    load_run_state,
+    save_run_state,
+    serialize_state,
+)
 from justice_sim.planner.rollout import (
     PlannerConfig,
     PlannerRecommendation,
@@ -446,6 +452,7 @@ class CliApp:
         self.search_results: list[OfferSearchResult] = []
         self.current_offer: OfferSpec | None = None
         self.current_recommendation: PlannerRecommendation | None = None
+        self._simulated_offer_scores: dict[str, dict[str, float]] = {}
         self.sim_mode: Literal["full", "mid", "none"] = "mid"
         self.show_all = False
         self.user_query = ""
@@ -883,6 +890,7 @@ class CliApp:
         self.session.reset(reseed=True)
         self.current_offer = None
         self.current_recommendation = None
+        self._simulated_offer_scores.clear()
         self._auto_offer_id = None
         self._auto_offer_case = None
         self._pending_resolution = None
@@ -901,6 +909,7 @@ class CliApp:
         self.session.rng = Rng.from_state(loaded.rng_state)
         self.session.log = SessionLog.from_list(loaded.log)
         self.current_recommendation = None
+        self._simulated_offer_scores.clear()
         self._refresh_results(preserve_selection=True)
         self.console.print(f"Imported run state from {path}")
 
@@ -939,6 +948,7 @@ class CliApp:
             self.planner.config = PlannerConfig(**profile.planner_settings)
             self.planner.weights = weights_for_preset(self.planner.config.risk_preset)
             self.planner.reset_cache()
+            self._simulated_offer_scores.clear()
             self.current_recommendation = None
         self.console.print(f"Loaded profile from {path}")
 
@@ -995,6 +1005,7 @@ class CliApp:
         self.planner.config = cfg
         self.planner.weights = weights_for_preset(cfg.risk_preset)
         self.planner.reset_cache()
+        self._simulated_offer_scores.clear()
         self.current_recommendation = None
         self._update_recommendation()
         self.console.print("Planner settings updated.")
@@ -1122,7 +1133,31 @@ class CliApp:
             self.encounter_model,
             weights=self.planner.weights,
             rng_state=self.session.rng.state(),
+            simulated_scores=self._simulated_scores_for_state(state),
         )
+
+    def _luck_state_key(self, state: GameState) -> str:
+        return json.dumps(serialize_state(state), sort_keys=True, separators=(",", ":"))
+
+    def _simulated_scores_for_state(self, state: GameState) -> dict[str, float]:
+        key = self._luck_state_key(state)
+        return dict(self._simulated_offer_scores.get(key, {}))
+
+    def _record_simulated_offer_score(
+        self, state: GameState, offer_id: str, recommendation: PlannerRecommendation
+    ) -> None:
+        if not recommendation.action_scores:
+            return
+        best = max(
+            recommendation.action_scores,
+            key=lambda score: score.expected_utility,
+        )
+        if best.expected_utility == float("-inf"):
+            return
+        key = self._luck_state_key(state)
+        scores = dict(self._simulated_offer_scores.get(key, {}))
+        scores[offer_id] = best.expected_utility
+        self._simulated_offer_scores[key] = scores
 
     def _show_pending_prompt(self) -> None:
         prompt = self.pending_prompt
@@ -1144,6 +1179,9 @@ class CliApp:
             return
         self.current_recommendation = self.planner.recommend(
             self.session.state, self.current_offer
+        )
+        self._record_simulated_offer_score(
+            self.session.state, self.current_offer.id, self.current_recommendation
         )
 
     def _recommended_action(self) -> str | None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+from typing import Mapping
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -118,6 +119,8 @@ class _NpcButtonBar(QtWidgets.QWidget):
 
 class OfferSearchWidget(QtWidgets.QWidget):
     offer_selected = QtCore.Signal(object)
+    _CLEAR_ICON_ACTIVE = QtGui.QColor("#b00020")
+    _CLEAR_ICON_INACTIVE = QtGui.QColor("#6a6a6a")
 
     def __init__(
         self,
@@ -136,10 +139,13 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self._npc_buttons: dict[str, QtWidgets.QToolButton] = {}
         self._npc_button_effects: dict[str, QtWidgets.QGraphicsOpacityEffect] = {}
         self._npc_queries: dict[str, str] = {}
+        self._clear_npc_filter_button: QtWidgets.QToolButton | None = None
+        self._clear_npc_filter_effect: QtWidgets.QGraphicsOpacityEffect | None = None
         self._auto_offer_id: str | None = None
         self._show_all_restore_state = False
         self._ui_scale = 1.0
         self._luck_weights = UtilityWeights()
+        self._simulated_scores: dict[str, float] = {}
 
         layout = QtWidgets.QVBoxLayout(self)
         self.search_input = QtWidgets.QLineEdit()
@@ -235,6 +241,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
                 self._encounter_model,
                 weights=self._luck_weights,
                 candidate_offer_ids=ranking_offer_ids,
+                simulated_scores=self._simulated_scores,
             )
             if unfiltered_view
             else {}
@@ -287,6 +294,19 @@ class OfferSearchWidget(QtWidgets.QWidget):
 
     def set_luck_weights(self, weights: UtilityWeights) -> None:
         self._luck_weights = weights
+        selected_offer_id = self._selected_offer_id()
+        self._on_search(
+            self.search_input.text(),
+            preserve_scroll=True,
+            selected_offer_id=selected_offer_id,
+        )
+
+    def set_simulated_scores(
+        self, scores: Mapping[str, float] | None, *, rerender: bool = True
+    ) -> None:
+        self._simulated_scores = dict(scores or {})
+        if not rerender:
+            return
         selected_offer_id = self._selected_offer_id()
         self._on_search(
             self.search_input.text(),
@@ -406,8 +426,25 @@ class OfferSearchWidget(QtWidgets.QWidget):
             self._scaled(2),
         )
         icon_size = self._scaled(28, minimum=1)
+        button_size = self._npc_button_size()
         for button in self._npc_buttons.values():
             button.setIconSize(QtCore.QSize(icon_size, icon_size))
+            button.setFixedSize(button_size)
+        if self._clear_npc_filter_button is not None:
+            self._clear_npc_filter_button.setIconSize(
+                QtCore.QSize(icon_size, icon_size)
+            )
+            self._clear_npc_filter_button.setFixedSize(button_size)
+            self._clear_npc_filter_button.setIcon(
+                self._clear_filter_icon(
+                    self._clear_npc_filter_button.iconSize(),
+                    color=(
+                        self._CLEAR_ICON_ACTIVE
+                        if self.search_input.text().strip()
+                        else self._CLEAR_ICON_INACTIVE
+                    ),
+                )
+            )
         self._apply_show_all_styles()
         selected_offer_id = self._selected_offer_id()
         self._on_search(
@@ -578,6 +615,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
             button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
             icon_size = self._scaled(28, minimum=1)
             button.setIconSize(QtCore.QSize(icon_size, icon_size))
+            button.setFixedSize(self._npc_button_size())
             button.setToolTip(npc.name)
             button.setAccessibleName(npc.name)
             icon = self._load_npc_icon(npc)
@@ -595,6 +633,27 @@ class OfferSearchWidget(QtWidgets.QWidget):
             self._npc_buttons[npc.id] = button
             self._npc_button_effects[npc.id] = effect
             self._npc_queries[npc.id] = normalize_npc_query(npc.name)
+
+        clear_button = QtWidgets.QToolButton()
+        clear_button.setAutoRaise(True)
+        clear_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonIconOnly)
+        icon_size = self._scaled(28, minimum=1)
+        clear_button.setIconSize(QtCore.QSize(icon_size, icon_size))
+        clear_button.setFixedSize(self._npc_button_size())
+        clear_button.setIcon(
+            self._clear_filter_icon(
+                clear_button.iconSize(), color=self._CLEAR_ICON_INACTIVE
+            )
+        )
+        clear_button.setToolTip("Clear filter")
+        clear_button.setAccessibleName("Clear filter")
+        clear_button.clicked.connect(self._on_clear_filter_button_clicked)
+        clear_effect = QtWidgets.QGraphicsOpacityEffect(clear_button)
+        clear_effect.setOpacity(0.25)
+        clear_button.setGraphicsEffect(clear_effect)
+        container.add_button(clear_button)
+        self._clear_npc_filter_button = clear_button
+        self._clear_npc_filter_effect = clear_effect
 
         container.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
@@ -629,6 +688,14 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self._set_search_text(f"#{npc_query}")
         self._on_search(self.search_input.text())
 
+    def _on_clear_filter_button_clicked(self) -> None:
+        if self._forced_filter:
+            return
+        if not self.search_input.text().strip():
+            return
+        self._set_search_text("")
+        self._on_search(self.search_input.text())
+
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
         if obj is self.search_input and event.type() in {
             QtCore.QEvent.Type.Resize,
@@ -655,6 +722,20 @@ class OfferSearchWidget(QtWidgets.QWidget):
 
     def _update_npc_filter_buttons(self, text: str) -> None:
         npc_query, _, _ = parse_search_query(text)
+        has_filter = bool(text.strip())
+        if self._clear_npc_filter_effect is not None:
+            self._clear_npc_filter_effect.setOpacity(1.0 if has_filter else 0.25)
+        if self._clear_npc_filter_button is not None:
+            self._clear_npc_filter_button.setIcon(
+                self._clear_filter_icon(
+                    self._clear_npc_filter_button.iconSize(),
+                    color=(
+                        self._CLEAR_ICON_ACTIVE
+                        if has_filter
+                        else self._CLEAR_ICON_INACTIVE
+                    ),
+                )
+            )
         if not self._npc_buttons:
             return
         if not npc_query:
@@ -668,6 +749,31 @@ class OfferSearchWidget(QtWidgets.QWidget):
             effect = self._npc_button_effects.get(npc_id)
             if effect is not None:
                 effect.setOpacity(1.0 if matches else 0.25)
+
+    def _npc_button_size(self) -> QtCore.QSize:
+        edge = self._scaled(36, minimum=1)
+        return QtCore.QSize(edge, edge)
+
+    def _clear_filter_icon(
+        self, size: QtCore.QSize, *, color: QtGui.QColor
+    ) -> QtGui.QIcon:
+        width = max(1, size.width())
+        height = max(1, size.height())
+        pixmap = QtGui.QPixmap(width, height)
+        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        pen_width = max(1, int(round(min(width, height) * 0.12)))
+        margin = max(2, int(round(min(width, height) * 0.18)))
+        pen = QtGui.QPen(color)
+        pen.setWidth(pen_width)
+        pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        rect = QtCore.QRect(margin, margin, width - margin * 2, height - margin * 2)
+        painter.drawEllipse(rect)
+        painter.drawLine(rect.left(), rect.bottom(), rect.right(), rect.top())
+        painter.end()
+        return QtGui.QIcon(pixmap)
 
     def _update_selection_styles(self) -> None:
         selected_item = self.results_list.currentItem()

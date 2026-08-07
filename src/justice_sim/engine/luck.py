@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Mapping
 
 from justice_sim.engine.encounter import EncounterModel, possible_encounter_offers
 from justice_sim.engine.reducer import ActionNotAllowed, apply_action
@@ -36,6 +37,8 @@ def rank_encounter_offer(
     *,
     weights: UtilityWeights | None = None,
     rng_state: RngState | None = None,
+    simulated_scores: Mapping[str, float] | None = None,
+    simulated_weight: float = 0.7,
 ) -> EncounterLuck | None:
     rankings = encounter_offer_rankings(
         state,
@@ -43,6 +46,8 @@ def rank_encounter_offer(
         encounter_model,
         weights=weights,
         rng_state=rng_state,
+        simulated_scores=simulated_scores,
+        simulated_weight=simulated_weight,
     )
     return rankings.get(offer_id)
 
@@ -55,6 +60,8 @@ def encounter_offer_rankings(
     weights: UtilityWeights | None = None,
     rng_state: RngState | None = None,
     candidate_offer_ids: set[str] | None = None,
+    simulated_scores: Mapping[str, float] | None = None,
+    simulated_weight: float = 0.7,
 ) -> dict[str, EncounterLuck]:
     if candidate_offer_ids is None:
         possible_offer_ids = possible_encounter_offers(state, data, encounter_model)
@@ -69,7 +76,15 @@ def encounter_offer_rankings(
         offer = data.offers_by_id.get(possible_offer_id)
         if offer is None:
             continue
-        score = _best_action_score(state, offer, data, weights, rng_state)
+        one_step_score = _best_action_score(state, offer, data, weights, rng_state)
+        simulated_score = (
+            simulated_scores.get(possible_offer_id) if simulated_scores else None
+        )
+        score = _hybrid_score(
+            one_step_score,
+            simulated_score,
+            simulated_weight=simulated_weight,
+        )
         if score is None:
             continue
         scored.append((possible_offer_id, score))
@@ -94,6 +109,20 @@ def encounter_luck_color(rank: int, total: int) -> str:
     green = int(round(58 + (134 * ratio)))
     blue = int(round(48 + (32 * ratio)))
     return f"#{red:02x}{green:02x}{blue:02x}"
+
+
+def _hybrid_score(
+    one_step_score: float | None,
+    simulated_score: float | None,
+    *,
+    simulated_weight: float,
+) -> float | None:
+    if simulated_score is None:
+        return one_step_score
+    if one_step_score is None:
+        return simulated_score
+    weight = max(0.0, min(simulated_weight, 1.0))
+    return ((1.0 - weight) * one_step_score) + (weight * simulated_score)
 
 
 def _best_action_score(

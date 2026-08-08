@@ -513,10 +513,16 @@ class RolloutPlanner:
         return "mixed"
 
     def _non_resource_signature(self, state: GameState) -> tuple:
+        referenced_counters = getattr(self, "_referenced_counters", None)
+        if referenced_counters is None:
+            referenced_counters = _referenced_counter_names(
+                self.data, self.suggested_rules
+            )
+            self._referenced_counters = referenced_counters
         relevant_counters = {
             name: value
             for name, value in state.counters.items()
-            if name in self._referenced_counters
+            if name in referenced_counters
         }
         return replace(
             state,

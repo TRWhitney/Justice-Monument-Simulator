@@ -150,6 +150,35 @@ def test_planner_process_returns_recommendation(data_factory):
 
 
 @pytest.mark.gui
+def test_planner_process_recovers_missing_derived_counter_cache(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    data = data_factory()
+    window = MainWindow(data)
+    window.planner.config = PlannerConfig(
+        horizon_cases=1,
+        rollouts_per_action=5,
+        adaptive_rollouts=False,
+        adaptive_rollouts_max=5,
+        risk_preset="balanced",
+    )
+    del window.planner._referenced_counters
+
+    window._on_offer_selected(data.offers[0])
+    deadline = time.monotonic() + 3.0
+    while window._planner_process is not None and time.monotonic() < deadline:
+        QtWidgets.QApplication.processEvents()
+        time.sleep(0.005)
+
+    assert window.current_recommendation is not None
+    assert window.suggestion_panel.best_label.text() != "No recommendation"
+    assert window.suggestion_panel.metrics_label.text() != "Planner failed."
+
+    window.close()
+    app.quit()
+
+
+@pytest.mark.gui
 def test_recommended_button_uses_affordable_action(data_dict_factory):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = create_app()

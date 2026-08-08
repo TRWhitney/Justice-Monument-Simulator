@@ -1,9 +1,10 @@
 import os
 import time
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from justice_sim.engine.luck import EncounterLuck, encounter_luck_color
 from justice_sim.engine.rng import Rng
@@ -11,6 +12,89 @@ from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
 from justice_sim.ui_qt.app import create_app
 from justice_sim.ui_qt.main_window import MainWindow
+from justice_sim.ui_qt.widgets.file_dialog import ThemedFileDialog
+
+
+@pytest.mark.gui
+def test_run_file_buttons_open_dark_frameless_dialogs(data_factory):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    original_font = app.font()
+    window = MainWindow(data_factory(), theme_override=True)
+    window.show()
+    QtWidgets.QApplication.processEvents()
+    observed = []
+
+    for button_name, caption, accept_mode in (
+        (
+            "import_button",
+            "Import Run",
+            QtWidgets.QFileDialog.AcceptMode.AcceptOpen,
+        ),
+        (
+            "export_button",
+            "Export Run",
+            QtWidgets.QFileDialog.AcceptMode.AcceptSave,
+        ),
+    ):
+
+        def inspect_and_close_dialog():
+            dialog = QtWidgets.QApplication.activeModalWidget()
+            if isinstance(dialog, ThemedFileDialog):
+                observed.append(
+                    {
+                        "type": type(dialog),
+                        "title": dialog.windowTitle(),
+                        "dark": dialog.property("dark_theme"),
+                        "frameless": bool(
+                            dialog.windowFlags()
+                            & QtCore.Qt.WindowType.FramelessWindowHint
+                        ),
+                        "accept_mode": dialog.browser.acceptMode(),
+                        "native": dialog.browser.testOption(
+                            QtWidgets.QFileDialog.Option.DontUseNativeDialog
+                        ),
+                    }
+                )
+            if isinstance(dialog, QtWidgets.QDialog):
+                dialog.reject()
+
+        QtCore.QTimer.singleShot(0, inspect_and_close_dialog)
+        getattr(window, button_name).click()
+
+    assert observed == [
+        {
+            "type": ThemedFileDialog,
+            "title": "Import Run — Justice Monument Simulator",
+            "dark": True,
+            "frameless": True,
+            "accept_mode": QtWidgets.QFileDialog.AcceptMode.AcceptOpen,
+            "native": True,
+        },
+        {
+            "type": ThemedFileDialog,
+            "title": "Export Run — Justice Monument Simulator",
+            "dark": True,
+            "frameless": True,
+            "accept_mode": QtWidgets.QFileDialog.AcceptMode.AcceptSave,
+            "native": True,
+        },
+    ]
+
+    light_dialog = ThemedFileDialog(
+        "Import Run", Path.cwd(), save=False, dark=False, parent=window
+    )
+    assert light_dialog.property("dark_theme") is False
+    assert "#f7f4ee" in light_dialog.styleSheet()
+    light_dialog.close()
+    light_dialog.deleteLater()
+
+    window.close()
+    window.deleteLater()
+    QtWidgets.QApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
+    QtWidgets.QApplication.processEvents()
+    app.setFont(original_font)
+    app.quit()
 
 
 @pytest.mark.gui

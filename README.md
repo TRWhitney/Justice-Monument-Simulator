@@ -112,6 +112,7 @@ uv run justice-sim-gui --theme dark --ui-scale large --prompt-tour
 
 - Bottom-left buttons toggle theme and UI scale (Auto/Small/Medium/Large).
 - Theme and UI scale persist between runs.
+- Import and export file dialogs follow the selected light or dark theme.
 - Guided tour appears once until dismissed or completed.
 - Hold a resource's `-` or `+` button to adjust it repeatedly at increasing speed.
 - Use the NPC shortcut row's circle-slash button to clear the active offer filter.

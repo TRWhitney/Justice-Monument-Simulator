@@ -1,0 +1,917 @@
+{
+  "snapshots": [
+    {
+      "analysis_version": "encounter_selection_v1",
+      "conclusions": [
+        {
+          "adjusted_p_value": 1.0,
+          "direction": "higher",
+          "evidence": "not detected",
+          "name": "NPC frequency vs uniform eligible offers",
+          "null_mean": 14.02007176950354,
+          "observed": 19.502127659574132
+        },
+        {
+          "adjusted_p_value": 0.014279857201427985,
+          "direction": "higher",
+          "evidence": "tentative",
+          "name": "Offer frequency vs uniform eligible offers",
+          "null_mean": 68.00693614772545,
+          "observed": 113.31707317073196
+        },
+        {
+          "adjusted_p_value": 1.0,
+          "direction": "higher",
+          "evidence": "not detected",
+          "name": "Immediate NPC repeats",
+          "null_mean": 9.39445,
+          "observed": 11.0
+        },
+        {
+          "adjusted_p_value": 0.41289587104128955,
+          "direction": "higher",
+          "evidence": "not detected",
+          "name": "Immediate exact-offer repeats",
+          "null_mean": 1.96064,
+          "observed": 5.0
+        },
+        {
+          "adjusted_p_value": 0.41289587104128955,
+          "direction": "higher",
+          "evidence": "not detected",
+          "name": "Longest NPC streak",
+          "null_mean": 2.98784,
+          "observed": 5.0
+        },
+        {
+          "adjusted_p_value": 1.0,
+          "direction": "lower",
+          "evidence": "not detected",
+          "name": "Five-draw NPC diversity",
+          "null_mean": 4.119912558139535,
+          "observed": 4.034883720930233
+        },
+        {
+          "adjusted_p_value": 1.0,
+          "direction": "lower",
+          "evidence": "not detected",
+          "name": "Lag-one NPC mutual information",
+          "null_mean": 1.201819403296829,
+          "observed": 1.190310788922297
+        },
+        {
+          "adjusted_p_value": 1.0,
+          "direction": "higher",
+          "evidence": "not detected",
+          "name": "Maximum NPC mutual information, lags 1-5",
+          "null_mean": 1.3175816803017346,
+          "observed": 1.383692361808666
+        },
+        {
+          "adjusted_p_value": 1.0,
+          "direction": "higher",
+          "evidence": "not detected",
+          "name": "Within-NPC exact-offer repeats",
+          "null_mean": 15.02354,
+          "observed": 17.0
+        },
+        {
+          "adjusted_p_value": 0.16004839951600486,
+          "direction": "higher",
+          "evidence": "not detected",
+          "name": "NPC dependence on cadence slot",
+          "null_mean": 0.37826026379902106,
+          "observed": 0.5320966059572257
+        },
+        {
+          "adjusted_p_value": 1.0,
+          "direction": "higher",
+          "evidence": "not detected",
+          "name": "Categorical change-point scan",
+          "null_mean": 0.5109707175896472,
+          "observed": 0.5279898573449415
+        },
+        {
+          "adjusted_p_value": 1.0,
+          "direction": "higher",
+          "evidence": "not detected",
+          "name": "NPC distribution differs between runs",
+          "null_mean": 0.1279458420527364,
+          "observed": 0.14871508484918772
+        }
+      ],
+      "counts": {
+        "encounters": 116,
+        "excluded": {
+          "cadence": 22
+        },
+        "log_entries": 123,
+        "manual_adjustments": 7,
+        "ordinary": 94,
+        "runs": 2,
+        "segments": 2
+      },
+      "data_hash": "af3305c46cf2bc40c65c8a670284a047cc734a7d6bf26707e845b012f9ddbe2a",
+      "fingerprint": "cf260d37131f2c7460abeaaa94377adf5ef465f171baab944513a496ebbfb5c3",
+      "frequency": {
+        "all_offers_sensitivity": {
+          "candidate_model": "eligible_all_offers",
+          "incompatible": 0,
+          "incompatible_cases": [],
+          "npc_test": {
+            "direction": "higher",
+            "name": "NPC frequency vs uniform eligible offers",
+            "null_interval": [
+              5.757253384913085,
+              26.687832446808773
+            ],
+            "null_mean": 14.01488203433278,
+            "observed": 23.629545454545756,
+            "p_value": 0.05380946190538095,
+            "tail": "high"
+          },
+          "offer_test": {
+            "direction": "higher",
+            "name": "Offer frequency vs uniform eligible offers",
+            "null_interval": [
+              50.44680851063817,
+              98.59574468085081
+            ],
+            "null_mean": 72.01214234042534,
+            "observed": 128.10638297872308,
+            "p_value": 0.00024999750002499977,
+            "tail": "high"
+          },
+          "top_npc_residuals": [
+            {
+              "expected": 10.301369863013534,
+              "npc_id": "retirement_chester",
+              "observed": 23,
+              "ratio": 2.2327127659574826,
+              "standardized_residual": 4.1928964360847605
+            },
+            {
+              "expected": 14.164383561643561,
+              "npc_id": "little_timmy",
+              "observed": 8,
+              "ratio": 0.5647969052224481,
+              "standardized_residual": -1.7772822340625414
+            },
+            {
+              "expected": 2.5753424657534327,
+              "npc_id": "grumblo",
+              "observed": 5,
+              "ratio": 1.9414893617021216,
+              "standardized_residual": 1.5320225838683796
+            },
+            {
+              "expected": 10.301369863013534,
+              "npc_id": "head_honcho_of_big_biz_llc",
+              "observed": 7,
+              "ratio": 0.6795212765957556,
+              "standardized_residual": -1.0900626117544376
+            },
+            {
+              "expected": 7.726027397260181,
+              "npc_id": "concerned_poppy",
+              "observed": 5,
+              "ratio": 0.6471631205673837,
+              "standardized_residual": -1.0237080609898725
+            },
+            {
+              "expected": 6.438356164383506,
+              "npc_id": "esquire_bored_bean",
+              "observed": 5,
+              "ratio": 0.7765957446808578,
+              "standardized_residual": -0.587335043281353
+            },
+            {
+              "expected": 3.86301369863015,
+              "npc_id": "scripticus",
+              "observed": 3,
+              "ratio": 0.7765957446808484,
+              "standardized_residual": -0.4484014159068184
+            },
+            {
+              "expected": 5.15068493150683,
+              "npc_id": "cool_bird",
+              "observed": 6,
+              "ratio": 1.164893617021281,
+              "standardized_residual": 0.3849224325271309
+            },
+            {
+              "expected": 2.5753424657534327,
+              "npc_id": "ghost",
+              "observed": 2,
+              "ratio": 0.7765957446808486,
+              "standardized_residual": -0.36353078261284216
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "billionaire_chester",
+              "observed": 1,
+              "ratio": 0.7765957446808491,
+              "standardized_residual": -0.25526373512131795
+            }
+          ],
+          "top_offer_residuals": [
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "retirement_chester",
+              "observed": 9,
+              "offer_id": "retirement_chester_retirement_is_important_trust_me_i_d_kno_88267e44",
+              "ratio": 6.989361702127643,
+              "standardized_residual": 6.843499184442875,
+              "title": "Retirement Chester: Coin for Chest"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "grumblo",
+              "observed": 4,
+              "offer_id": "grumblo_me_like_coin_me_collect_coin_you_give_me_871448f0",
+              "ratio": 3.1063829787233965,
+              "standardized_residual": 2.406772359715254,
+              "title": "Grumblo: Mystery Gift"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "head_honcho_of_big_biz_llc",
+              "observed": 4,
+              "offer_id": "head_honcho_of_big_biz_llc_greetings_i_come_to_you_today_seeking_a__55d424ba",
+              "ratio": 3.1063829787233965,
+              "standardized_residual": 2.406772359715254,
+              "title": "Honcho: 15-Day Return"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "little_timmy",
+              "observed": 4,
+              "offer_id": "little_timmy_i_stole_my_fwends_toy_and_he_said_i_am_u_1e3fffc3",
+              "ratio": 3.1063829787233965,
+              "standardized_residual": 2.406772359715254,
+              "title": "Timmy: Toy Bribe"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "retirement_chester",
+              "observed": 4,
+              "offer_id": "retirement_chester_retirement_is_everything_trust_me_i_d_kn_d1759597",
+              "ratio": 3.1063829787233965,
+              "standardized_residual": 2.406772359715254,
+              "title": "Retirement Chester: Vitality Trade"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "retirement_chester",
+              "observed": 4,
+              "offer_id": "retirement_chester_retirement_is_the_key_to_happiness_trust_d9b5599f",
+              "ratio": 3.1063829787233965,
+              "standardized_residual": 2.406772359715254,
+              "title": "Retirement Chester: Pop for Chest"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "esquire_bored_bean",
+              "observed": 3,
+              "offer_id": "esquire_bored_bean_i_have_a_deeeelightful_proposition_for_y_a6fe8b10",
+              "ratio": 2.3297872340425476,
+              "standardized_residual": 1.5194269947697303,
+              "title": "Bored Bean: The Bet"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "fizarre_drink",
+              "observed": 3,
+              "offer_id": "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_38ef5cd7",
+              "ratio": 2.3297872340425476,
+              "standardized_residual": 1.5194269947697303,
+              "title": "Fizarre Drink: Dismissal Juice"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "reanimated_hand",
+              "observed": 3,
+              "offer_id": "reanimated_hand_you_look_richer_than_the_guy_i_just_stol_b9c031da",
+              "ratio": 2.3297872340425476,
+              "standardized_residual": 1.5194269947697303,
+              "title": "Reanimated Hand: Chest Heist"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "retirement_chester",
+              "observed": 3,
+              "offer_id": "retirement_chester_retirement_is_the_number_one_source_of_a_e41347c6",
+              "ratio": 2.3297872340425476,
+              "standardized_residual": 1.5194269947697303,
+              "title": "Retirement Chester: Freebie"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "rupie_slug",
+              "observed": 3,
+              "offer_id": "rupie_slug_hai_you_re_really_popular_can_i_have_som_49a95c45",
+              "ratio": 2.3297872340425476,
+              "standardized_residual": 1.5194269947697303,
+              "title": "Rupie Slug: Pop Swap"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "rupie_slug",
+              "observed": 3,
+              "offer_id": "rupie_slug_hii_you_re_really_tough_looking_can_you__95406a46",
+              "ratio": 2.3297872340425476,
+              "standardized_residual": 1.5194269947697303,
+              "title": "Rupie Slug: Dismissal Snack"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "concerned_poppy",
+              "observed": 0,
+              "offer_id": "concerned_poppy_hey_there_judge_i_just_wanted_to_tell_yo_57f3aeb9",
+              "ratio": 0.0,
+              "standardized_residual": -1.1426091000668421,
+              "title": "Concerned Poppy: Fan Mail"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "concerned_poppy",
+              "observed": 0,
+              "offer_id": "concerned_poppy_uhm_hello_i_was_wondering_if_you_could_s_329ab840",
+              "ratio": 0.0,
+              "standardized_residual": -1.1426091000668421,
+              "title": "Concerned Poppy: Humble Lesson"
+            },
+            {
+              "expected": 1.2876712328767155,
+              "npc_id": "cool_bird",
+              "observed": 0,
+              "offer_id": "cool_bird_sup_heads_you_win_a_bunch_of_coins_tails_9d92610f",
+              "ratio": 0.0,
+              "standardized_residual": -1.1426091000668421,
+              "title": "Cool Bird: Coin Flip"
+            }
+          ],
+          "uniform_npc_minus_offer_bits_per_encounter": -0.21905891523371068,
+          "usable": 94
+        },
+        "reconstructed": {
+          "candidate_model": "eligible_reconstructed",
+          "incompatible": 0,
+          "incompatible_cases": [],
+          "npc_test": {
+            "adjusted_p_value": 1.0,
+            "direction": "higher",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "model_sensitive": false,
+            "name": "NPC frequency vs uniform eligible offers",
+            "null_interval": [
+              5.733333333333438,
+              26.718085106382976
+            ],
+            "null_mean": 14.02007176950354,
+            "observed": 19.502127659574132,
+            "p_value": 0.14655853441465586,
+            "tail": "high"
+          },
+          "offer_test": {
+            "adjusted_p_value": 0.014279857201427985,
+            "direction": "higher",
+            "evidence": "tentative",
+            "leave_one_run_out_consistent": false,
+            "model_sensitive": false,
+            "name": "Offer frequency vs uniform eligible offers",
+            "null_interval": [
+              47.7872340425533,
+              94.08510638297894
+            ],
+            "null_mean": 68.00693614772545,
+            "observed": 113.31707317073196,
+            "p_value": 0.0011899881001189987,
+            "tail": "high"
+          },
+          "top_npc_residuals": [
+            {
+              "expected": 11.058823529411912,
+              "npc_id": "retirement_chester",
+              "observed": 23,
+              "ratio": 2.0797872340425254,
+              "standardized_residual": 3.822711154060081
+            },
+            {
+              "expected": 2.764705882352933,
+              "npc_id": "grumblo",
+              "observed": 5,
+              "ratio": 1.8085106382978775,
+              "standardized_residual": 1.3645601856724354
+            },
+            {
+              "expected": 11.058823529411912,
+              "npc_id": "head_honcho_of_big_biz_llc",
+              "observed": 7,
+              "ratio": 0.6329787234042469,
+              "standardized_residual": -1.2993451705919135
+            },
+            {
+              "expected": 8.294117647058814,
+              "npc_id": "concerned_poppy",
+              "observed": 5,
+              "ratio": 0.6028368794326249,
+              "standardized_residual": -1.197878090403703
+            },
+            {
+              "expected": 11.058823529411912,
+              "npc_id": "little_timmy",
+              "observed": 8,
+              "ratio": 0.7234042553191393,
+              "standardized_residual": -0.9792166503011637
+            },
+            {
+              "expected": 4.147058823529399,
+              "npc_id": "scripticus",
+              "observed": 3,
+              "ratio": 0.7234042553191512,
+              "standardized_residual": -0.5761205547600387
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "ghost",
+              "observed": 2,
+              "ratio": 1.446808510638301,
+              "standardized_residual": 0.5292342743214468
+            },
+            {
+              "expected": 6.91176470588233,
+              "npc_id": "fizarre_drink",
+              "observed": 6,
+              "ratio": 0.8680851063829815,
+              "standardized_residual": -0.360306822606435
+            },
+            {
+              "expected": 6.91176470588233,
+              "npc_id": "reanimated_hand",
+              "observed": 6,
+              "ratio": 0.8680851063829815,
+              "standardized_residual": -0.360306822606435
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "billionaire_chester",
+              "observed": 1,
+              "ratio": 0.7234042553191505,
+              "standardized_residual": -0.3276212174370818
+            }
+          ],
+          "top_offer_residuals": [
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "retirement_chester",
+              "observed": 9,
+              "offer_id": "retirement_chester_retirement_is_important_trust_me_i_d_kno_88267e44",
+              "ratio": 6.510638297872355,
+              "standardized_residual": 6.5272227166311465,
+              "title": "Retirement Chester: Coin for Chest"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "grumblo",
+              "observed": 4,
+              "offer_id": "grumblo_me_like_coin_me_collect_coin_you_give_me_871448f0",
+              "ratio": 2.893617021276602,
+              "standardized_residual": 2.242945257838504,
+              "title": "Grumblo: Mystery Gift"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "head_honcho_of_big_biz_llc",
+              "observed": 4,
+              "offer_id": "head_honcho_of_big_biz_llc_greetings_i_come_to_you_today_seeking_a__55d424ba",
+              "ratio": 2.893617021276602,
+              "standardized_residual": 2.242945257838504,
+              "title": "Honcho: 15-Day Return"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "little_timmy",
+              "observed": 4,
+              "offer_id": "little_timmy_i_stole_my_fwends_toy_and_he_said_i_am_u_1e3fffc3",
+              "ratio": 2.893617021276602,
+              "standardized_residual": 2.242945257838504,
+              "title": "Timmy: Toy Bribe"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "retirement_chester",
+              "observed": 4,
+              "offer_id": "retirement_chester_retirement_is_everything_trust_me_i_d_kn_d1759597",
+              "ratio": 2.893617021276602,
+              "standardized_residual": 2.242945257838504,
+              "title": "Retirement Chester: Vitality Trade"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "retirement_chester",
+              "observed": 4,
+              "offer_id": "retirement_chester_retirement_is_the_key_to_happiness_trust_d9b5599f",
+              "ratio": 2.893617021276602,
+              "standardized_residual": 2.242945257838504,
+              "title": "Retirement Chester: Pop for Chest"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "esquire_bored_bean",
+              "observed": 3,
+              "offer_id": "esquire_bored_bean_i_have_a_deeeelightful_proposition_for_y_a6fe8b10",
+              "ratio": 2.170212765957452,
+              "standardized_residual": 1.3860897660799754,
+              "title": "Bored Bean: The Bet"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "fizarre_drink",
+              "observed": 3,
+              "offer_id": "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_38ef5cd7",
+              "ratio": 2.170212765957452,
+              "standardized_residual": 1.3860897660799754,
+              "title": "Fizarre Drink: Dismissal Juice"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "reanimated_hand",
+              "observed": 3,
+              "offer_id": "reanimated_hand_you_look_richer_than_the_guy_i_just_stol_b9c031da",
+              "ratio": 2.170212765957452,
+              "standardized_residual": 1.3860897660799754,
+              "title": "Reanimated Hand: Chest Heist"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "retirement_chester",
+              "observed": 3,
+              "offer_id": "retirement_chester_retirement_is_the_number_one_source_of_a_e41347c6",
+              "ratio": 2.170212765957452,
+              "standardized_residual": 1.3860897660799754,
+              "title": "Retirement Chester: Freebie"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "rupie_slug",
+              "observed": 3,
+              "offer_id": "rupie_slug_hai_you_re_really_popular_can_i_have_som_49a95c45",
+              "ratio": 2.170212765957452,
+              "standardized_residual": 1.3860897660799754,
+              "title": "Rupie Slug: Pop Swap"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "rupie_slug",
+              "observed": 3,
+              "offer_id": "rupie_slug_hii_you_re_really_tough_looking_can_you__95406a46",
+              "ratio": 2.170212765957452,
+              "standardized_residual": 1.3860897660799754,
+              "title": "Rupie Slug: Dismissal Snack"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "concerned_poppy",
+              "observed": 0,
+              "offer_id": "concerned_poppy_hey_there_judge_i_just_wanted_to_tell_yo_57f3aeb9",
+              "ratio": 0.0,
+              "standardized_residual": -1.1844767091956103,
+              "title": "Concerned Poppy: Fan Mail"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "concerned_poppy",
+              "observed": 0,
+              "offer_id": "concerned_poppy_uhm_hello_i_was_wondering_if_you_could_s_329ab840",
+              "ratio": 0.0,
+              "standardized_residual": -1.1844767091956103,
+              "title": "Concerned Poppy: Humble Lesson"
+            },
+            {
+              "expected": 1.3823529411764675,
+              "npc_id": "cool_bird",
+              "observed": 0,
+              "offer_id": "cool_bird_sup_heads_you_win_a_bunch_of_coins_tails_9d92610f",
+              "ratio": 0.0,
+              "standardized_residual": -1.1844767091956103,
+              "title": "Cool Bird: Coin Flip"
+            }
+          ],
+          "uniform_npc_minus_offer_bits_per_encounter": -0.24391963899599198,
+          "usable": 94
+        }
+      },
+      "order": {
+        "observed": {
+          "cadence_mi": 0.5320966059572257,
+          "change_point": 0.5279898573449415,
+          "lag_one_mi": 1.190310788922297,
+          "longest_npc_streak": 5.0,
+          "max_lag_mi": 1.383692361808666,
+          "npc_repeats": 11.0,
+          "offer_repeats": 5.0,
+          "run_mi": 0.14871508484918772,
+          "window_diversity": 4.034883720930233,
+          "within_npc_offer_repeats": 17.0
+        },
+        "tests": [
+          {
+            "adjusted_p_value": 1.0,
+            "direction": "higher",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "name": "Immediate NPC repeats",
+            "null_interval": [
+              5.0,
+              15.0
+            ],
+            "null_mean": 9.39445,
+            "observed": 11.0,
+            "p_value": 0.5704942950570494,
+            "tail": "two-sided"
+          },
+          {
+            "adjusted_p_value": 0.41289587104128955,
+            "direction": "higher",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "name": "Immediate exact-offer repeats",
+            "null_interval": [
+              0.0,
+              5.0
+            ],
+            "null_mean": 1.96064,
+            "observed": 5.0,
+            "p_value": 0.04217957820421796,
+            "tail": "two-sided"
+          },
+          {
+            "adjusted_p_value": 0.41289587104128955,
+            "direction": "higher",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "name": "Longest NPC streak",
+            "null_interval": [
+              2.0,
+              5.0
+            ],
+            "null_mean": 2.98784,
+            "observed": 5.0,
+            "p_value": 0.04128958710412896,
+            "tail": "two-sided"
+          },
+          {
+            "adjusted_p_value": 1.0,
+            "direction": "lower",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "name": "Five-draw NPC diversity",
+            "null_interval": [
+              3.895348837209302,
+              4.325581395348837
+            ],
+            "null_mean": 4.119912558139535,
+            "observed": 4.034883720930233,
+            "p_value": 0.4616453835461645,
+            "tail": "two-sided"
+          },
+          {
+            "adjusted_p_value": 1.0,
+            "direction": "lower",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "name": "Lag-one NPC mutual information",
+            "null_interval": [
+              1.0685379254582037,
+              1.3480711327963828
+            ],
+            "null_mean": 1.201819403296829,
+            "observed": 1.190310788922297,
+            "p_value": 0.5536644633553665,
+            "tail": "high"
+          },
+          {
+            "adjusted_p_value": 1.0,
+            "direction": "higher",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "name": "Maximum NPC mutual information, lags 1-5",
+            "null_interval": [
+              1.2152522621681339,
+              1.4395113010957235
+            ],
+            "null_mean": 1.3175816803017346,
+            "observed": 1.383692361808666,
+            "p_value": 0.12616873831261688,
+            "tail": "high"
+          },
+          {
+            "adjusted_p_value": 1.0,
+            "direction": "higher",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "name": "Within-NPC exact-offer repeats",
+            "null_interval": [
+              10.0,
+              20.0
+            ],
+            "null_mean": 15.02354,
+            "observed": 17.0,
+            "p_value": 0.5408045919540805,
+            "tail": "two-sided"
+          },
+          {
+            "adjusted_p_value": 0.16004839951600486,
+            "direction": "higher",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "name": "NPC dependence on cadence slot",
+            "null_interval": [
+              0.25808207543157724,
+              0.5157716342243855
+            ],
+            "null_mean": 0.37826026379902106,
+            "observed": 0.5320966059572257,
+            "p_value": 0.014549854501454986,
+            "tail": "high"
+          },
+          {
+            "adjusted_p_value": 1.0,
+            "direction": "higher",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "name": "Categorical change-point scan",
+            "null_interval": [
+              0.36312843298603636,
+              0.710941625795327
+            ],
+            "null_mean": 0.5109707175896472,
+            "observed": 0.5279898573449415,
+            "p_value": 0.3839561604383956,
+            "tail": "high"
+          },
+          {
+            "adjusted_p_value": 1.0,
+            "direction": "higher",
+            "evidence": "not detected",
+            "leave_one_run_out_consistent": false,
+            "name": "NPC distribution differs between runs",
+            "null_interval": [
+              0.05801998077742861,
+              0.22194420209736745
+            ],
+            "null_mean": 0.1279458420527364,
+            "observed": 0.14871508484918772,
+            "p_value": 0.28684713152868474,
+            "tail": "high"
+          }
+        ]
+      },
+      "recorded_at": "2026-08-08T02:06:22.706449+00:00",
+      "resamples": 100000,
+      "runs": [
+        {
+          "encounters": 79,
+          "log_entries": 84,
+          "manual_adjustments": 5,
+          "npc_counts": {
+            "concerned_poppy": 4,
+            "cool_bird": 4,
+            "esquire_bored_bean": 4,
+            "fizarre_drink": 3,
+            "ghost": 1,
+            "grumblo": 5,
+            "head_honcho_of_big_biz_llc": 5,
+            "little_timmy": 7,
+            "mister_bribe": 5,
+            "reanimated_hand": 5,
+            "retirement_chester": 17,
+            "rupie_slug": 2,
+            "scripticus": 2
+          },
+          "npc_repeats": 9,
+          "offer_repeats": 4,
+          "ordinary": 64,
+          "run_id": "run-5c3d26613f",
+          "segments": 1,
+          "source_hash": "5c3d26613fb58c6e7451e68af11610bfc408792402f98a86be47bd439b4308bd",
+          "warnings": []
+        },
+        {
+          "encounters": 37,
+          "log_entries": 39,
+          "manual_adjustments": 2,
+          "npc_counts": {
+            "billionaire_chester": 1,
+            "chippy": 1,
+            "concerned_poppy": 1,
+            "cool_bird": 2,
+            "esquire_bored_bean": 1,
+            "fizarre_drink": 3,
+            "ghost": 1,
+            "head_honcho_of_big_biz_llc": 2,
+            "little_timmy": 1,
+            "mister_bribe": 3,
+            "reanimated_hand": 1,
+            "retirement_chester": 6,
+            "rupie_slug": 6,
+            "scripticus": 1
+          },
+          "npc_repeats": 2,
+          "offer_repeats": 1,
+          "ordinary": 30,
+          "run_id": "run-509d0970f9",
+          "segments": 1,
+          "source_hash": "509d0970f9c97fa3ebc47007b54501450c223604cbd1218a9235bd5109ceae81",
+          "warnings": []
+        }
+      ],
+      "seed": 0,
+      "source_hashes": [
+        "509d0970f9c97fa3ebc47007b54501450c223604cbd1218a9235bd5109ceae81",
+        "5c3d26613fb58c6e7451e68af11610bfc408792402f98a86be47bd439b4308bd"
+      ],
+      "top_transitions": [
+        {
+          "count": 4,
+          "from": "retirement_chester",
+          "to": "retirement_chester"
+        },
+        {
+          "count": 3,
+          "from": "retirement_chester",
+          "to": "rupie_slug"
+        },
+        {
+          "count": 3,
+          "from": "retirement_chester",
+          "to": "cool_bird"
+        },
+        {
+          "count": 3,
+          "from": "head_honcho_of_big_biz_llc",
+          "to": "retirement_chester"
+        },
+        {
+          "count": 3,
+          "from": "rupie_slug",
+          "to": "retirement_chester"
+        },
+        {
+          "count": 3,
+          "from": "retirement_chester",
+          "to": "mister_bribe"
+        },
+        {
+          "count": 3,
+          "from": "retirement_chester",
+          "to": "concerned_poppy"
+        },
+        {
+          "count": 2,
+          "from": "mister_bribe",
+          "to": "retirement_chester"
+        },
+        {
+          "count": 2,
+          "from": "retirement_chester",
+          "to": "ghost"
+        },
+        {
+          "count": 2,
+          "from": "ghost",
+          "to": "retirement_chester"
+        },
+        {
+          "count": 2,
+          "from": "mister_bribe",
+          "to": "reanimated_hand"
+        },
+        {
+          "count": 2,
+          "from": "reanimated_hand",
+          "to": "retirement_chester"
+        },
+        {
+          "count": 2,
+          "from": "little_timmy",
+          "to": "rupie_slug"
+        },
+        {
+          "count": 2,
+          "from": "concerned_poppy",
+          "to": "fizarre_drink"
+        },
+        {
+          "count": 2,
+          "from": "fizarre_drink",
+          "to": "little_timmy"
+        }
+      ],
+      "warnings": []
+    }
+  ],
+  "version": "encounter_selection_history_v1"
+}

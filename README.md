@@ -169,6 +169,28 @@ The simulation methodology and evidence behind the tuned recommendation rules
 are recorded in
 [Suggested Rules Simulation Analysis](docs/suggested-rules-analysis.html).
 
+## Encounter Selection Research
+
+Saved runs placed in the ignored `scratch/` directory can be checked for
+encounter-frequency and ordering patterns without changing the simulator's
+encounter model. A normal run prints a temporary summary:
+
+```bash
+uv run python scripts/analyze_encounter_runs.py
+```
+
+After adding new runs, explicitly record a deduplicated aggregate snapshot and
+regenerate the tracked report with:
+
+```bash
+uv run python scripts/analyze_encounter_runs.py --record
+```
+
+The methodology, limitations, current evidence, and prior snapshots are in the
+[Encounter Selection Analysis](docs/encounter-selection-analysis.html). Raw run
+files remain local; recorded results contain content hashes and aggregate
+statistics only.
+
 ## License
 
 This project is released into the public domain under the

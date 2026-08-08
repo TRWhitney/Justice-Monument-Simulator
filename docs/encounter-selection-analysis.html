@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Encounter Selection Analysis</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; line-height: 1.5; }
+    body { margin: 0 auto; max-width: 78rem; padding: 2rem; }
+    h1, h2 { line-height: 1.2; }
+    .callout { border-left: .35rem solid #4d8ed8; padding: .3rem 1rem; background: color-mix(in srgb, #4d8ed8 9%, transparent); }
+    .warning { border-color: #d99728; background: color-mix(in srgb, #d99728 10%, transparent); }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .8rem; margin: 1rem 0; }
+    .card { border: 1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius: .5rem; padding: .8rem; }
+    .card strong { display: block; font-size: 1.7rem; }
+    .table-wrap { max-width: 100%; overflow-x: auto; margin: 1rem 0 2rem; }
+    table { border-collapse: collapse; min-width: 100%; width: max-content; }
+    th, td { border: 1px solid color-mix(in srgb, currentColor 24%, transparent); padding: .45rem .65rem; text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+    code { background: color-mix(in srgb, currentColor 10%, transparent); border-radius: .2rem; padding: .1rem .25rem; }
+    code.hash { overflow-wrap: anywhere; word-break: break-all; }
+    .status { border-radius: 999px; padding: .1rem .5rem; background: color-mix(in srgb, currentColor 10%, transparent); }
+    .status.tentative { background: color-mix(in srgb, #d99728 25%, transparent); }
+    .status.repeated { background: color-mix(in srgb, #29966f 25%, transparent); }
+    .status.model-sensitive { background: color-mix(in srgb, #bc5caa 25%, transparent); }
+    .bar-row { display: grid; grid-template-columns: minmax(12rem, 1fr) 3fr 3rem; gap: .6rem; align-items: center; margin: .3rem 0; }
+    .bar { height: .8rem; border-radius: 1rem; background: #4d8ed8; width: calc(var(--width) * 100%); min-width: 2px; }
+    @media (max-width: 42rem) { body { padding: 1rem; } .bar-row { grid-template-columns: 1fr 2fr 2rem; font-size: .8rem; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Encounter Selection Analysis</h1>
+  <div class="callout">
+    <p><strong>Research status:</strong> this report records evidence and hypotheses only. It does not change encounter selection in the simulator. With 2 runs, no result can be classified above tentative.</p>
+  </div>
+  <div class="cards">
+    <div class="card"><strong>2</strong>runs</div>
+    <div class="card"><strong>116</strong>ordered encounters</div>
+    <div class="card"><strong>94</strong>ordinary selections</div>
+    <div class="card"><strong>7</strong>manual adjustments</div>
+  </div>
+
+  <h2>Current findings</h2>
+  <p>Adjusted p-values use Holm correction across the predefined primary tests. “Not detected” means this dataset did not distinguish the statistic from its null model; it is not proof of randomness.</p>
+  <div class="callout">
+    <p><strong>Current interpretation:</strong> Offer frequency vs uniform eligible offers (tentative) The direct model comparison currently favors uniform eligible-offer selection. The largest descriptive NPC deviation is <code>retirement_chester</code>, observed 23 times versus 11.06 expected under uniform eligible-offer selection; the adjusted NPC-level omnibus test does not currently establish that as a replicated weight difference.</p>
+  </div>
+  <div class="table-wrap"><table aria-label="Current statistical findings">
+    <thead><tr><th>Test</th><th>Evidence</th><th>Observed</th><th>Null mean</th><th>Direction</th><th>Adjusted p</th></tr></thead>
+    <tbody><tr><td>NPC frequency vs uniform eligible offers</td><td><span class="status not-detected">not detected</span></td><td>19.5021</td><td>14.0201</td><td>higher</td><td>1.0000</td></tr><tr><td>Offer frequency vs uniform eligible offers</td><td><span class="status tentative">tentative</span></td><td>113.3171</td><td>68.0069</td><td>higher</td><td>0.0143</td></tr><tr><td>Immediate NPC repeats</td><td><span class="status not-detected">not detected</span></td><td>11.0000</td><td>9.3945</td><td>higher</td><td>1.0000</td></tr><tr><td>Immediate exact-offer repeats</td><td><span class="status not-detected">not detected</span></td><td>5.0000</td><td>1.9606</td><td>higher</td><td>0.4129</td></tr><tr><td>Longest NPC streak</td><td><span class="status not-detected">not detected</span></td><td>5.0000</td><td>2.9878</td><td>higher</td><td>0.4129</td></tr><tr><td>Five-draw NPC diversity</td><td><span class="status not-detected">not detected</span></td><td>4.0349</td><td>4.1199</td><td>lower</td><td>1.0000</td></tr><tr><td>Lag-one NPC mutual information</td><td><span class="status not-detected">not detected</span></td><td>1.1903</td><td>1.2018</td><td>lower</td><td>1.0000</td></tr><tr><td>Maximum NPC mutual information, lags 1-5</td><td><span class="status not-detected">not detected</span></td><td>1.3837</td><td>1.3176</td><td>higher</td><td>1.0000</td></tr><tr><td>Within-NPC exact-offer repeats</td><td><span class="status not-detected">not detected</span></td><td>17.0000</td><td>15.0235</td><td>higher</td><td>1.0000</td></tr><tr><td>NPC dependence on cadence slot</td><td><span class="status not-detected">not detected</span></td><td>0.5321</td><td>0.3783</td><td>higher</td><td>0.1600</td></tr><tr><td>Categorical change-point scan</td><td><span class="status not-detected">not detected</span></td><td>0.5280</td><td>0.5110</td><td>higher</td><td>1.0000</td></tr><tr><td>NPC distribution differs between runs</td><td><span class="status not-detected">not detected</span></td><td>0.1487</td><td>0.1279</td><td>higher</td><td>1.0000</td></tr></tbody>
+  </table></div>
+
+  <h2>Observed ordinary encounters by NPC</h2>
+  <div aria-label="NPC frequency chart"><div class="bar-row"><span>retirement_chester</span><div class="bar" style="--width:1.0000"></div><strong>23</strong></div><div class="bar-row"><span>little_timmy</span><div class="bar" style="--width:0.3478"></div><strong>8</strong></div><div class="bar-row"><span>mister_bribe</span><div class="bar" style="--width:0.3478"></div><strong>8</strong></div><div class="bar-row"><span>rupie_slug</span><div class="bar" style="--width:0.3478"></div><strong>8</strong></div><div class="bar-row"><span>head_honcho_of_big_biz_llc</span><div class="bar" style="--width:0.3043"></div><strong>7</strong></div><div class="bar-row"><span>cool_bird</span><div class="bar" style="--width:0.2609"></div><strong>6</strong></div><div class="bar-row"><span>fizarre_drink</span><div class="bar" style="--width:0.2609"></div><strong>6</strong></div><div class="bar-row"><span>reanimated_hand</span><div class="bar" style="--width:0.2609"></div><strong>6</strong></div><div class="bar-row"><span>concerned_poppy</span><div class="bar" style="--width:0.2174"></div><strong>5</strong></div><div class="bar-row"><span>esquire_bored_bean</span><div class="bar" style="--width:0.2174"></div><strong>5</strong></div><div class="bar-row"><span>grumblo</span><div class="bar" style="--width:0.2174"></div><strong>5</strong></div><div class="bar-row"><span>scripticus</span><div class="bar" style="--width:0.1304"></div><strong>3</strong></div><div class="bar-row"><span>ghost</span><div class="bar" style="--width:0.0870"></div><strong>2</strong></div><div class="bar-row"><span>billionaire_chester</span><div class="bar" style="--width:0.0435"></div><strong>1</strong></div><div class="bar-row"><span>chippy</span><div class="bar" style="--width:0.0435"></div><strong>1</strong></div></div>
+
+  <h2>Largest offer-frequency deviations</h2>
+  <p>These rows explain the offer-level discrepancy and are descriptive follow-up hypotheses, not separately tested discoveries.</p>
+  <div class="table-wrap"><table aria-label="Largest offer frequency deviations"><thead><tr><th>Offer</th><th>NPC</th><th>Observed</th><th>Expected</th><th>Ratio</th><th>Residual</th></tr></thead><tbody><tr><td>Retirement Chester: Coin for Chest</td><td>retirement_chester</td><td>9</td><td>1.38</td><td>6.51×</td><td>+6.53</td></tr><tr><td>Grumblo: Mystery Gift</td><td>grumblo</td><td>4</td><td>1.38</td><td>2.89×</td><td>+2.24</td></tr><tr><td>Honcho: 15-Day Return</td><td>head_honcho_of_big_biz_llc</td><td>4</td><td>1.38</td><td>2.89×</td><td>+2.24</td></tr><tr><td>Timmy: Toy Bribe</td><td>little_timmy</td><td>4</td><td>1.38</td><td>2.89×</td><td>+2.24</td></tr><tr><td>Retirement Chester: Vitality Trade</td><td>retirement_chester</td><td>4</td><td>1.38</td><td>2.89×</td><td>+2.24</td></tr><tr><td>Retirement Chester: Pop for Chest</td><td>retirement_chester</td><td>4</td><td>1.38</td><td>2.89×</td><td>+2.24</td></tr><tr><td>Bored Bean: The Bet</td><td>esquire_bored_bean</td><td>3</td><td>1.38</td><td>2.17×</td><td>+1.39</td></tr><tr><td>Fizarre Drink: Dismissal Juice</td><td>fizarre_drink</td><td>3</td><td>1.38</td><td>2.17×</td><td>+1.39</td></tr><tr><td>Reanimated Hand: Chest Heist</td><td>reanimated_hand</td><td>3</td><td>1.38</td><td>2.17×</td><td>+1.39</td></tr><tr><td>Retirement Chester: Freebie</td><td>retirement_chester</td><td>3</td><td>1.38</td><td>2.17×</td><td>+1.39</td></tr></tbody></table></div>
+
+  <h2>Runs</h2>
+  <div class="table-wrap"><table aria-label="Run summaries">
+    <thead><tr><th>Content-derived ID</th><th>Encounters</th><th>Ordinary</th><th>Adjustments</th><th>Segments</th><th>NPC repeats</th><th>Offer repeats</th></tr></thead>
+    <tbody><tr><td><code>run-5c3d26613f</code></td><td>79</td><td>64</td><td>5</td><td>1</td><td>9</td><td>4</td></tr><tr><td><code>run-509d0970f9</code></td><td>37</td><td>30</td><td>2</td><td>1</td><td>2</td><td>1</td></tr></tbody>
+  </table></div>
+
+  <h2>Most frequent ordinary transitions</h2>
+  <div class="table-wrap"><table aria-label="Top NPC transitions"><thead><tr><th>From</th><th>To</th><th>Count</th></tr></thead><tbody><tr><td>retirement_chester</td><td>retirement_chester</td><td>4</td></tr><tr><td>retirement_chester</td><td>rupie_slug</td><td>3</td></tr><tr><td>retirement_chester</td><td>cool_bird</td><td>3</td></tr><tr><td>head_honcho_of_big_biz_llc</td><td>retirement_chester</td><td>3</td></tr><tr><td>rupie_slug</td><td>retirement_chester</td><td>3</td></tr><tr><td>retirement_chester</td><td>mister_bribe</td><td>3</td></tr><tr><td>retirement_chester</td><td>concerned_poppy</td><td>3</td></tr><tr><td>mister_bribe</td><td>retirement_chester</td><td>2</td></tr><tr><td>retirement_chester</td><td>ghost</td><td>2</td></tr><tr><td>ghost</td><td>retirement_chester</td><td>2</td></tr><tr><td>mister_bribe</td><td>reanimated_hand</td><td>2</td></tr><tr><td>reanimated_hand</td><td>retirement_chester</td><td>2</td></tr><tr><td>little_timmy</td><td>rupie_slug</td><td>2</td></tr><tr><td>concerned_poppy</td><td>fizarre_drink</td><td>2</td></tr><tr><td>fizarre_drink</td><td>little_timmy</td><td>2</td></tr></tbody></table></div>
+
+  <h2>Eligibility sensitivity</h2>
+  <p>The reconstructed-state analysis used 94 ordinary encounters and excluded 0 that the current data model considered ineligible. The condition-free sensitivity analysis used 94 and excluded 0.</p>
+  <p>A positive NPC-minus-offer log-score difference favors selecting an NPC uniformly before selecting one of its offers. Reconstructed difference: <strong>-0.2439 bits/encounter</strong>; condition-free difference: <strong>-0.2191 bits/encounter</strong>.</p>
+
+  <h2>Data-quality notes</h2>
+  <div class="callout warning">
+    <p>Offer identity, order, case index, and run boundaries are treated as authoritative. Resources, counters, flags, and eligibility are sensitivity evidence because the game and simulator model may have drifted. Game version and capture context are unknown.</p>
+  </div>
+  <p>No parser or sequence-integrity warnings were recorded.</p>
+
+  <h2>Method</h2>
+  <p>Manual adjustments and known cadence, forced, or override encounters are retained in totals but excluded from ordinary-selector tests. Order-only tests shuffle observed NPC/offer pairs within each run segment, preserving marginal counts and preventing transitions across discontinuities. Frequency tests simulate independent choices from each case’s candidate set.</p>
+  <p>Primary statistics cover NPC and offer goodness of fit, immediate repetition, longest streak, five-draw diversity, lagged mutual information, within-NPC offer repetition, cadence-slot association, run heterogeneity, and a categorical change-point scan. Recorded analyses use 100,000 deterministic resamples with seed 0. Monte Carlo p-values use <code>(extreme + 1) / (resamples + 1)</code>.</p>
+  <p>Research basis: <a href="https://www.itl.nist.gov/div898/handbook/ppc/section2/ppc24.htm">NIST on sparse categorical goodness of fit</a>; <a href="https://gksmyth.github.io/pubs/PermPValuesPreprint.pdf">Phipson and Smyth on valid permutation p-values</a>; <a href="https://doi.org/10.1016/j.physa.2012.12.017">Papapetrou and Kugiumtzis on mutual-information randomization for categorical sequences</a>; and <a href="https://www.itl.nist.gov/div898/handbook/eda/section3/eda35d.htm">NIST on randomness diagnostics</a>.</p>
+
+  <h2>Evidence labels</h2>
+  <ul>
+    <li><strong>Not detected:</strong> Holm-adjusted p &gt; 0.05.</li>
+    <li><strong>Tentative:</strong> adjusted p ≤ 0.05 without at least three independently consistent runs.</li>
+    <li><strong>Repeated:</strong> at least three runs, adjusted p ≤ 0.05, and consistent leave-one-run-out direction.</li>
+    <li><strong>Model-sensitive:</strong> reconstructed and condition-free eligibility analyses disagree.</li>
+  </ul>
+
+  <h2>Snapshot history</h2>
+  <div class="table-wrap"><table aria-label="Analysis history"><thead><tr><th>Recorded</th><th>Fingerprint</th><th>Runs</th><th>Ordinary</th><th>Signals</th></tr></thead><tbody><tr><td>2026-08-08T02:06:22.706449+00:00</td><td><code>cf260d37131f</code></td><td>2</td><td>94</td><td>1</td></tr></tbody></table></div>
+  <p>Analysis version <code>encounter_selection_v1</code>; data SHA-256 <code class="hash">af3305c46cf2bc40c65c8a670284a047cc734a7d6bf26707e845b012f9ddbe2a</code>; snapshot <code class="hash">cf260d37131f2c7460abeaaa94377adf5ef465f171baab944513a496ebbfb5c3</code>.</p>
+</main>
+</body>
+</html>

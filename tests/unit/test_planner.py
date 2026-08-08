@@ -278,7 +278,7 @@ def test_planner_runs_rollouts_for_required_action(data_dict_factory):
 
 
 @pytest.mark.unit
-def test_planner_runs_rollouts_for_strict_upside(data_factory):
+def test_planner_short_circuits_rollouts_for_strict_upside(data_factory):
     data = data_factory()
     planner = RolloutPlanner.from_defaults(data)
     planner.config = PlannerConfig(
@@ -297,7 +297,7 @@ def test_planner_runs_rollouts_for_strict_upside(data_factory):
     recommendation = planner.recommend(state, offer, progress=progress_calls.append)
 
     assert recommendation.best_action == "approve"
-    assert progress_calls
+    assert progress_calls == []
 
 
 @pytest.mark.unit
@@ -374,7 +374,7 @@ def test_planner_short_circuits_rollouts_for_game_over_outcome(data_dict_factory
 
 
 @pytest.mark.unit
-def test_planner_runs_rollouts_for_random_sure_thing_upside(data_dict_factory):
+def test_planner_short_circuits_for_random_sure_thing_upside(data_dict_factory):
     data_dict = data_dict_factory()
     data_dict["offers"][0]["actions_available"] = ["approve", "reject"]
     data_dict["offers"][0]["approve"] = {
@@ -430,7 +430,115 @@ def test_planner_runs_rollouts_for_random_sure_thing_upside(data_dict_factory):
     recommendation = planner.recommend(state, offer, progress=progress_calls.append)
 
     assert recommendation.best_action == "approve"
-    assert progress_calls
+    assert progress_calls == []
+
+
+@pytest.mark.unit
+def test_planner_never_recommends_an_unaffordable_action(data_dict_factory):
+    data_dict = data_dict_factory()
+    offer_dict = data_dict["offers"][0]
+    offer_dict["actions_available"] = ["approve", "reject"]
+    coin_cost = {
+        "type": "add_resource",
+        "params": {"resource": "coins", "amount": -10},
+    }
+    offer_dict["approve"] = {"effects": [coin_cost]}
+    offer_dict["reject"] = {"effects": [coin_cost]}
+    data = JusticeData.from_dict(data_dict)
+    planner = RolloutPlanner.from_defaults(data)
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+
+    recommendation = planner.recommend(state, data.offers_by_id["offer1"])
+
+    assert recommendation.best_action is None
+    assert all(
+        score.expected_utility == float("-inf")
+        for score in recommendation.action_scores
+    )
+
+
+@pytest.mark.unit
+def test_planner_keeps_json_insufficient_funds_exception(data_dict_factory):
+    data_dict = data_dict_factory()
+    offer_dict = data_dict["offers"][0]
+    offer_dict["actions_available"] = ["approve", "reject"]
+    offer_dict["allow_insufficient_funds"] = True
+    offer_dict["approve"] = {
+        "effects": [
+            {
+                "type": "add_resource",
+                "params": {"resource": "coins", "amount": -10},
+            },
+            {
+                "type": "add_resource",
+                "params": {"resource": "retirement_chests", "amount": 1},
+            },
+        ]
+    }
+    offer_dict["reject"] = {"effects": []}
+    data = JusticeData.from_dict(data_dict)
+    planner = RolloutPlanner.from_defaults(data)
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    progress_calls: list[int] = []
+
+    recommendation = planner.recommend(
+        state, data.offers_by_id["offer1"], progress=progress_calls.append
+    )
+
+    assert recommendation.best_action == "approve"
+    assert progress_calls == []
+
+
+@pytest.mark.unit
+def test_planner_keeps_reject_popularity_exception(data_dict_factory):
+    data_dict = data_dict_factory()
+    offer_dict = data_dict["offers"][0]
+    offer_dict["actions_available"] = ["approve", "reject"]
+    offer_dict["approve"] = {"effects": []}
+    offer_dict["reject"] = {
+        "effects": [
+            {
+                "type": "add_resource",
+                "params": {"resource": "pop", "amount": -10},
+            },
+            {
+                "type": "add_resource",
+                "params": {"resource": "coins", "amount": 1},
+            },
+        ]
+    }
+    data = JusticeData.from_dict(data_dict)
+    planner = RolloutPlanner.from_defaults(data)
+    state = GameState(
+        case_index=1,
+        coins=0,
+        pop=0,
+        mh=3,
+        dismissals=0,
+        retirement_chests=0,
+    )
+    progress_calls: list[int] = []
+
+    recommendation = planner.recommend(
+        state, data.offers_by_id["offer1"], progress=progress_calls.append
+    )
+
+    assert recommendation.best_action == "reject"
+    assert progress_calls == []
 
 
 @pytest.mark.unit

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from math import isfinite, sqrt
+import re
 from statistics import mean, variance
 from typing import Callable
 
@@ -69,7 +71,7 @@ class ActionScore:
 
 @dataclass(frozen=True)
 class PlannerRecommendation:
-    best_action: str
+    best_action: str | None
     action_scores: tuple[ActionScore, ...]
 
 
@@ -89,6 +91,9 @@ class RolloutPlanner:
         self.cache = ValueCache()
         self.weights = weights_for_preset(config.risk_preset)
         self.suggested_rules = suggested_rules or SuggestedRules.empty()
+        self._referenced_counters = _referenced_counter_names(
+            data, self.suggested_rules
+        )
 
     @classmethod
     def from_defaults(
@@ -114,6 +119,11 @@ class RolloutPlanner:
         progress: Callable[[int], None] | None = None,
     ) -> PlannerRecommendation:
         eligible_actions = self._eligible_actions(state, offer)
+        if not eligible_actions:
+            return PlannerRecommendation(
+                best_action=None,
+                action_scores=tuple(self._deterministic_action_scores(state, offer)),
+            )
         fast_path = self._fast_path_recommendation(
             state, offer, eligible_actions=eligible_actions
         )
@@ -155,7 +165,7 @@ class RolloutPlanner:
         eligible_scores = [
             score for score in scores if score.action in eligible_actions
         ]
-        best = max(eligible_scores or scores, key=lambda s: s.expected_utility)
+        best = max(eligible_scores, key=lambda s: s.expected_utility)
         return PlannerRecommendation(
             best_action=best.action, action_scores=tuple(scores)
         )
@@ -167,18 +177,25 @@ class RolloutPlanner:
         *,
         eligible_actions: tuple[str, ...],
     ) -> PlannerRecommendation | None:
-        if not self._is_terminal_offer_state(state, offer):
-            return None
         scores = self._deterministic_action_scores(state, offer)
         if not scores:
             return None
         scores = self._apply_action_biases(state, offer, scores)
-        eligible_scores = [
-            score for score in scores if score.action in eligible_actions
-        ]
-        best = max(eligible_scores or scores, key=lambda score: score.expected_utility)
+        if self._is_terminal_offer_state(state, offer):
+            eligible_scores = [
+                score for score in scores if score.action in eligible_actions
+            ]
+            best = max(eligible_scores, key=lambda score: score.expected_utility)
+            return PlannerRecommendation(
+                best_action=best.action, action_scores=tuple(scores)
+            )
+        upside_action = self._guaranteed_upside_action(
+            state, offer, eligible_actions=eligible_actions
+        )
+        if upside_action is None:
+            return None
         return PlannerRecommendation(
-            best_action=best.action, action_scores=tuple(scores)
+            best_action=upside_action, action_scores=tuple(scores)
         )
 
     def _scores_need_more_samples(
@@ -360,14 +377,20 @@ class RolloutPlanner:
             if triggered.ended or triggered.mh <= 0:
                 return triggered
             action = self._select_action(current, offer, rng)
+            if action is None:
+                break
             try:
                 current, _ = apply_action(current, offer, action, self.data, rng)
             except ActionNotAllowed:
                 break
         return current
 
-    def _select_action(self, state: GameState, offer: OfferSpec, rng: Rng) -> str:
+    def _select_action(
+        self, state: GameState, offer: OfferSpec, rng: Rng
+    ) -> str | None:
         actions = self._eligible_actions(state, offer)
+        if not actions:
+            return None
         best_action = actions[0]
         best_value = float("-inf")
         action_biases = self._biases_for_offer(state, offer)
@@ -406,12 +429,104 @@ class RolloutPlanner:
             for action in base_actions
             if self._action_is_possible(state, offer, action)
         )
-        return (
-            possible_actions
-            or possible_base_actions
-            or constrained_actions
-            or base_actions
+        return possible_actions or possible_base_actions
+
+    def _guaranteed_upside_action(
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        *,
+        eligible_actions: tuple[str, ...],
+    ) -> str | None:
+        profiles: dict[str, tuple[str, tuple]] = {}
+        for action in eligible_actions:
+            if not self._action_is_possible(state, offer, action):
+                continue
+            profile = self._action_outcome_profile(state, offer, action)
+            if profile is not None:
+                profiles[action] = profile
+        if len(profiles) < 2:
+            return None
+        if len({signature for _, signature in profiles.values()}) != 1:
+            return None
+        positives = [
+            action for action, (profile, _) in profiles.items() if profile == "positive"
+        ]
+        alternatives = [
+            profile for profile, _ in profiles.values() if profile != "positive"
+        ]
+        if (
+            len(positives) == 1
+            and alternatives
+            and all(profile in {"neutral", "negative"} for profile in alternatives)
+        ):
+            return positives[0]
+        return None
+
+    def _action_outcome_profile(
+        self, state: GameState, offer: OfferSpec, action: str
+    ) -> tuple[str, tuple] | None:
+        outcome = self._outcome_for_action(offer, action)
+        if outcome is None:
+            return None
+        scenarios = self._expand_outcome_scenarios(state, outcome)
+        if scenarios is None or not scenarios:
+            return None
+
+        profiles: list[str] = []
+        signatures: set[tuple] = set()
+        for scenario_index, (scenario, _probability) in enumerate(scenarios):
+            rng = Rng(scenario_index)
+            try:
+                next_state, _ = apply_action_with_outcome(
+                    state, offer, action, scenario, self.data, rng
+                )
+            except ActionNotAllowed:
+                return None
+            if rng.state().draws != 0:
+                return None
+            profiles.append(self._resource_delta_profile(state, next_state))
+            signatures.add(self._non_resource_signature(next_state))
+
+        if len(signatures) != 1:
+            return None
+        if all(profile == profiles[0] for profile in profiles):
+            return profiles[0], next(iter(signatures))
+        return "mixed", next(iter(signatures))
+
+    def _resource_delta_profile(self, state: GameState, next_state: GameState) -> str:
+        deltas = (
+            next_state.coins - state.coins,
+            next_state.pop - state.pop,
+            next_state.mh - state.mh,
+            next_state.dismissals - state.dismissals,
+            next_state.retirement_chests - state.retirement_chests,
         )
+        has_positive = any(value > 1e-9 for value in deltas)
+        has_negative = any(value < -1e-9 for value in deltas)
+        if has_positive and not has_negative:
+            return "positive"
+        if has_negative and not has_positive:
+            return "negative"
+        if not has_positive and not has_negative:
+            return "neutral"
+        return "mixed"
+
+    def _non_resource_signature(self, state: GameState) -> tuple:
+        relevant_counters = {
+            name: value
+            for name, value in state.counters.items()
+            if name in self._referenced_counters
+        }
+        return replace(
+            state,
+            coins=0,
+            pop=0,
+            mh=0,
+            dismissals=0,
+            retirement_chests=0,
+            counters=relevant_counters,
+        ).to_cache_key()
 
     def _expected_action_value(
         self, state: GameState, offer: OfferSpec, action: str, rng: Rng
@@ -746,3 +861,39 @@ class RolloutPlanner:
             cached = utility(state, self.data, self.weights)
             self.cache.set(state, 0, cached)
         return cached
+
+
+_COUNTER_REFERENCE = re.compile(r"\bcounters\.([A-Za-z_][A-Za-z0-9_]*)\b")
+
+
+def _referenced_counter_names(*roots: object) -> frozenset[str]:
+    """Return counters that can affect data- or rule-driven behavior."""
+    references: set[str] = set()
+    visited: set[int] = set()
+
+    def visit(value: object) -> None:
+        if isinstance(value, str):
+            references.update(_COUNTER_REFERENCE.findall(value))
+            return
+        if value is None or isinstance(value, (bool, int, float, bytes)):
+            return
+        identity = id(value)
+        if identity in visited:
+            return
+        visited.add(identity)
+        if is_dataclass(value) and not isinstance(value, type):
+            for item in fields(value):
+                visit(getattr(value, item.name))
+            return
+        if isinstance(value, Mapping):
+            for key, item in value.items():
+                visit(key)
+                visit(item)
+            return
+        if isinstance(value, (tuple, list, set, frozenset)):
+            for item in value:
+                visit(item)
+
+    for root in roots:
+        visit(root)
+    return frozenset(references)

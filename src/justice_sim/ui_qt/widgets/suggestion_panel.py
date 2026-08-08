@@ -33,6 +33,12 @@ class SuggestionPanel(QtWidgets.QWidget):
         layout.addWidget(self.progress_label)
 
     def update_recommendation(self, recommendation: PlannerRecommendation) -> None:
+        if recommendation.best_action is None:
+            self.best_label.setText("No available action")
+            self.metrics_label.setText("")
+            self.last_action = None
+            self.set_calculating(False)
+            return
         best = next(
             score
             for score in recommendation.action_scores

@@ -31,3 +31,20 @@ def test_suggestion_panel_displays_utility_confidence_interval():
     assert "Utility 12.00 ± 0.78 (95% CI)" in panel.metrics_label.text()
     panel.close()
     app.quit()
+
+
+@pytest.mark.gui
+def test_suggestion_panel_displays_no_available_action():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    panel = SuggestionPanel()
+
+    panel.update_recommendation(
+        PlannerRecommendation(best_action=None, action_scores=())
+    )
+
+    assert panel.best_label.text() == "No available action"
+    assert panel.metrics_label.text() == ""
+    assert panel.last_action is None
+    panel.close()
+    app.quit()

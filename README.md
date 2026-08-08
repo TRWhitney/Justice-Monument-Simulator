@@ -117,6 +117,11 @@ uv run justice-sim-gui --theme dark --ui-scale large --prompt-tour
 - Use the NPC shortcut row's circle-slash button to clear the active offer filter.
 - Unfiltered offers show their deal-luck rank among the encounters currently possible; the run indicator summarizes recorded deal rankings.
 - Recommendation utility includes a 95% confidence interval; close calls automatically receive additional rollouts under the builtin planner defaults.
+- Recommendations exclude actions the current resources cannot pay for, except
+  offers explicitly marked as allowing insufficient funds and rejection costs
+  that may spend unavailable popularity.
+- Guaranteed-upside choices are recommended immediately without running
+  rollouts when they do not change other future-relevant state.
 
 ## CLI Notes
 

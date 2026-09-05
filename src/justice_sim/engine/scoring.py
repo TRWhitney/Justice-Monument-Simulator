@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import lru_cache
 
@@ -13,7 +14,7 @@ from justice_sim.engine.effects import (
     resolve_probability,
 )
 from justice_sim.engine.rng import Rng
-from justice_sim.models.offer import JusticeData
+from justice_sim.models.offer import JusticeData, OfferSpec
 from justice_sim.models.state import GameState
 from justice_sim.util.dependencies import referenced_counter_names
 
@@ -156,10 +157,13 @@ class RiskEvaluator:
     """
 
     def __init__(self, data: JusticeData, max_entries: int = 10000) -> None:
+        from justice_sim.engine.health import HealthProbeCache
+
         self.data = data
         self.max_entries = max_entries
         self.counter_names = referenced_counter_names(data) | {"fizarre_drink_approves"}
         self._cache: OrderedDict[tuple, float] = OrderedDict()
+        self._health_probes = HealthProbeCache(data, max_entries)
 
     def client_risk(self, state: GameState) -> float:
         key = state.to_cache_key()
@@ -170,14 +174,21 @@ class RiskEvaluator:
         key = key[:13] + (counters,) + key[14:]
         cached = self._cache.get(key)
         if cached is None:
-            cached = _client_harbinger_risk(state, self.data)
+            cached = _client_harbinger_risk(
+                state, self.data, health_probe=self._health_probes.can_preserve_health
+            )
             if len(self._cache) >= self.max_entries:
                 self._cache.popitem(last=False)
             self._cache[key] = cached
         return cached
 
 
-def _client_harbinger_risk(state: GameState, data: JusticeData) -> float:
+def _client_harbinger_risk(
+    state: GameState,
+    data: JusticeData,
+    *,
+    health_probe: Callable[[GameState, OfferSpec, str], bool] | None = None,
+) -> float:
     # Use the actual variant pool: a dismissal cannot save Broke Again, and
     # Busted Bills may be payable in popularity despite having no coins.
     from justice_sim.engine.encounter import (
@@ -193,7 +204,11 @@ def _client_harbinger_risk(state: GameState, data: JusticeData) -> float:
         safe = False
         for action in offer.actions_available:
             try:
-                safe = action_preserves_health(state, offer, action, data)
+                safe = (
+                    health_probe(state, offer, action)
+                    if health_probe is not None
+                    else action_preserves_health(state, offer, action, data)
+                )
             except ActionNotAllowed:
                 continue
             if safe:

@@ -598,6 +598,23 @@ def _set_resource(
     )
 
 
+def is_case_only_value(value: Any, data: JusticeData) -> bool:
+    """Whether a numeric payload is independent of mutable state except case."""
+    if isinstance(value, (int, float)):
+        return True
+    if isinstance(value, dict):
+        if value.get("scaling", "none") not in {"none", "case", "harbinger"}:
+            return False
+        value = str(value.get("expr"))
+    return (
+        isinstance(value, str)
+        and _case_only_numeric(value)
+        and _case_only_scaling(
+            data.special_rules.case_scale.expr, data.special_rules.harbinger.cost_expr
+        )
+    )
+
+
 def resolve_expr(expr: Any, state: GameState, data: JusticeData) -> float:
     if isinstance(expr, (int, float)):
         return float(expr)

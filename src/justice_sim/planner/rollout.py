@@ -45,6 +45,9 @@ from justice_sim.util.dependencies import (
 )
 
 
+type ActionResults = dict[str, list[tuple[GameState, float]] | None]
+
+
 @dataclass(frozen=True)
 class PlannerConfig:
     horizon_cases: int = 20
@@ -123,14 +126,15 @@ class RolloutPlanner:
         offer: OfferSpec,
         progress: Callable[[int], None] | None = None,
     ) -> PlannerRecommendation:
-        eligible_actions = self._eligible_actions(state, offer)
+        evaluated = self._evaluate_actions(state, offer)
+        eligible_actions = self._eligible_actions(state, offer, results=evaluated)
         if not eligible_actions:
             return PlannerRecommendation(
                 best_action=None,
                 action_scores=tuple(self._deterministic_action_scores(state, offer)),
             )
         fast_path = self._fast_path_recommendation(
-            state, offer, eligible_actions=eligible_actions
+            state, offer, eligible_actions=eligible_actions, evaluated=evaluated
         )
         if fast_path is not None:
             return fast_path
@@ -196,18 +200,21 @@ class RolloutPlanner:
         offer: OfferSpec,
         *,
         eligible_actions: tuple[str, ...],
+        evaluated: ActionResults | None = None,
     ) -> PlannerRecommendation | None:
-        terminal = self._is_terminal_offer_state(state, offer)
+        terminal = self._is_terminal_offer_state(state, offer, evaluated=evaluated)
         upside_action = (
             None
             if terminal
             else self._guaranteed_upside_action(
-                state, offer, eligible_actions=eligible_actions
+                state, offer, eligible_actions=eligible_actions, evaluated=evaluated
             )
         )
         if not terminal and upside_action is None:
             return None
-        scores = self._exact_action_scores(state, offer, actions=eligible_actions)
+        scores = self._exact_action_scores(
+            state, offer, actions=eligible_actions, evaluated=evaluated
+        )
         if not scores:
             return None
         scores = self._apply_action_biases(state, offer, scores)
@@ -466,17 +473,15 @@ class RolloutPlanner:
         encounter_start: GameState | None = None,
         remaining: int = 0,
     ) -> tuple[str | None, GameState | None]:
-        results = {
-            action: self._exact_action_results(
-                state, offer, action, encounter_start=encounter_start
-            )
-            for action in offer.actions_available
-        }
+        results = self._evaluate_actions(state, offer, encounter_start=encounter_start)
         actions = self._eligible_actions(
             state, offer, results=results, encounter_start=encounter_start
         )
         if not actions:
             return None, None
+        if len(actions) == 1:
+            action = actions[0]
+            return action, self._reusable_transition(offer, action, results[action])
         best_action = actions[0]
         best_value = float("-inf")
         action_biases = self._biases_for_offer(state, offer)
@@ -525,8 +530,14 @@ class RolloutPlanner:
             if value > best_value:
                 best_action = action
                 best_value = value
-        outcome = self._outcome_for_action(offer, best_action)
-        exact = results[best_action]
+        return best_action, self._reusable_transition(
+            offer, best_action, results[best_action]
+        )
+
+    def _reusable_transition(
+        self, offer: OfferSpec, action: str, exact: list[tuple[GameState, float]] | None
+    ) -> GameState | None:
+        outcome = self._outcome_for_action(offer, action)
         # Scenario expansion can erase RNG draws even for a one-branch random
         # outcome. Reuse only an unexpanded deterministic transition; all other
         # randomness in preparation/commitments was checked by exact evaluation.
@@ -542,23 +553,34 @@ class RolloutPlanner:
             )
         ):
             transition = exact[0][0]
-        return best_action, transition
+        return transition
+
+    def _evaluate_actions(
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        *,
+        encounter_start: GameState | None = None,
+    ) -> ActionResults:
+        return {
+            action: self._exact_action_results(
+                state, offer, action, encounter_start=encounter_start
+            )
+            for action in offer.actions_available
+        }
 
     def _eligible_actions(
         self,
         state: GameState,
         offer: OfferSpec,
         *,
-        results: dict[str, list[tuple[GameState, float]] | None] | None = None,
+        results: ActionResults | None = None,
         encounter_start: GameState | None = None,
     ) -> tuple[str, ...]:
         if results is None:
-            results = {
-                action: self._exact_action_results(
-                    state, offer, action, encounter_start=encounter_start
-                )
-                for action in offer.actions_available
-            }
+            results = self._evaluate_actions(
+                state, offer, encounter_start=encounter_start
+            )
         possible = tuple(
             action
             for action in offer.actions_available
@@ -589,13 +611,18 @@ class RolloutPlanner:
         offer: OfferSpec,
         *,
         eligible_actions: tuple[str, ...],
+        evaluated: ActionResults | None = None,
     ) -> str | None:
         profiles: dict[str, tuple[str, tuple]] = {}
         next_states = []
         for action in eligible_actions:
             if not self._action_is_possible(state, offer, action):
                 continue
-            results = self._exact_action_results(state, offer, action)
+            results = (
+                self._exact_action_results(state, offer, action)
+                if evaluated is None
+                else evaluated[action]
+            )
             if not results:
                 return None
             profile = self._action_outcome_profile(
@@ -903,10 +930,15 @@ class RolloutPlanner:
         offer: OfferSpec,
         *,
         actions: tuple[str, ...] | None = None,
+        evaluated: ActionResults | None = None,
     ) -> list[ActionScore] | None:
         scores = []
         for action in offer.actions_available if actions is None else actions:
-            results = self._exact_action_results(state, offer, action)
+            results = (
+                self._exact_action_results(state, offer, action)
+                if evaluated is None
+                else evaluated[action]
+            )
             if results is None:
                 return None
             if not results:
@@ -1000,13 +1032,23 @@ class RolloutPlanner:
             return offer.dismiss or offer.reject
         return None
 
-    def _is_terminal_offer_state(self, state: GameState, offer: OfferSpec) -> bool:
+    def _is_terminal_offer_state(
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        *,
+        evaluated: ActionResults | None = None,
+    ) -> bool:
         if state.ended or state.mh <= 0:
             return True
         if not offer.actions_available:
             return True
         for action in offer.actions_available:
-            results = self._exact_action_results(state, offer, action)
+            results = (
+                self._exact_action_results(state, offer, action)
+                if evaluated is None
+                else evaluated[action]
+            )
             if results is None:
                 return False
             if any(not result.ended and result.mh > 0 for result, _ in results):

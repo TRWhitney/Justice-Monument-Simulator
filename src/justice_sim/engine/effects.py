@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import math
 from dataclasses import replace
+from functools import lru_cache
 from types import SimpleNamespace
 from typing import Any, Iterable, Mapping
 
@@ -584,6 +586,24 @@ def _set_resource(
 def resolve_expr(expr: Any, state: GameState, data: JusticeData) -> float:
     if isinstance(expr, (int, float)):
         return float(expr)
+    if isinstance(expr, (str, dict)):
+        raw = str(expr.get("expr")) if isinstance(expr, dict) else expr
+        case_expr = data.special_rules.case_scale.expr
+        cost_expr = data.special_rules.harbinger.cost_expr
+        if _case_only_scaling(case_expr, cost_expr) and _case_only_numeric(raw):
+            value, case_scale, cost = _case_numeric_value(
+                raw, case_expr, cost_expr, state.case_index
+            )
+            scaling = (
+                str(expr.get("scaling", "none")) if isinstance(expr, dict) else "none"
+            )
+            if scaling == "case":
+                value *= case_scale
+            elif scaling == "harbinger":
+                value *= cost
+            elif scaling != "none":
+                raise ValueError(f"Unsupported scaling mode: {scaling}")
+            return float(value)
     if isinstance(expr, str):
         _, _, functions, variables = _build_numeric_context(state, data)
         value = expr_util.evaluate_numeric(
@@ -657,17 +677,99 @@ def outcome_additive_resource_cost(
     return float(max(0, -rounded_delta))
 
 
+_NUMERIC_FUNCTIONS = {
+    "ceil": math.ceil,
+    "floor": math.floor,
+    "min": min,
+    "max": max,
+    "abs": abs,
+}
+
+
+@lru_cache(maxsize=1024)
+def _case_only_numeric(expression: str) -> bool:
+    try:
+        names = {
+            node.id
+            for node in ast.walk(ast.parse(expression, mode="eval"))
+            if isinstance(node, ast.Name)
+        }
+    except SyntaxError:
+        return False
+    return names <= {
+        "case_index",
+        "case_scale",
+        "harbinger_cost",
+        "true",
+        "false",
+        *_NUMERIC_FUNCTIONS,
+    }
+
+
+@lru_cache(maxsize=4096)
+def _case_numeric_value(
+    expression: str, case_expr: str, cost_expr: str, case_index: int
+) -> tuple[float, float, float]:
+    case_scale, cost = _case_scaling_values(case_expr, cost_expr, case_index)
+    context = expr_util.build_numeric_context(
+        {
+            "case_index": case_index,
+            "case_scale": case_scale,
+            "harbinger_cost": cost,
+            "true": True,
+            "false": False,
+        },
+        _NUMERIC_FUNCTIONS,
+    )
+    return expr_util.evaluate_numeric(expression, context), case_scale, cost
+
+
+@lru_cache(maxsize=128)
+def _case_only_scaling(case_expr: str, cost_expr: str) -> bool:
+    """Only cache by case when neither formula can read changing resources."""
+    try:
+        for expression, extra in ((case_expr, set()), (cost_expr, {"case_scale"})):
+            names = {
+                node.id
+                for node in ast.walk(ast.parse(expression, mode="eval"))
+                if isinstance(node, ast.Name)
+            }
+            if not names <= {
+                "case_index",
+                "true",
+                "false",
+                *_NUMERIC_FUNCTIONS,
+                *extra,
+            }:
+                return False
+    except SyntaxError:
+        return False
+    return True
+
+
+@lru_cache(maxsize=1024)
+def _case_scaling_values(
+    case_expr: str, cost_expr: str, case_index: int
+) -> tuple[float, float]:
+    variables = {"case_index": case_index, "true": True, "false": False}
+    ctx = expr_util.build_numeric_context(variables, _NUMERIC_FUNCTIONS)
+    try:
+        case_scale = expr_util.evaluate_numeric(case_expr, ctx)
+    except Exception:
+        case_scale = harbinger_rules.case_scale(case_index)
+    variables["case_scale"] = case_scale
+    try:
+        cost = expr_util.evaluate_numeric(cost_expr, ctx)
+    except Exception:
+        cost = harbinger_rules.harbinger_cost(case_index)
+    return case_scale, cost
+
+
 def _build_numeric_context(
     state: GameState,
     data: JusticeData,
 ) -> tuple[float, float, Mapping[str, Any], Mapping[str, Any]]:
-    functions = {
-        "ceil": math.ceil,
-        "floor": math.floor,
-        "min": min,
-        "max": max,
-        "abs": abs,
-    }
+    functions = _NUMERIC_FUNCTIONS
     variables = {
         "case_index": state.case_index,
         "coins": state.coins,
@@ -681,6 +783,16 @@ def _build_numeric_context(
         "true": True,
         "false": False,
     }
+
+    case_expr = data.special_rules.case_scale.expr
+    cost_expr = data.special_rules.harbinger.cost_expr
+    if _case_only_scaling(case_expr, cost_expr):
+        case_scale_value, harbinger_cost_value = _case_scaling_values(
+            case_expr, cost_expr, state.case_index
+        )
+        variables["case_scale"] = case_scale_value
+        variables["harbinger_cost"] = harbinger_cost_value
+        return case_scale_value, harbinger_cost_value, functions, variables
 
     ctx = expr_util.build_numeric_context(variables, functions)
     try:

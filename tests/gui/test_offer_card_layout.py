@@ -1,7 +1,8 @@
 import os
+from pathlib import Path
 
 import pytest
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtTest, QtWidgets
 
 from justice_sim.config import load_builtin_data
 from justice_sim.ui_qt.app import create_app
@@ -81,6 +82,67 @@ def test_offer_card_action_spacing():
 
     card.close()
     app.quit()
+
+
+@pytest.mark.gui
+@pytest.mark.parametrize("scale,width", [(1.0, 800), (1.25, 1800)])
+def test_grumblo_effects_fit_before_selection_and_after_reuse(scale, width):
+    app = create_app()
+    data = load_builtin_data()
+    widget = OfferSearchWidget(data, GameState(16, 30, 10, 3, 0, 0))
+    widget.set_ui_scale(scale)
+    widget.resize(width, 800)
+    widget.show()
+
+    def settled_card():
+        # Let normal Qt layout events run; never repair row sizes from the test.
+        QtTest.QTest.qWait(30)
+        for index in range(widget.results_list.count()):
+            item = widget.results_list.item(index)
+            card = widget.results_list.itemWidget(item)
+            if "Mystery Gift" in card._title_label.text():
+                assert item.sizeHint().height() >= card.heightForWidth(card.width())
+                for label in card._effect_labels.values():
+                    assert label.height() >= label.heightForWidth(label.width())
+                    bottom = label.mapTo(card, label.rect().bottomRight()).y()
+                    assert bottom < card.height()
+                return index, card
+        pytest.fail("Missing Grumblo: Mystery Gift")
+
+    try:
+        QtTest.QTest.qWait(30)
+        widget.search_input.setText("#grumblo")
+        index, card = settled_card()
+        assert widget.results_list.currentRow() == -1
+        destination = os.environ.get("JUSTICE_LAYOUT_ARTIFACT_DIR")
+        if destination:
+            directory = Path(destination)
+            directory.mkdir(parents=True, exist_ok=True)
+            assert card.grab().save(str(directory / f"grumblo-initial-{scale}.png"))
+        QtTest.QTest.mouseClick(
+            widget.results_list.viewport(),
+            QtCore.Qt.MouseButton.LeftButton,
+            pos=widget.results_list.visualItemRect(
+                widget.results_list.item(index)
+            ).center(),
+        )
+        settled_card()
+        widget.search_input.setText("no-such-offer-in-this-dataset")
+        QtTest.QTest.qWait(30)
+        widget.search_input.setText("#grumblo")
+        settled_card()
+        widget.resize(width - 150, 700)
+        settled_card()
+        widget.update_state(GameState(26, 40, 20, 3, 0, 0), preserve_scroll=True)
+        settled_card()
+        widget.set_ui_scale(scale + 0.25)
+        settled_card()
+        QtTest.QTest.qWait(30)
+        assert not widget._item_size_timer.isActive()
+    finally:
+        widget.close()
+        widget.deleteLater()
+        app.processEvents()
 
 
 @pytest.mark.gui

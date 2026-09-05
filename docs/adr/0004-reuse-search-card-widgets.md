@@ -8,6 +8,14 @@ and main-thread Qt ownership. Update existing rows in place. Use Qt's delegate
 when the result list grows again. The pool cannot exceed the largest result set
 rendered at the current UI scale; changing scale discards it.
 
+Wrapping correction, 2026-09-05: in-place rich-text changes settle through Qt
+layout events after the synchronous row refresh. Coalesce card layout requests
+and viewport resizes into a deferred sizing pass. Change item size hints only
+when their dimensions differ, so measurement settles without a layout loop.
+Retain synchronous selection and the existing widget pool. Initial Grumblo
+rendering, reuse, selection, resizing, and scale changes must fit without a test
+calling the sizing method to repair the display.
+
 Refresh all offer-dependent labels, images, effects, and highlights when a card's
 content changes. Cache only the most recent ranking inputs and results, including
 the complete game state, candidate offers, utility weights, and simulated scores.

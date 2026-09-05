@@ -178,6 +178,9 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self._simulated_scores: dict[str, float] = {}
         self._rankings_key: tuple | None = None
         self._rankings: dict[str, EncounterLuck] = {}
+        self._item_size_timer = QtCore.QTimer(self)
+        self._item_size_timer.setSingleShot(True)
+        self._item_size_timer.timeout.connect(self._update_item_sizes)
 
         layout = QtWidgets.QVBoxLayout(self)
         self.search_input = QtWidgets.QLineEdit()
@@ -193,6 +196,7 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self._apply_show_all_styles()
         self._npc_filter_bar = self._build_npc_filter_bar()
         self.results_list = QtWidgets.QListWidget()
+        self.results_list.viewport().installEventFilter(self)
         self._card_delegate = _OfferCardDelegate(self)
         self.results_list.setItemDelegate(self._card_delegate)
         self.results_list.setSelectionMode(
@@ -351,12 +355,14 @@ class OfferSearchWidget(QtWidgets.QWidget):
                     )
                 else:
                     card.update_result(result, self._state, **options)
+                card.installEventFilter(self)
                 width = self.results_list.viewport().width()
                 card.setFixedWidth(width)
                 item.setSizeHint(QtCore.QSize(width, card.heightForWidth(width)))
                 self.results_list.addItem(item)
                 self.results_list.setItemWidget(item, card)
         self._update_item_sizes()
+        self._schedule_item_sizes()
 
     def set_luck_weights(
         self, weights: UtilityWeights, *, rerender: bool = True
@@ -416,8 +422,14 @@ class OfferSearchWidget(QtWidgets.QWidget):
 
     def showEvent(self, event: QtGui.QShowEvent) -> None:
         super().showEvent(event)
-        QtCore.QTimer.singleShot(0, self._update_item_sizes)
+        self._schedule_item_sizes()
         QtCore.QTimer.singleShot(0, self._position_show_all_toggle)
+
+    def _schedule_item_sizes(self) -> None:
+        # Rich-text child layouts settle after an in-place content update. Coalesce
+        # their layout requests and viewport changes into one measurement pass.
+        if not self._item_size_timer.isActive():
+            self._item_size_timer.start(0)
 
     def _update_item_sizes(self) -> None:
         viewport_width = self.results_list.viewport().width()
@@ -433,7 +445,9 @@ class OfferSearchWidget(QtWidgets.QWidget):
             if height <= 0:
                 card.adjustSize()
                 height = card.sizeHint().height()
-            item.setSizeHint(QtCore.QSize(viewport_width, height))
+            size = QtCore.QSize(viewport_width, height)
+            if item.sizeHint() != size:
+                item.setSizeHint(size)
 
     def _apply_forced_filter(self) -> bool:
         if self._auto_offer_id:
@@ -768,6 +782,14 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self._on_search(self.search_input.text())
 
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        if (
+            isinstance(obj, OfferCard)
+            and event.type() == QtCore.QEvent.Type.LayoutRequest
+        ) or (
+            obj is self.results_list.viewport()
+            and event.type() == QtCore.QEvent.Type.Resize
+        ):
+            self._schedule_item_sizes()
         if obj is self.search_input and event.type() in {
             QtCore.QEvent.Type.Resize,
             QtCore.QEvent.Type.Show,

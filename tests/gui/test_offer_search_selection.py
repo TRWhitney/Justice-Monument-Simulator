@@ -286,3 +286,110 @@ def test_offer_search_clear_filter_button_clears_and_dims(data_factory):
 
     widget.close()
     app.quit()
+
+
+def _card_labels(card):
+    return [label.text() for label in card.findChildren(QtWidgets.QLabel)]
+
+
+@pytest.mark.gui
+def test_reused_search_cards_match_fresh_content(builtin_data):
+    from dataclasses import replace
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    state = GameState(1, 5, 3, 1, 0, 0)
+    widget = OfferSearchWidget(builtin_data, state)
+    widget.resize(770, 600)
+    widget.show()
+    app.processEvents()
+    original = widget.results_list.itemWidget(widget.results_list.item(0))
+    try:
+        widget.search_input.setText("c")
+        assert widget.results_list.itemWidget(widget.results_list.item(0)) is original
+        for query in ("coin", "#grumblo", "$+1", "no_such_offer", ""):
+            widget.search_input.setText(query)
+            app.processEvents()
+            fresh = OfferSearchWidget(builtin_data, state)
+            try:
+                fresh.resize(770, 600)
+                fresh.show()
+                fresh.search_input.setText(query)
+                app.processEvents()
+                assert widget._results == fresh._results
+                for row in range(widget.results_list.count()):
+                    actual = widget.results_list.itemWidget(
+                        widget.results_list.item(row)
+                    )
+                    expected = fresh.results_list.itemWidget(
+                        fresh.results_list.item(row)
+                    )
+                    assert _card_labels(actual) == _card_labels(expected)
+                    assert (
+                        actual._npc_image_label.pixmap().toImage()
+                        == expected._npc_image_label.pixmap().toImage()
+                    )
+            finally:
+                fresh.close()
+                fresh.deleteLater()
+        # A changed state must refresh both scaled effects and cached rankings.
+        state = replace(state, case_index=6, coins=99)
+        widget.update_state(state)
+        fresh = OfferSearchWidget(builtin_data, state)
+        try:
+            assert widget._results == fresh._results
+            for row in range(widget.results_list.count()):
+                assert _card_labels(
+                    widget.results_list.itemWidget(widget.results_list.item(row))
+                ) == _card_labels(
+                    fresh.results_list.itemWidget(fresh.results_list.item(row))
+                )
+        finally:
+            fresh.close()
+            fresh.deleteLater()
+    finally:
+        widget.close()
+        widget.deleteLater()
+        app.processEvents()
+        app.quit()
+
+
+@pytest.mark.gui
+def test_empty_search_recycles_cards_and_scale_discards_old_sizes(data_factory):
+    from PySide6 import QtCore
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    widget = OfferSearchWidget(data_factory(), GameState(1, 5, 3, 1, 0, 0))
+    try:
+        original = [
+            widget.results_list.itemWidget(widget.results_list.item(i))
+            for i in range(widget.results_list.count())
+        ]
+        widget.search_input.setText("no_such_offer")
+        assert widget.results_list.count() == 0
+        QtCore.QCoreApplication.sendPostedEvents(
+            None, QtCore.QEvent.Type.DeferredDelete
+        )
+        widget.search_input.clear()
+        assert [
+            widget.results_list.itemWidget(widget.results_list.item(i))
+            for i in range(widget.results_list.count())
+        ] == original
+        widget.search_input.setText("no_such_offer")
+        widget.set_ui_scale(1.3)
+        widget.search_input.clear()
+        assert (
+            widget.results_list.itemWidget(widget.results_list.item(0))._ui_scale == 1.3
+        )
+        assert (
+            widget.results_list.itemWidget(widget.results_list.item(0))
+            is not original[0]
+        )
+    finally:
+        widget.close()
+        widget.deleteLater()
+        QtCore.QCoreApplication.sendPostedEvents(
+            None, QtCore.QEvent.Type.DeferredDelete
+        )
+        app.quit()

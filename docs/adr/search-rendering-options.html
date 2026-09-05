@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Search rendering options</title>
+<style>
+body { font: 17px/1.5 system-ui; max-width: 760px; margin: 3rem auto; padding: 0 1rem; }
+label { display: block; margin: 1rem 0; }
+input, select, button { font: inherit; padding: .3rem; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: .6rem; border-bottom: 1px solid #aaa; text-align: left; }
+</style>
+<h1>Search rendering work</h1>
+<p>Compare one search transition. Counts describe card allocations, not elapsed time.
+All options still need to format changed content and lay out visible results.</p>
+<label>Previously allocated cards <input id="allocated" type="number" min="0" max="10000" value="67"></label>
+<label>Previous matches <input id="previous" type="number" min="0" max="10000" value="0"></label>
+<label>New matches <input id="matches" type="number" min="0" max="10000" value="67"></label>
+<label>Selected option <select id="option">
+<option value="reuse" selected>Update and recycle cards</option>
+<option value="rebuild">Rebuild all cards</option>
+<option value="batch">Rebuild in timer batches</option>
+</select></label>
+<label>Cards per timer batch <input id="batch" type="number" min="1" max="1000" value="4"></label>
+<table><thead><tr><th>Option</th><th>New allocations</th><th>Construction batches</th></tr></thead><tbody id="rows"></tbody></table>
+<p id="retained"></p>
+<button id="export">Export selection as JSON</button>
+<script>
+const fields = ['allocated', 'previous', 'matches', 'option', 'batch'];
+const element = id => document.getElementById(id);
+function values() {
+  const number = (id, minimum = 0) => Math.max(minimum, Math.floor(Number(element(id).value) || minimum));
+  return {allocated: Math.max(number('allocated'), number('previous')),
+    previous: number('previous'), matches: number('matches'),
+    option: element('option').value, batch: number('batch', 1)};
+}
+function render() {
+  const v = values();
+  const fresh = Math.max(0, v.matches - v.allocated);
+  element('rows').replaceChildren();
+  for (const row of [['Update and recycle', fresh, fresh ? 1 : 0],
+    ['Rebuild all', v.matches, v.matches ? 1 : 0],
+    ['Timer batches', v.matches, Math.ceil(v.matches / v.batch)]]) {
+    const tr = document.createElement('tr');
+    row.forEach(value => { const td = document.createElement('td'); td.textContent = value; tr.append(td); });
+    element('rows').append(tr);
+  }
+  element('retained').textContent = `Recycling retains ${Math.max(v.allocated, v.matches)} cards total, including ${Math.max(0, v.allocated - v.matches)} hidden cards. Changing UI scale clears the pool.`;
+}
+fields.forEach(id => element(id).addEventListener('input', render));
+element('export').addEventListener('click', () => {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(values(), null, 2)], {type: 'application/json'}));
+  const link = document.createElement('a'); link.href = url; link.download = 'search-rendering-option.json'; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+render();
+</script>
+</html>

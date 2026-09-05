@@ -68,6 +68,15 @@ class OfferCard(QtWidgets.QFrame):
         self._title_html_override = title_html_override
         self._extra_effects = extra_effects or {}
         self._ui_scale = ui_scale
+        self._effect_labels: dict[str, QtWidgets.QLabel] = {}
+        self._render_context = (
+            result,
+            state,
+            tuple(self._highlight_terms),
+            tuple(self._effect_highlight_terms),
+            npc_highlight,
+            title_html_override,
+        )
         self.setObjectName("offer_card")
         self.setProperty("selected", False)
         border_width = self._scaled(2, minimum=1)
@@ -123,27 +132,95 @@ class OfferCard(QtWidgets.QFrame):
     def _scaled(self, value: int, *, minimum: int | None = None) -> int:
         return scale_int(value, self._ui_scale, minimum=minimum)
 
+    def update_result(
+        self,
+        result: OfferSearchResult,
+        state: GameState,
+        *,
+        highlight_terms: Sequence[str],
+        effect_highlight_terms: Sequence[str],
+        npc_highlight: str | None,
+        title_html_override: str | None,
+    ) -> None:
+        """Refresh search content while retaining the card's widgets and images."""
+        context = (
+            result,
+            state,
+            tuple(highlight_terms),
+            tuple(effect_highlight_terms),
+            npc_highlight,
+            title_html_override,
+        )
+        if context == self._render_context:
+            return
+        self._state = state
+        self._highlight_terms = list(highlight_terms)
+        self._effect_highlight_terms = list(effect_highlight_terms)
+        self._npc_highlight = npc_highlight
+        self._title_html_override = title_html_override
+        npc = self._data.npcs_by_id.get(result.offer.npc_id)
+        self._update_npc_image(resolve_npc_image_path(self._data, npc) if npc else None)
+        _set_label_text(
+            self._npc_name_label,
+            npc.name if npc else result.npc_name,
+            _merge_terms(self._highlight_terms, [npc_highlight]),
+        )
+        self._update_title(result)
+        _set_label_text(self._text_label, result.offer.text, self._highlight_terms)
+        outcomes = {
+            "approve": (result.offer.approve, result.approve_summary),
+            "reject": (result.offer.reject, result.reject_summary),
+            "dismiss": (
+                result.offer.dismiss or result.offer.reject,
+                result.dismiss_summary or result.reject_summary,
+            ),
+        }
+        for action, label in self._effect_labels.items():
+            outcome, summary = outcomes[action]
+            tokens = _extract_effect_tokens(outcome, self._data, state)
+            extra = self._extra_effects.get(action, ())
+            if extra:
+                tokens = _append_extra_effects(tokens, extra, self._data)
+            label.setText(
+                _format_effects_html(
+                    tokens,
+                    summary,
+                    _merge_terms(self._highlight_terms, self._effect_highlight_terms),
+                    self._scaled(_RESOURCE_ICON_SIZE, minimum=1),
+                )
+            )
+        self._render_context = context
+
+    def _update_npc_image(self, path: Path | None) -> None:
+        if path == self._npc_image_path:
+            return
+        self._npc_image_path = path
+        pixmap = _load_pixmap(path)
+        self._npc_image_label.setPixmap(
+            pixmap.scaled(
+                self._npc_image_label.size(),
+                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                QtCore.Qt.TransformationMode.SmoothTransformation,
+            )
+            if pixmap is not None
+            else QtGui.QPixmap()
+        )
+
     def _build_npc_panel(
         self, data: JusticeData, result: OfferSearchResult
     ) -> QtWidgets.QWidget:
         npc = data.npcs_by_id.get(result.offer.npc_id)
         npc_name = npc.name if npc else result.npc_name
         image_label = QtWidgets.QLabel()
+        self._npc_image_label = image_label
+        self._npc_image_path: Path | None = None
         image_size = self._scaled(64, minimum=1)
         image_label.setFixedSize(image_size, image_size)
         image_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        pixmap = _load_pixmap(resolve_npc_image_path(data, npc) if npc else None)
-        if pixmap is not None:
-            image_label.setPixmap(
-                pixmap.scaled(
-                    image_size,
-                    image_size,
-                    QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                    QtCore.Qt.TransformationMode.SmoothTransformation,
-                )
-            )
+        self._update_npc_image(resolve_npc_image_path(data, npc) if npc else None)
 
         name_label = _WrappingLabel()
+        self._npc_name_label = name_label
         _set_label_text(
             name_label,
             npc_name,
@@ -167,18 +244,15 @@ class OfferCard(QtWidgets.QFrame):
 
     def _build_offer_panel(self, result: OfferSearchResult) -> QtWidgets.QWidget:
         title = _WrappingLabel()
+        self._title_label = title
         title.setObjectName("offer_title_label")
         title.setStyleSheet("font-weight: 600;")
         title.setWordWrap(True)
         title.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
-        if self._title_html_override is not None and not self._highlight_terms:
-            title.setTextFormat(QtCore.Qt.TextFormat.RichText)
-            title.setText(self._title_html_override)
-        else:
-            title_text = self._title_override or result.offer.title
-            _set_label_text(title, title_text, self._highlight_terms)
+        self._update_title(result)
 
         text = _WrappingLabel()
+        self._text_label = text
         text.setWordWrap(True)
         text.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
         _set_label_text(text, result.offer.text, self._highlight_terms)
@@ -191,6 +265,14 @@ class OfferCard(QtWidgets.QFrame):
         widget = QtWidgets.QWidget()
         widget.setLayout(column)
         return widget
+
+    def _update_title(self, result: OfferSearchResult) -> None:
+        if self._title_html_override is not None and not self._highlight_terms:
+            self._title_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
+            self._title_label.setText(self._title_html_override)
+        else:
+            title_text = self._title_override or result.offer.title
+            _set_label_text(self._title_label, title_text, self._highlight_terms)
 
     def _build_effects_panel(self, result: OfferSearchResult) -> QtWidgets.QWidget:
         sections: list[tuple[str, OutcomeSpec, str]] = []
@@ -247,6 +329,7 @@ class OfferCard(QtWidgets.QFrame):
                 _merge_terms(self._highlight_terms, self._effect_highlight_terms),
                 resource_icon_size,
             )
+            self._effect_labels[action] = effects
             stack.addWidget(icon, alignment=QtCore.Qt.AlignmentFlag.AlignHCenter)
             stack.addWidget(effects)
         stack.addStretch(1)

@@ -117,6 +117,33 @@ class _NpcButtonBar(QtWidgets.QWidget):
         return y + bottom
 
 
+class _OfferCardDelegate(QtWidgets.QStyledItemDelegate):
+    """Retain removed index widgets for the next search instead of deleting them."""
+
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self._cards: list[OfferCard] = []
+        self._storage = QtWidgets.QWidget(parent)
+        self._storage.hide()
+
+    def destroyEditor(
+        self, editor: QtWidgets.QWidget, index: QtCore.QModelIndex
+    ) -> None:
+        if isinstance(editor, OfferCard):
+            editor.setParent(self._storage)
+            self._cards.append(editor)
+        else:
+            super().destroyEditor(editor, index)
+
+    def take_card(self) -> OfferCard | None:
+        return self._cards.pop() if self._cards else None
+
+    def clear(self) -> None:
+        for card in self._cards:
+            card.deleteLater()
+        self._cards.clear()
+
+
 class OfferSearchWidget(QtWidgets.QWidget):
     offer_selected = QtCore.Signal(object)
     _CLEAR_ICON_ACTIVE = QtGui.QColor("#b00020")
@@ -146,8 +173,11 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self._auto_offer_id: str | None = None
         self._show_all_restore_state = False
         self._ui_scale = 1.0
+        self._rendered_scale = self._ui_scale
         self._luck_weights = UtilityWeights()
         self._simulated_scores: dict[str, float] = {}
+        self._rankings_key: tuple | None = None
+        self._rankings: dict[str, EncounterLuck] = {}
 
         layout = QtWidgets.QVBoxLayout(self)
         self.search_input = QtWidgets.QLineEdit()
@@ -163,6 +193,8 @@ class OfferSearchWidget(QtWidgets.QWidget):
         self._apply_show_all_styles()
         self._npc_filter_bar = self._build_npc_filter_bar()
         self.results_list = QtWidgets.QListWidget()
+        self._card_delegate = _OfferCardDelegate(self)
+        self.results_list.setItemDelegate(self._card_delegate)
         self.results_list.setSelectionMode(
             QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
         )
@@ -236,44 +268,29 @@ class OfferSearchWidget(QtWidgets.QWidget):
         if self.show_all_toggle.isChecked() and not self._is_offer_locked():
             eligible_ids = None
             ranking_offer_ids = {offer.id for offer in self._data.offers}
-        rankings = (
-            encounter_offer_rankings(
+        rankings = {}
+        if unfiltered_view:
+            rankings_key = (
                 self._state,
-                self._data,
-                self._encounter_model,
-                weights=self._luck_weights,
-                candidate_offer_ids=ranking_offer_ids,
-                simulated_scores=self._simulated_scores,
+                self._luck_weights,
+                frozenset(ranking_offer_ids) if ranking_offer_ids is not None else None,
+                tuple(sorted(self._simulated_scores.items())),
             )
-            if unfiltered_view
-            else {}
-        )
+            if rankings_key != self._rankings_key:
+                self._rankings = encounter_offer_rankings(
+                    self._state,
+                    self._data,
+                    self._encounter_model,
+                    weights=self._luck_weights,
+                    candidate_offer_ids=ranking_offer_ids,
+                    simulated_scores=self._simulated_scores,
+                )
+                self._rankings_key = rankings_key
+            rankings = self._rankings
         self._results = search_offers(
             text, self._data, self._state, eligible_offer_ids=eligible_ids
         )
-        highlight_terms = terms
-        self.results_list.clear()
-        for result in self._results:
-            item = QtWidgets.QListWidgetItem()
-            luck = rankings.get(result.offer.id)
-            card = OfferCard(
-                self._data,
-                result,
-                self._state,
-                highlight_terms=highlight_terms,
-                effect_highlight_terms=effect_terms,
-                npc_highlight=npc_query.replace("_", " ") if npc_query else None,
-                title_html_override=self._ranked_title_html(
-                    result.npc_name,
-                    result.offer.title,
-                    luck,
-                ),
-                ui_scale=self._ui_scale,
-            )
-            item.setSizeHint(card.sizeHint())
-            self.results_list.addItem(item)
-            self.results_list.setItemWidget(item, card)
-        self._update_item_sizes()
+        self._render_results(rankings, terms, effect_terms, npc_query)
         restored = False
         pending_emit = False
         if self._auto_offer_id:
@@ -293,6 +310,53 @@ class OfferSearchWidget(QtWidgets.QWidget):
             self._on_selection()
         self._update_npc_filter_buttons(text)
         self._update_selection_styles()
+
+    def _render_results(
+        self,
+        rankings: Mapping[str, EncounterLuck],
+        highlight_terms: list[str],
+        effect_terms: list[str],
+        npc_query: str | None,
+    ) -> None:
+        if self._rendered_scale != self._ui_scale:
+            self.results_list.clear()
+            self._card_delegate.clear()
+            self._rendered_scale = self._ui_scale
+        while self.results_list.count() > len(self._results):
+            self.results_list.takeItem(self.results_list.count() - 1)
+        for index, result in enumerate(self._results):
+            luck = rankings.get(result.offer.id)
+            options = dict(
+                highlight_terms=highlight_terms,
+                effect_highlight_terms=effect_terms,
+                npc_highlight=npc_query.replace("_", " ") if npc_query else None,
+                title_html_override=self._ranked_title_html(
+                    result.npc_name, result.offer.title, luck
+                ),
+            )
+            if index < self.results_list.count():
+                item = self.results_list.item(index)
+                card = self.results_list.itemWidget(item)
+                card.update_result(result, self._state, **options)
+            else:
+                item = QtWidgets.QListWidgetItem()
+                card = self._card_delegate.take_card()
+                if card is None:
+                    card = OfferCard(
+                        self._data,
+                        result,
+                        self._state,
+                        ui_scale=self._ui_scale,
+                        **options,
+                    )
+                else:
+                    card.update_result(result, self._state, **options)
+                width = self.results_list.viewport().width()
+                card.setFixedWidth(width)
+                item.setSizeHint(QtCore.QSize(width, card.heightForWidth(width)))
+                self.results_list.addItem(item)
+                self.results_list.setItemWidget(item, card)
+        self._update_item_sizes()
 
     def set_luck_weights(
         self, weights: UtilityWeights, *, rerender: bool = True
@@ -788,6 +852,8 @@ class OfferSearchWidget(QtWidgets.QWidget):
             item = self.results_list.item(index)
             card = self.results_list.itemWidget(item)
             if card is None:
+                continue
+            if card.property("selected") == (item is selected_item):
                 continue
             card.setProperty("selected", item is selected_item)
             card.style().unpolish(card)

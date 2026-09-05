@@ -8,7 +8,7 @@ from justice_sim.engine.effects import resolve_expr
 from justice_sim.engine.luck import encounter_luck_color
 from justice_sim.models.offer import EffectSpec, JusticeData, OfferSpec
 from justice_sim.models.state import ActionTrigger, EncounterTrigger, GameState
-from justice_sim.persistence.logs import EncounterLuck, SessionLog
+from justice_sim.persistence.logs import EncounterLuck, LogEntry, SessionLog
 from justice_sim.ui_qt.widgets.offer_card import OfferCard
 from justice_sim.ui_qt.widgets.resource_delta import format_resource_delta_html
 from justice_sim.ui_qt.ui_scale import scale_int
@@ -27,6 +27,8 @@ class LogPanel(QtWidgets.QWidget):
         self._data = data
         self._ui_scale = 1.0
         self._last_log: SessionLog | None = None
+        self._rendered_entries: list[LogEntry] = []
+        self._rendered_scale = self._ui_scale
         self._popover = _LogPopover(data, ui_scale=self._ui_scale)
         self.destroyed.connect(self._popover.deleteLater)
         self._hover_item: QtWidgets.QListWidgetItem | None = None
@@ -43,16 +45,29 @@ class LogPanel(QtWidgets.QWidget):
 
     def update_log(self, log: SessionLog) -> None:
         self._last_log = log
+        unchanged = 0
+        if self._rendered_scale == self._ui_scale:
+            for old, new in zip(self._rendered_entries, log.entries):
+                if old is not new:
+                    break
+                unchanged += 1
+            if unchanged == len(log.entries) == len(self._rendered_entries):
+                return
         self._popover.hide()
         self._hover_item = None
-        self.log_list.clear()
-        for entry in log.entries:
+        scroll_value = self.log_list.verticalScrollBar().value()
+        while self.log_list.count() > unchanged:
+            self.log_list.takeItem(self.log_list.count() - 1)
+        for entry in log.entries[unchanged:]:
             item = QtWidgets.QListWidgetItem()
             widget = _LogEntryWidget(entry, ui_scale=self._ui_scale)
             item.setSizeHint(widget.sizeHint())
             item.setData(QtCore.Qt.ItemDataRole.UserRole, entry)
             self.log_list.addItem(item)
             self.log_list.setItemWidget(item, widget)
+        self._rendered_entries = list(log.entries)
+        self._rendered_scale = self._ui_scale
+        self.log_list.verticalScrollBar().setValue(scroll_value)
 
     def eventFilter(self, source: QtCore.QObject, event: QtCore.QEvent) -> bool:
         if source is self.log_list.viewport():

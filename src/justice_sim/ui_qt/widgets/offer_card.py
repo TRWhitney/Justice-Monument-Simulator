@@ -1180,7 +1180,7 @@ def _format_amount_text(
         if resource in MAIN_RESOURCES:
             value = math.ceil(value)
         return _format_number(value)
-    if isinstance(amount, dict):
+    if isinstance(amount, Mapping):
         return str(amount.get("expr", ""))
     if amount is None:
         return "-"
@@ -1195,7 +1195,7 @@ def _format_value_text(
         if resource in MAIN_RESOURCES:
             value = math.ceil(value)
         return _format_plain_number(value)
-    if isinstance(amount, dict):
+    if isinstance(amount, Mapping):
         return str(amount.get("expr", ""))
     if amount is None:
         return "-"

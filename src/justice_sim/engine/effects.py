@@ -7,7 +7,8 @@ import math
 from dataclasses import replace
 from functools import lru_cache
 from types import SimpleNamespace
-from typing import Any, Iterable, Mapping
+from collections.abc import Mapping
+from typing import Any, Iterable
 
 from justice_sim.engine import harbinger as harbinger_rules
 from justice_sim.engine.rng import Rng
@@ -367,7 +368,7 @@ def _apply_effect(
         )
 
     if effect_type == "end_run":
-        reason = params.get("reason") if isinstance(params, dict) else None
+        reason = params.get("reason") if isinstance(params, Mapping) else None
         return replace(state, ended=True, end_reason=reason)
 
     if effect_type == "random_range_resource":
@@ -475,7 +476,7 @@ def _snapshot_params(
 
 
 def _snapshot_expr(expr: Any, state: GameState, data: JusticeData) -> Any:
-    if isinstance(expr, dict) and expr.get("snapshot"):
+    if isinstance(expr, Mapping) and expr.get("snapshot"):
         return resolve_expr(expr, state, data)
     return expr
 
@@ -602,7 +603,7 @@ def is_case_only_value(value: Any, data: JusticeData) -> bool:
     """Whether a numeric payload is independent of mutable state except case."""
     if isinstance(value, (int, float)):
         return True
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         if value.get("scaling", "none") not in {"none", "case", "harbinger"}:
             return False
         value = str(value.get("expr"))
@@ -618,8 +619,8 @@ def is_case_only_value(value: Any, data: JusticeData) -> bool:
 def resolve_expr(expr: Any, state: GameState, data: JusticeData) -> float:
     if isinstance(expr, (int, float)):
         return float(expr)
-    if isinstance(expr, (str, dict)):
-        raw = str(expr.get("expr")) if isinstance(expr, dict) else expr
+    if isinstance(expr, (str, Mapping)):
+        raw = str(expr.get("expr")) if isinstance(expr, Mapping) else expr
         case_expr = data.special_rules.case_scale.expr
         cost_expr = data.special_rules.harbinger.cost_expr
         if _case_only_scaling(case_expr, cost_expr) and _case_only_numeric(raw):
@@ -627,7 +628,9 @@ def resolve_expr(expr: Any, state: GameState, data: JusticeData) -> float:
                 raw, case_expr, cost_expr, state.case_index
             )
             scaling = (
-                str(expr.get("scaling", "none")) if isinstance(expr, dict) else "none"
+                str(expr.get("scaling", "none"))
+                if isinstance(expr, Mapping)
+                else "none"
             )
             if scaling == "case":
                 value *= case_scale
@@ -642,7 +645,7 @@ def resolve_expr(expr: Any, state: GameState, data: JusticeData) -> float:
             expr, expr_util.build_numeric_context(variables, functions)
         )
         return float(value)
-    if isinstance(expr, dict):
+    if isinstance(expr, Mapping):
         raw_expr = str(expr.get("expr"))
         case_scale_value, harbinger_cost_value, functions, variables = (
             _build_numeric_context(state, data)
@@ -672,7 +675,7 @@ def resolve_probability(prob_spec: Any, state: GameState, data: JusticeData) -> 
         if data.defaults.default_probability_format == "percent":
             value = value / 100.0
         return float(value)
-    if isinstance(prob_spec, dict):
+    if isinstance(prob_spec, Mapping):
         raw_expr = str(prob_spec.get("expr"))
         format_type = (
             prob_spec.get("format") or data.defaults.default_probability_format

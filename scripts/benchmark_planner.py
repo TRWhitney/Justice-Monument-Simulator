@@ -14,6 +14,7 @@ from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import EffectSpec, JusticeData
 from justice_sim.models.state import EncounterOverride, GameState, ScheduledEvent
 from justice_sim.planner.rollout import RolloutPlanner
+from justice_sim.util.immutable import thaw_payload
 
 
 SCENARIOS = ("baseline", "low-health", "loan", "due-event", "override")
@@ -91,7 +92,7 @@ def main() -> None:
             "scenario": scenario,
             "python": platform.python_version(),
             "offer": offer.title,
-            "state": asdict(state),
+            "state": thaw_payload(asdict(state)),
             "seed": args.seed,
             "config": asdict(planner.config),
             "seconds": seconds,

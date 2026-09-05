@@ -1,6 +1,8 @@
 import pytest
 
 from justice_sim.ui_qt.widgets import offer_card
+from justice_sim.models.state import GameState
+from justice_sim.util.immutable import freeze_payload
 
 
 @pytest.mark.unit
@@ -25,3 +27,19 @@ def test_effects_html_custom_separator_respected():
     html_text = offer_card._format_effects_html(tokens, "no effect")
     assert "OR" in html_text
     assert html_text.count("<img") == 2
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "formatter", [offer_card._format_amount_text, offer_card._format_value_text]
+)
+def test_frozen_amounts_preserve_values_and_unresolved_expression_text(
+    data_factory, formatter
+):
+    data = data_factory()
+    state = GameState(1, 5, 3, 3, 0, 0)
+    for expression in ("coins + 2", "unknown_name"):
+        raw = {"expr": expression}
+        assert formatter(freeze_payload(raw), data, state) == formatter(
+            raw, data, state
+        )

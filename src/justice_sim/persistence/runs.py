@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from justice_sim.engine.rng import RngState
+from justice_sim.util.immutable import thaw_payload
 from justice_sim.models.offer import EffectSpec
 from justice_sim.models.state import (
     ActionTrigger,
@@ -66,7 +67,10 @@ def serialize_state(state: GameState) -> dict[str, Any]:
         "retirement_chests": state.retirement_chests,
         "flags": sorted(state.flags),
         "statuses": {
-            name: {"remaining_cases": status.remaining_cases, "data": dict(status.data)}
+            name: {
+                "remaining_cases": status.remaining_cases,
+                "data": thaw_payload(status.data),
+            }
             for name, status in state.statuses.items()
         },
         "scheduled_events": [
@@ -130,7 +134,7 @@ def serialize_state(state: GameState) -> dict[str, Any]:
                 "npc_id": override.npc_id,
                 "offer_id": override.offer_id,
                 "remaining_uses": override.remaining_uses,
-                "probability": override.probability,
+                "probability": thaw_payload(override.probability),
                 "priority": override.priority,
                 "allow_harbinger": override.allow_harbinger,
             }
@@ -247,8 +251,8 @@ def deserialize_state(payload: Mapping[str, Any]) -> GameState:
 def _serialize_effect(effect: EffectSpec) -> dict[str, Any]:
     return {
         "type": effect.type,
-        "params": dict(effect.params),
-        "when": effect.when,
+        "params": thaw_payload(effect.params),
+        "when": thaw_payload(effect.when),
         "duration_cases": effect.duration_cases,
         "schedule_after_cases": effect.schedule_after_cases,
         "label": effect.label,

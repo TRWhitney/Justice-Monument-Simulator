@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any, Mapping, NamedTuple
 
 from justice_sim.models.offer import EffectSpec
+from justice_sim.util.immutable import freeze_payload, payload_key
 
 
 @dataclass(frozen=True)
@@ -14,12 +16,26 @@ class StatusEffect:
     remaining_cases: int
     data: Mapping[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "data", freeze_payload(self.data))
+
 
 @dataclass(frozen=True)
 class ScheduledEvent:
     trigger_case_index: int
     effects: tuple[EffectSpec, ...]
     label: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "effects", tuple(self.effects))
+
+    @cached_property
+    def cache_key(self) -> tuple:
+        return (
+            self.trigger_case_index,
+            tuple(e.cache_key for e in self.effects),
+            self.label,
+        )
 
 
 @dataclass(frozen=True)
@@ -28,6 +44,19 @@ class EncounterModifier:
     offer_weights: Mapping[str, float] | None = None
     mode: str = "multiply"
     remaining_cases: int | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "npc_weights", freeze_payload(self.npc_weights))
+        object.__setattr__(self, "offer_weights", freeze_payload(self.offer_weights))
+
+    @cached_property
+    def cache_key(self) -> tuple:
+        return (
+            self.mode,
+            self.remaining_cases,
+            payload_key(self.npc_weights or {}),
+            payload_key(self.offer_weights or {}),
+        )
 
 
 @dataclass(frozen=True)
@@ -40,6 +69,21 @@ class ActionTrigger:
     when: str | None = None
     label: str | None = None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "effects", tuple(self.effects))
+
+    @cached_property
+    def cache_key(self) -> tuple:
+        return (
+            self.label,
+            self.action,
+            self.npc_id,
+            self.offer_id,
+            self.remaining_uses,
+            self.when,
+            tuple(e.cache_key for e in self.effects),
+        )
+
 
 @dataclass(frozen=True)
 class EncounterTrigger:
@@ -49,6 +93,20 @@ class EncounterTrigger:
     remaining_uses: int | None = None
     when: str | None = None
     label: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "effects", tuple(self.effects))
+
+    @cached_property
+    def cache_key(self) -> tuple:
+        return (
+            self.label,
+            self.npc_id,
+            self.offer_id,
+            self.remaining_uses,
+            self.when,
+            tuple(e.cache_key for e in self.effects),
+        )
 
 
 @dataclass(frozen=True)
@@ -60,6 +118,21 @@ class EncounterOverride:
     priority: int = 0
     allow_harbinger: bool = False
     label: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "probability", freeze_payload(self.probability))
+
+    @cached_property
+    def cache_key(self) -> tuple:
+        return (
+            self.label,
+            self.npc_id,
+            self.offer_id,
+            self.remaining_uses,
+            payload_key(self.probability),
+            self.priority,
+            self.allow_harbinger,
+        )
 
 
 @dataclass(frozen=True)
@@ -133,87 +206,22 @@ class GameState:
     def contract_key(self) -> ContractKey:
         """Describe ordered contracts and their complete condition/effect payloads."""
 
-        def freeze(value: Any) -> Any:
-            if isinstance(value, Mapping):
-                return tuple(sorted((k, freeze(v)) for k, v in value.items()))
-            if isinstance(value, (list, tuple)):
-                return tuple(freeze(v) for v in value)
-            if isinstance(value, (set, frozenset)):
-                return tuple(sorted(freeze(v) for v in value))
-            return value
-
-        def effect_key(effect: EffectSpec) -> tuple[Any, ...]:
-            return (
-                effect.type,
-                freeze(effect.params),
-                freeze(effect.when),
-                effect.duration_cases,
-                effect.schedule_after_cases,
-                effect.label,
-            )
-
         statuses_key = tuple(
             sorted(
-                (name, status.remaining_cases, freeze(status.data))
+                (name, status.remaining_cases, payload_key(status.data))
                 for name, status in self.statuses.items()
             )
         )
-        scheduled_key = tuple(
-            (
-                event.trigger_case_index,
-                tuple(effect_key(effect) for effect in event.effects),
-                event.label,
-            )
-            for event in self.scheduled_events
-        )
+        scheduled_key = tuple(event.cache_key for event in self.scheduled_events)
         modifiers_key = tuple(
-            (
-                modifier.mode,
-                modifier.remaining_cases,
-                tuple(sorted((modifier.npc_weights or {}).items())),
-                tuple(sorted((modifier.offer_weights or {}).items())),
-            )
-            for modifier in self.encounter_modifiers
+            modifier.cache_key for modifier in self.encounter_modifiers
         )
         forced_key = tuple(
-            (forced.trigger_case_index, forced.offer_id, forced.once)
-            for forced in self.forced_encounters
+            (f.trigger_case_index, f.offer_id, f.once) for f in self.forced_encounters
         )
-        action_triggers_key = tuple(
-            (
-                trigger.label,
-                trigger.action,
-                trigger.npc_id,
-                trigger.offer_id,
-                trigger.remaining_uses,
-                trigger.when,
-                tuple(effect_key(effect) for effect in trigger.effects),
-            )
-            for trigger in self.action_triggers
-        )
-        encounter_triggers_key = tuple(
-            (
-                trigger.label,
-                trigger.npc_id,
-                trigger.offer_id,
-                trigger.remaining_uses,
-                trigger.when,
-                tuple(effect_key(effect) for effect in trigger.effects),
-            )
-            for trigger in self.encounter_triggers
-        )
-        encounter_overrides_key = tuple(
-            (
-                override.label,
-                override.npc_id,
-                override.offer_id,
-                override.remaining_uses,
-                freeze(override.probability),
-                override.priority,
-                override.allow_harbinger,
-            )
-            for override in self.encounter_overrides
-        )
+        action_triggers_key = tuple(t.cache_key for t in self.action_triggers)
+        encounter_triggers_key = tuple(t.cache_key for t in self.encounter_triggers)
+        encounter_overrides_key = tuple(o.cache_key for o in self.encounter_overrides)
         return ContractKey(
             statuses=statuses_key,
             scheduled_events=scheduled_key,
@@ -221,7 +229,7 @@ class GameState:
             forced_encounters=forced_key,
             required_action=self.required_action,
             required_action_penalty_effects=tuple(
-                effect_key(effect) for effect in self.required_action_penalty_effects
+                effect.cache_key for effect in self.required_action_penalty_effects
             ),
             resource_floors=tuple(sorted(self.resource_floors.items())),
             action_triggers=action_triggers_key,

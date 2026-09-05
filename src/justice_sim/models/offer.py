@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any, Iterable, Mapping
+
+from justice_sim.util.immutable import freeze_payload, payload_key
 
 
 @dataclass(frozen=True)
@@ -23,6 +26,21 @@ class EffectSpec:
     schedule_after_cases: int | None = None
     label: str | None = None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "params", freeze_payload(self.params))
+        object.__setattr__(self, "when", freeze_payload(self.when))
+
+    @cached_property
+    def cache_key(self) -> tuple:
+        return (
+            self.type,
+            payload_key(self.params),
+            payload_key(self.when),
+            self.duration_cases,
+            self.schedule_after_cases,
+            self.label,
+        )
+
 
 @dataclass(frozen=True)
 class RandomChoiceSpec:
@@ -37,6 +55,9 @@ class BernoulliSpec:
     p: Any
     then_effects: tuple[EffectSpec, ...]
     else_effects: tuple[EffectSpec, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "p", freeze_payload(self.p))
 
 
 @dataclass(frozen=True)
@@ -60,6 +81,9 @@ class ChainStep:
     probability: Any | None = None
     once: bool = True
     notes: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "probability", freeze_payload(self.probability))
 
 
 @dataclass(frozen=True)

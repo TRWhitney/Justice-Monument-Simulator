@@ -14,7 +14,7 @@
     "default_probability_format": "unit",
     "encounter_model_default": "uniform",
     "planner_defaults": {
-      "horizon_cases": 12,
+      "horizon_cases": 20,
       "rollouts_per_action": 200,
       "adaptive_rollouts": true,
       "adaptive_rollouts_max": 400,

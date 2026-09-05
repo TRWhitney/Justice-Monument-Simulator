@@ -175,7 +175,8 @@
       },
       "client_rows": [
         80
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "chippy_eat_me_eat_me_eat_me_f7ef54bb",
@@ -220,7 +221,8 @@
       },
       "client_rows": [
         49
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "concerned_poppy_hey_there_judge_i_just_wanted_to_tell_yo_57f3aeb9",
@@ -269,7 +271,8 @@
       },
       "client_rows": [
         79
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "concerned_poppy_uh_hello_there_could_you_consider_maybe__f673632b",
@@ -314,7 +317,8 @@
       },
       "client_rows": [
         77
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "concerned_poppy_uhm_hello_i_was_wondering_if_you_could_s_329ab840",
@@ -365,7 +369,8 @@
       },
       "client_rows": [
         74
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "concerned_poppy_uhm_hi_could_you_spare_me_a_mental_healt_2627c8c9",
@@ -414,7 +419,8 @@
       },
       "client_rows": [
         78
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "concerned_poppy_um_hey_there_i_was_thinking_maybe_you_ha_06081546",
@@ -463,7 +469,8 @@
       },
       "client_rows": [
         75
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "concerned_poppy_ummm_greetings_your_honor_would_you_have_9045f50a",
@@ -512,7 +519,8 @@
       },
       "client_rows": [
         76
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "cool_bird_sup_heads_you_dope_as_heck_tails_you_fai_7e71938c",
@@ -563,7 +571,8 @@
       },
       "client_rows": [
         41
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "cool_bird_sup_heads_you_the_man_and_get_2_mental_h_80b6c9c3",
@@ -608,7 +617,8 @@
       },
       "client_rows": [
         54
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "cool_bird_sup_heads_you_win_2_retirement_chests_ta_16198ca9",
@@ -653,7 +663,8 @@
       },
       "client_rows": [
         42
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "cool_bird_sup_heads_you_win_a_bunch_of_coins_tails_9d92610f",
@@ -704,7 +715,8 @@
       },
       "client_rows": [
         40
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "esquire_bored_bean_hark_i_have_returned_bearing_the_gift_of_3d4b33c1",
@@ -752,7 +764,8 @@
       },
       "client_rows": [
         28
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "esquire_bored_bean_huzzah_it_is_i_would_you_like_to_buy_a_m_46230dd8",
@@ -790,7 +803,8 @@
       },
       "client_rows": [
         27
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "esquire_bored_bean_i_have_a_deeeelightful_proposition_for_y_a6fe8b10",
@@ -904,7 +918,8 @@
       },
       "client_rows": [
         29
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "esquire_bored_bean_mmmm_yeeees_charmed_your_honor_perchance_59fd29ac",
@@ -973,7 +988,8 @@
       },
       "client_rows": [
         26
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "esquire_bored_bean_ohohoho_i_have_heard_the_stories_about_y_d2bcd717",
@@ -1044,7 +1060,8 @@
       },
       "client_rows": [
         61
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_1f67196f",
@@ -1110,7 +1127,8 @@
       },
       "client_rows": [
         58
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_38ef5cd7",
@@ -1169,7 +1187,8 @@
       },
       "client_rows": [
         57
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_4b3017f9",
@@ -1232,7 +1251,8 @@
       },
       "client_rows": [
         60
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_5cd95449",
@@ -1294,7 +1314,8 @@
       },
       "client_rows": [
         55
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_d8c926e1",
@@ -1349,7 +1370,8 @@
       },
       "client_rows": [
         56
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "ghost_can_you_make_it_legal_for_me_to_scare_pe_a3c5b55d",
@@ -1428,7 +1450,8 @@
       },
       "client_rows": [
         50
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "ghost_i_m_done_scaring_people_i_thought_it_was_c4237215",
@@ -1478,7 +1501,8 @@
       },
       "client_rows": [
         59
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "grumblo_me_like_coin_me_collect_coin_you_give_me_1fadf7a7",
@@ -1545,7 +1569,8 @@
       "client_rows": [
         70,
         87
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "grumblo_me_like_coin_me_collect_coin_you_give_me_871448f0",
@@ -1651,7 +1676,8 @@
         46,
         47,
         71
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "head_honcho_of_big_biz_llc_good_afternoon_i_am_seeking_invesetment__482cacba",
@@ -1707,7 +1733,8 @@
       },
       "client_rows": [
         53
-      ]
+      ],
+      "payment_resource": "retirement_chests"
     },
     {
       "id": "head_honcho_of_big_biz_llc_good_afternoon_i_represent_a_third_party_99301182",
@@ -1755,7 +1782,8 @@
       },
       "client_rows": [
         3
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "head_honcho_of_big_biz_llc_greetings_are_you_interested_in_making_s_cba0f9d6",
@@ -1803,7 +1831,8 @@
       },
       "client_rows": [
         85
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "head_honcho_of_big_biz_llc_greetings_i_come_to_you_today_seeking_a__55d424ba",
@@ -1864,7 +1893,8 @@
       },
       "client_rows": [
         36
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "head_honcho_of_big_biz_llc_greetings_i_come_to_you_today_seeking_a__7c4eb020",
@@ -1919,7 +1949,8 @@
       },
       "client_rows": [
         35
-      ]
+      ],
+      "payment_resource": "pop"
     },
     {
       "id": "head_honcho_of_big_biz_llc_greetings_i_have_a_fantastic_opportunity_5d739a3e",
@@ -1985,7 +2016,8 @@
       },
       "client_rows": [
         43
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "head_honcho_of_big_biz_llc_you_aren_t_looking_too_well_my_friend_pe_82709538",
@@ -2063,7 +2095,8 @@
       },
       "client_rows": [
         72
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "head_honcho_of_big_biz_llc_your_honor_i_seek_an_investment_of_x_coi_39b860c2",
@@ -2133,7 +2166,8 @@
       },
       "client_rows": [
         2
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "little_timmy_can_i_has_fwee_stuff_pls_liiike_i_want_f_b580b27f",
@@ -2188,7 +2222,8 @@
       },
       "client_rows": [
         88
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "little_timmy_can_i_has_x_coins_pwease_68e8ccd0",
@@ -2243,7 +2278,8 @@
       },
       "client_rows": [
         0
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "little_timmy_can_u_make_today_a_holiday_so_school_is__5dd498b9",
@@ -2283,13 +2319,13 @@
         "effects": []
       },
       "notes": "Can approve without the necessary coins",
-      "allow_insufficient_funds": true,
       "dismiss": {
         "effects": []
       },
       "client_rows": [
         48
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "little_timmy_can_u_subskwibe_to_my_yootoob_channel_pw_23c5cb9c",
@@ -2334,7 +2370,8 @@
       },
       "client_rows": [
         30
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "little_timmy_hewwo_owo_can_u_tell_everyone_they_are_s_239bb3fb",
@@ -2379,7 +2416,8 @@
       },
       "client_rows": [
         4
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "little_timmy_i_stole_my_fwends_toy_and_he_said_i_am_u_1e3fffc3",
@@ -2434,7 +2472,8 @@
       },
       "client_rows": [
         32
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "little_timmy_musical_theme_plays_nonono_i_cant_eat_mo_05a5a624",
@@ -2498,7 +2537,8 @@
       },
       "client_rows": [
         84
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "little_timmy_musical_theme_plays_ooh_ohh_teh_ice_cwea_52004749",
@@ -2578,7 +2618,8 @@
       },
       "client_rows": [
         82
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "little_timmy_musical_theme_plays_ooh_ohh_teh_ice_cwea_6f685625",
@@ -2658,7 +2699,8 @@
       },
       "client_rows": [
         81
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "little_timmy_musical_theme_plays_ooh_ohh_teh_ice_cwea_a9700eed",
@@ -2738,7 +2780,8 @@
       },
       "client_rows": [
         83
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "little_timmy_your_a_big_poopy_head_fr_fr_you_stink_da_f73c88ad",
@@ -2783,7 +2826,8 @@
       },
       "client_rows": [
         89
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "mister_bribe_aight_check_it_i_ain_t_done_no_dirty_tri_85f4eacc",
@@ -2822,7 +2866,8 @@
       },
       "client_rows": [
         20
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "mister_bribe_eyo_was_up_my_guy_i_got_a_bit_of_a_deal__ec695a5c",
@@ -2873,7 +2918,8 @@
       },
       "client_rows": [
         31
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "mister_bribe_hey_buddy_how_s_the_grind_going_look_i_g_35938b26",
@@ -2915,7 +2961,8 @@
       },
       "client_rows": [
         63
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "mister_bribe_hey_friendo_is_me_again_what_s_good_i_go_d8db8dcb",
@@ -2964,7 +3011,8 @@
       },
       "client_rows": [
         19
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "mister_bribe_hey_pal_how_we_doin_you_lookin_for_some__f4a543d8",
@@ -3019,7 +3067,8 @@
       },
       "client_rows": [
         18
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "mister_bribe_ok_dog_hear_me_out_i_had_this_dope_idea__088c520f",
@@ -3063,7 +3112,8 @@
       },
       "client_rows": [
         38
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "reanimated_hand_good_going_judge_your_stupid_laws_just_g_7165cf9b",
@@ -3118,7 +3168,8 @@
       },
       "client_rows": [
         16
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "reanimated_hand_here_judge_i_brought_the_x_coins_i_owe_f_3cd8fdb9",
@@ -3159,7 +3210,8 @@
       },
       "client_rows": [
         17
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "reanimated_hand_i_got_fined_x_coins_by_your_laws_for_usi_aef10241",
@@ -3214,7 +3266,8 @@
       },
       "client_rows": [
         1
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "reanimated_hand_you_are_so_dumb_forcing_me_here_whenever_226eed98",
@@ -3286,7 +3339,8 @@
       ],
       "client_rows": [
         62
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "reanimated_hand_you_look_richer_than_the_guy_i_just_stol_b9c031da",
@@ -3338,7 +3392,8 @@
       },
       "client_rows": [
         51
-      ]
+      ],
+      "payment_resource": "retirement_chests"
     },
     {
       "id": "retirement_chester_have_you_hit_the_lottery_are_you_looking_427a1e99",
@@ -3379,7 +3434,8 @@
       },
       "client_rows": [
         73
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "retirement_chester_hey_buddy_life_sure_is_a_gamble_sometime_a683e44e",
@@ -3443,7 +3499,8 @@
       },
       "client_rows": [
         64
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "retirement_chester_retirement_is_everything_trust_me_i_d_kn_d1759597",
@@ -3482,7 +3539,8 @@
       },
       "client_rows": [
         33
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "retirement_chester_retirement_is_important_trust_me_i_d_kno_88267e44",
@@ -3523,7 +3581,8 @@
       },
       "client_rows": [
         21
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "retirement_chester_retirement_is_the_key_to_happiness_trust_d9b5599f",
@@ -3564,7 +3623,8 @@
       },
       "client_rows": [
         22
-      ]
+      ],
+      "payment_resource": "pop"
     },
     {
       "id": "retirement_chester_retirement_is_the_number_one_source_of_a_e41347c6",
@@ -3595,7 +3655,8 @@
       },
       "client_rows": [
         39
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "retirement_chester_retirement_is_the_top_priority_trust_me__b6355d05",
@@ -3644,10 +3705,10 @@
       "dismiss": {
         "effects": []
       },
-      "allow_insufficient_funds": true,
       "client_rows": [
         37
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "retirement_chester_retirement_is_worth_considering_trust_me_aa3e4985",
@@ -3688,7 +3749,8 @@
       },
       "client_rows": [
         52
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "rupie_slug_hai_you_re_really_popular_can_i_have_som_49a95c45",
@@ -3724,7 +3786,8 @@
       },
       "client_rows": [
         65
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "rupie_slug_henlo_you_re_really_awesome_i_wanna_be_j_c8de550d",
@@ -3766,7 +3829,8 @@
       },
       "client_rows": [
         69
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "rupie_slug_hewwo_i_think_i_dropped_x_coins_around_h_bc1cce66",
@@ -3831,7 +3895,8 @@
       },
       "client_rows": [
         67
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "rupie_slug_heyy_you_re_really_rich_can_i_have_some__4f29f399",
@@ -3867,7 +3932,8 @@
       },
       "client_rows": [
         66
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "rupie_slug_hii_you_re_really_tough_looking_can_you__95406a46",
@@ -3905,7 +3971,8 @@
       },
       "client_rows": [
         68
-      ]
+      ],
+      "payment_resource": "dismissals"
     },
     {
       "id": "rupie_slug_omg_hi_hi_you_have_been_so_nice_to_me_yo_a5ab3972",
@@ -3944,7 +4011,8 @@
       },
       "client_rows": [
         86
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "scripticus_can_i_get_a_x_coin_loan_to_buy_my_next_k_0674de6d",
@@ -4020,7 +4088,8 @@
       },
       "client_rows": [
         34
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "scripticus_hey_it_s_me_everyone_s_favorite_wiggly_p_39c2f421",
@@ -4078,7 +4147,8 @@
       },
       "client_rows": [
         24
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "scripticus_oh_boy_i_m_in_the_justice_monument_minig_1dac57aa",
@@ -4090,7 +4160,6 @@
         "reject",
         "dismiss"
       ],
-      "allow_insufficient_funds": true,
       "approve": {
         "effects": [
           {
@@ -4135,7 +4204,8 @@
       },
       "client_rows": [
         23
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "the_gratefulbinger_i_ve_been_watching_you_closely_and_i_wan_d49e05c5",
@@ -4182,12 +4252,12 @@
       },
       "client_rows": [
         25
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "the_harbinger_blocked_artery_your_spouse_rushed_you_to_fc0916af",
       "npc_id": "the_harbinger",
-      "allow_insufficient_funds": true,
       "title": "Harbinger: Blocked Artery",
       "text": "Blocked artery. Your spouse rushed you to the hospital at quite the pace, you should say thanks if you ever see them again! The bill is looking to be about X coins, are you ready to pay up?",
       "actions_available": [
@@ -4226,7 +4296,8 @@
       },
       "client_rows": [
         11
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "the_harbinger_it_s_a_heart_attack_you_re_currently_in__3c8bc866",
@@ -4269,7 +4340,8 @@
       },
       "client_rows": [
         5
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "the_harbinger_no_no_i_m_not_here_for_you_it_s_well_it__52e91e3f",
@@ -4315,7 +4387,8 @@
       },
       "client_rows": [
         13
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "the_harbinger_shark_attack_during_a_weekend_hike_in_th_a936f412",
@@ -4358,7 +4431,8 @@
       },
       "client_rows": [
         8
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "the_harbinger_snake_attack_during_a_weekend_hike_you_r_b6c52faf",
@@ -4401,7 +4475,8 @@
       },
       "client_rows": [
         7
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "the_harbinger_someone_you_rejected_is_putting_their_pl_df84c7ab",
@@ -4447,7 +4522,8 @@
       },
       "client_rows": [
         12
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "the_harbinger_uh_oh_looks_like_your_bills_finally_got__606f838b",
@@ -4523,7 +4599,8 @@
       },
       "client_rows": [
         14
-      ]
+      ],
+      "payment_resource": "pop"
     },
     {
       "id": "the_harbinger_uhhh_hey_why_am_i_here_you_seem_fine_but_d1c14611",
@@ -4566,7 +4643,8 @@
       },
       "client_rows": [
         10
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "the_harbinger_well_that_stream_could_have_gone_better__11b64b3c",
@@ -4609,7 +4687,8 @@
       },
       "client_rows": [
         9
-      ]
+      ],
+      "payment_resource": "coins"
     },
     {
       "id": "the_harbinger_you_re_broke_again_i_even_gave_you_a_coi_1c0ee0c9",
@@ -4675,7 +4754,8 @@
       },
       "client_rows": [
         15
-      ]
+      ],
+      "payment_resource": "none"
     },
     {
       "id": "the_harbinger_you_re_in_a_coma_yea_car_crash_on_your_w_91969c2a",
@@ -4718,7 +4798,8 @@
       },
       "client_rows": [
         6
-      ]
+      ],
+      "payment_resource": "coins"
     }
   ],
   "special_rules": {

@@ -199,6 +199,12 @@ def _can_afford_action(
 ) -> bool:
     if action == "dismiss" and state.dismissals <= 0:
         return False
+    if offer.payment_resource is not None:
+        if action != "approve" or offer.payment_resource == "none":
+            return True
+        resource = offer.payment_resource
+        cost = outcome_additive_resource_cost(state, offer.approve, resource, data)
+        return getattr(state, resource) >= cost
     if offer.allow_insufficient_funds is True:
         return True
     outcome = _select_outcome(offer, action)

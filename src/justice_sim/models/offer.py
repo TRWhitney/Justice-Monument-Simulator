@@ -82,6 +82,11 @@ class OfferSpec:
     conditions: tuple[Any, ...] = ()
     chain: ChainSpec | None = None
     notes: str | None = None
+    client_rows: tuple[int, ...] = ()
+    encounter_weight: float = 1.0
+    payment_resource: str | None = None
+    approval_triggers_first: bool = False
+    arrival_effects: tuple[EffectSpec, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -97,6 +102,7 @@ class HarbingerRule:
     cost_expr: str
     offer_pool: tuple[str, ...] = ()
     on_unpaid_effects: tuple[EffectSpec, ...] = ()
+    priority_offers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -104,6 +110,7 @@ class GratefulbingerRule:
     offer_id: str
     replace_harbinger_probability_expr: str
     format: str = "percent"
+    minimum_pop: float = 0
 
 
 @dataclass(frozen=True)
@@ -111,6 +118,7 @@ class SpecialRules:
     case_scale: CaseScaleRule
     harbinger: HarbingerRule
     gratefulbinger: GratefulbingerRule | None = None
+    client_encounters: bool = False
 
 
 @dataclass(frozen=True)
@@ -254,6 +262,13 @@ def _parse_offer(item: Mapping[str, Any]) -> OfferSpec:
         allow_insufficient_funds=item.get("allow_insufficient_funds"),
         conditions=tuple(item.get("conditions", []) or ()),
         chain=_parse_chain(item.get("chain", {})) if item.get("chain") else None,
+        client_rows=tuple(item.get("client_rows", ())),
+        encounter_weight=float(item.get("encounter_weight", 1)),
+        payment_resource=item.get("payment_resource"),
+        approval_triggers_first=bool(item.get("approval_triggers_first", False)),
+        arrival_effects=tuple(
+            _parse_effect(e) for e in item.get("arrival_effects", ())
+        ),
         notes=item.get("notes"),
     )
 
@@ -272,6 +287,7 @@ def _parse_special_rules(data: Mapping[str, Any]) -> SpecialRules:
         offer_pool=tuple(harbinger_data.get("offer_pool", []) or ()),
         cadence_modulus=int(harbinger_data.get("cadence_modulus", 5)),
         cost_expr=str(harbinger_data.get("cost_expr")),
+        priority_offers=tuple(harbinger_data.get("priority_offers", ())),
         on_unpaid_effects=tuple(
             _parse_effect(e) for e in harbinger_data.get("on_unpaid_effects", [])
         ),
@@ -284,9 +300,13 @@ def _parse_special_rules(data: Mapping[str, Any]) -> SpecialRules:
                 grateful_data.get("replace_harbinger_probability_expr")
             ),
             format=str(grateful_data.get("format", "percent")),
+            minimum_pop=float(grateful_data.get("minimum_pop", 0)),
         )
     return SpecialRules(
-        case_scale=case_scale, harbinger=harbinger, gratefulbinger=grateful
+        case_scale=case_scale,
+        harbinger=harbinger,
+        gratefulbinger=grateful,
+        client_encounters=bool(data.get("client_encounters", False)),
     )
 
 

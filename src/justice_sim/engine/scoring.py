@@ -15,7 +15,7 @@ from justice_sim.engine.effects import (
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData, OfferSpec
-from justice_sim.models.state import GameState
+from justice_sim.models.state import ContractKey, GameState
 from justice_sim.util.dependencies import referenced_counter_names
 
 
@@ -144,7 +144,7 @@ def _next_harbinger_risk(
 
 
 @lru_cache(maxsize=1024)
-def _contract_counters(contract_key: tuple) -> frozenset[str]:
+def _contract_counters(contract_key: ContractKey) -> frozenset[str]:
     return referenced_counter_names(contract_key)
 
 
@@ -166,12 +166,9 @@ class RiskEvaluator:
         self._health_probes = HealthProbeCache(data, max_entries)
 
     def client_risk(self, state: GameState) -> float:
-        key = state.to_cache_key()
-        # Preserve all condition/effect payloads, their order, and their labels.
-        contract_key = key[7:13] + key[14:18]
-        names = self.counter_names | _contract_counters(contract_key)
-        counters = tuple(item for item in key[13] if item[0] in names)
-        key = key[:13] + (counters,) + key[14:]
+        contracts = state.contract_key()
+        names = self.counter_names | _contract_counters(contracts)
+        key = state.to_cache_key(counter_names=names, contracts=contracts)
         cached = self._cache.get(key)
         if cached is None:
             cached = _client_harbinger_risk(

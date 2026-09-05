@@ -766,20 +766,7 @@ class RolloutPlanner:
                 self.data, self.suggested_rules
             )
             self._referenced_counters = referenced_counters
-        relevant_counters = {
-            name: value
-            for name, value in state.counters.items()
-            if name in referenced_counters
-        }
-        return replace(
-            state,
-            coins=0,
-            pop=0,
-            mh=0,
-            dismissals=0,
-            retirement_chests=0,
-            counters=relevant_counters,
-        ).to_cache_key()
+        return state.non_resource_key(referenced_counters)
 
     def _expected_action_value(
         self, state: GameState, offer: OfferSpec, action: str, rng: Rng

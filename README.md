@@ -2,6 +2,10 @@
 
 Simulator and advisor for the Idleon Justice Monument minigame. Provides both a Qt GUI and an interactive Rich CLI, backed by a shared simulation engine and JSON-driven data.
 
+The [Justice Monument mechanics guide](docs/justice-monument-guide.md) explains
+the game's resources, every request, encounter selection, continuing agreements,
+and retirement rewards from the official web-client logic.
+
 ## Install and Run
 
 No programming tools are required beforehand. The steps below install

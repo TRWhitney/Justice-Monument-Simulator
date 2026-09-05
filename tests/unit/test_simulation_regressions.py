@@ -14,7 +14,8 @@ from justice_sim.engine.reducer import (
     preview_state_before_outcome,
 )
 from justice_sim.engine.rng import Rng
-from justice_sim.models.offer import EffectSpec, OutcomeSpec
+from justice_sim.engine.scoring import UtilityWeights, utility
+from justice_sim.models.offer import BernoulliSpec, EffectSpec, OutcomeSpec
 from justice_sim.models.state import EncounterTrigger, GameState
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.planner.rollout import PlannerConfig, RolloutPlanner
@@ -136,3 +137,160 @@ def test_preparation_preview_does_not_double_consume_trigger(data_factory):
     assert result.coins == prepared.coins + 2
     assert not result.encounter_triggers
     assert rng.state().draws == 1
+
+
+def test_random_upside_scores_are_exact_without_rollouts(builtin_data):
+    state = GameState(1, 5, 3, 3, 1, 0)
+    offer = next(o for o in builtin_data.offers if o.npc_id == "billionaire_chester")
+    planner = _planner(builtin_data)
+    progress = []
+    result = planner.recommend(state, offer, progress=progress.append)
+    score = next(s for s in result.action_scores if s.action == "approve")
+    # This checks the configured distribution independently of the planner.
+    outcomes = [
+        (replace(state, case_index=2, retirement_chests=2), 1 / 6),
+        (replace(state, case_index=2, retirement_chests=3), 1 / 6),
+        (replace(state, case_index=2, dismissals=3), 1 / 3),
+        (replace(state, case_index=2, coins=6), 1 / 3),
+    ]
+    values = [(utility(s, builtin_data, planner.weights), p) for s, p in outcomes]
+    expected = sum(v * p for v, p in values)
+    assert result.best_action == "approve"
+    assert progress == []
+    assert score.sample_count == 0
+    assert score.expected_chests == pytest.approx(5 / 6)
+    assert score.expected_utility == pytest.approx(expected)
+    assert score.variance == pytest.approx(
+        sum(p * (v - expected) ** 2 for v, p in values)
+    )
+    assert score.variance > 0
+    assert score.death_probability == 0
+
+
+@pytest.mark.parametrize("change", ["base", "encounter", "penalty", "dismissal"])
+def test_probability_uses_state_at_random_branch(data_factory, change):
+    data = data_factory(include_grateful=False)
+    state = GameState(1, 1, 3, 1, 1, 0)
+    zero_coins = EffectSpec("set_resource", {"resource": "coins", "value": 0})
+    action = "dismiss" if change == "dismissal" else "approve"
+    outcome = OutcomeSpec(
+        effects=(zero_coins,) if change == "base" else (),
+        random=BernoulliSpec(
+            "bernoulli",
+            "dismissals" if change == "dismissal" else "coins",
+            (_resource("coins", 100),),
+            (_resource("mh", -1),),
+        ),
+    )
+    offer = replace(
+        data.offers[0],
+        approve=OutcomeSpec(),
+        reject=OutcomeSpec(),
+        dismiss=OutcomeSpec(),
+    )
+    offer = replace(offer, **{action: outcome})
+    if change == "encounter":
+        state = replace(
+            state,
+            encounter_triggers=(
+                EncounterTrigger(effects=(zero_coins,), remaining_uses=1),
+            ),
+        )
+    elif change == "penalty":
+        state = replace(
+            state,
+            required_action="reject",
+            required_action_penalty_effects=(zero_coins,),
+        )
+    planner = _planner(data)
+    actual, _ = apply_action(state, offer, action, data, Rng(1))
+    assert actual.mh == 0
+    assert planner._expected_action_value(
+        state, offer, action, Rng(3)
+    ) == pytest.approx(utility(actual, data, planner.weights))
+    progress = []
+    result = planner.recommend(state, offer, progress=progress.append)
+    assert result.best_action != action
+    assert progress  # The alleged guaranteed upside must not bypass rollouts.
+
+
+def test_random_base_effects_have_branch_specific_probabilities(data_factory):
+    data = data_factory(include_grateful=False)
+    outcome = OutcomeSpec(
+        effects=(
+            EffectSpec(
+                "random_range_resource", {"resource": "coins", "min": 0, "max": 1}
+            ),
+        ),
+        random=BernoulliSpec(
+            "bernoulli", "coins", (_resource("retirement_chests", 1),), ()
+        ),
+    )
+    offer = replace(data.offers[0], approve=outcome)
+    planner = _planner(data)
+    planner.weights = UtilityWeights(
+        w_chests=20,
+        w_death=0,
+        w_low_mh=0,
+        w_insolvency=0,
+        w_resources=0,
+        w_dismissals=0,
+        w_progress=0,
+    )
+    assert planner._expected_action_value(
+        GameState(1, 0, 3, 3, 0, 0), offer, "approve", Rng(0)
+    ) == pytest.approx(10)
+
+
+def test_state_dependent_guaranteed_upside_still_short_circuits(data_factory):
+    data = data_factory()
+    offer = replace(
+        data.offers[0],
+        approve=OutcomeSpec(
+            effects=(EffectSpec("set_resource", {"resource": "coins", "value": 1}),),
+            random=BernoulliSpec(
+                "bernoulli",
+                "coins",
+                (_resource("retirement_chests", 2),),
+                (_resource("mh", -1),),
+            ),
+        ),
+        reject=OutcomeSpec(),
+    )
+    progress = []
+    result = _planner(data).recommend(
+        GameState(1, 0, 3, 1, 0, 0), offer, progress=progress.append
+    )
+    assert result.best_action == "approve"
+    assert progress == []
+    score = next(s for s in result.action_scores if s.action == "approve")
+    assert score.expected_chests == 2
+    assert score.death_probability == 0
+
+
+def test_shortcut_does_not_omit_unclassified_alternative(data_factory):
+    data = data_factory()
+    offer = replace(
+        data.offers[0],
+        approve=OutcomeSpec(effects=(_resource("coins", 1),)),
+        reject=OutcomeSpec(
+            effects=(
+                EffectSpec(
+                    "random_exchange",
+                    {
+                        "take_resource": "pop",
+                        "give_resource": "retirement_chests",
+                        "min": 1,
+                        "max": 1,
+                    },
+                ),
+            )
+        ),
+        dismiss=OutcomeSpec(),
+    )
+    progress = []
+    result = _planner(data).recommend(
+        GameState(1, 5, 1, 3, 1, 0), offer, progress=progress.append
+    )
+    assert result.best_action == "reject"
+    assert progress

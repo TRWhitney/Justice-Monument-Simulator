@@ -138,3 +138,18 @@ def test_rounded_harbinger_payment_is_clickable(audit_window):
     assert window.session.state.coins == 0
     assert window.session.state.mh == 1
     assert window.session.state.case_index == 16
+
+
+def test_shortcut_panel_displays_expected_random_chests(audit_window):
+    window = audit_window
+    offer = next(o for o in window.data.offers if o.npc_id == "billionaire_chester")
+    window.session.state = GameState(1, 5, 3, 3, 0, 0)
+    progress = []
+    recommendation = window.planner.recommend(
+        window.session.state, offer, progress=progress.append
+    )
+    window.suggestion_panel.update_recommendation(recommendation)
+    assert progress == []
+    assert window.suggestion_panel.best_label.text() == "Best: approve"
+    assert "Chests 0.83" in window.suggestion_panel.metrics_label.text()
+    _capture_review(window.suggestion_panel, "random-upside-expectation")

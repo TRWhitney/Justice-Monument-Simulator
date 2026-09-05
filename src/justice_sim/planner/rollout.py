@@ -16,7 +16,7 @@ from justice_sim.engine.encounter import (
     consume_forced_encounter,
     select_encounter,
 )
-from justice_sim.engine.effects import resolve_expr, resolve_probability
+from justice_sim.engine.effects import apply_effects, resolve_expr, resolve_probability
 from justice_sim.engine.reducer import (
     ActionNotAllowed,
     apply_action,
@@ -24,6 +24,7 @@ from justice_sim.engine.reducer import (
     can_afford_action,
     is_action_blocked,
     preview_state_after_encounter_triggers,
+    preview_state_before_outcome,
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.engine.scoring import utility, weights_for_preset
@@ -177,11 +178,21 @@ class RolloutPlanner:
         *,
         eligible_actions: tuple[str, ...],
     ) -> PlannerRecommendation | None:
-        scores = self._deterministic_action_scores(state, offer)
+        terminal = self._is_terminal_offer_state(state, offer)
+        upside_action = (
+            None
+            if terminal
+            else self._guaranteed_upside_action(
+                state, offer, eligible_actions=eligible_actions
+            )
+        )
+        if not terminal and upside_action is None:
+            return None
+        scores = self._exact_action_scores(state, offer)
         if not scores:
             return None
         scores = self._apply_action_biases(state, offer, scores)
-        if self._is_terminal_offer_state(state, offer):
+        if terminal:
             eligible_scores = [
                 score for score in scores if score.action in eligible_actions
             ]
@@ -189,11 +200,6 @@ class RolloutPlanner:
             return PlannerRecommendation(
                 best_action=best.action, action_scores=tuple(scores)
             )
-        upside_action = self._guaranteed_upside_action(
-            state, offer, eligible_actions=eligible_actions
-        )
-        if upside_action is None:
-            return None
         return PlannerRecommendation(
             best_action=upside_action, action_scores=tuple(scores)
         )
@@ -443,8 +449,10 @@ class RolloutPlanner:
             if not self._action_is_possible(state, offer, action):
                 continue
             profile = self._action_outcome_profile(state, offer, action)
-            if profile is not None:
-                profiles[action] = profile
+            if profile is None:
+                # Dominance must include every eligible alternative.
+                return None
+            profiles[action] = profile
         if len(profiles) < 2:
             return None
         if len({signature for _, signature in profiles.values()}) != 1:
@@ -466,25 +474,13 @@ class RolloutPlanner:
     def _action_outcome_profile(
         self, state: GameState, offer: OfferSpec, action: str
     ) -> tuple[str, tuple] | None:
-        outcome = self._outcome_for_action(offer, action)
-        if outcome is None:
-            return None
-        scenarios = self._expand_outcome_scenarios(state, outcome)
-        if scenarios is None or not scenarios:
+        results = self._exact_action_results(state, offer, action)
+        if not results:
             return None
 
         profiles: list[str] = []
         signatures: set[tuple] = set()
-        for scenario_index, (scenario, _probability) in enumerate(scenarios):
-            rng = Rng(scenario_index)
-            try:
-                next_state, _ = apply_action_with_outcome(
-                    state, offer, action, scenario, self.data, rng
-                )
-            except ActionNotAllowed:
-                return None
-            if rng.state().draws != 0:
-                return None
+        for next_state, _probability in results:
             profiles.append(self._resource_delta_profile(state, next_state))
             signatures.add(self._non_resource_signature(next_state))
 
@@ -537,16 +533,42 @@ class RolloutPlanner:
     def _expected_action_value(
         self, state: GameState, offer: OfferSpec, action: str, rng: Rng
     ) -> float | None:
+        results = self._exact_action_results(state, offer, action)
+        if results is None:
+            return self._sample_action_value(state, offer, action, rng)
+        if not results:
+            return None
+        return sum(
+            probability * self._cached_utility(next_state)
+            for next_state, probability in results
+        )
+
+    def _exact_action_results(
+        self, state: GameState, offer: OfferSpec, action: str
+    ) -> list[tuple[GameState, float]] | None:
+        """Return all immediate results, or None when randomness is unexpanded."""
         outcome = self._outcome_for_action(offer, action)
         if outcome is None:
+            return []
+        prepared = state
+        if isinstance(outcome.random, BernoulliSpec) and not isinstance(
+            outcome.random.p, (int, float)
+        ):
+            preparation_rng = Rng(0)
+            try:
+                prepared = preview_state_before_outcome(
+                    state, offer, action, self.data, preparation_rng
+                )
+            except ActionNotAllowed:
+                return None if preparation_rng.state().draws else []
+            if preparation_rng.state().draws:
+                return None
+        scenarios = self._expand_outcome_scenarios(prepared, outcome)
+        if scenarios is None:
             return None
-        scenarios = self._expand_outcome_scenarios(state, outcome)
-        if scenarios is None or not scenarios:
-            return self._sample_action_value(state, offer, action, rng)
-
-        expected_value = 0.0
-        for scenario_index, (scenario, probability) in enumerate(scenarios):
-            scenario_rng = rng.spawn(scenario_index)
+        results = []
+        for scenario, probability in scenarios:
+            scenario_rng = Rng(0)
             try:
                 next_state, _ = apply_action_with_outcome(
                     state,
@@ -557,11 +579,11 @@ class RolloutPlanner:
                     scenario_rng,
                 )
             except ActionNotAllowed:
-                return self._sample_action_value(state, offer, action, rng)
+                return None if scenario_rng.state().draws else []
             if scenario_rng.state().draws != 0:
-                return self._sample_action_value(state, offer, action, rng)
-            expected_value += probability * self._cached_utility(next_state)
-        return expected_value
+                return None
+            results.append((next_state, probability))
+        return results
 
     def _sample_action_value(
         self, state: GameState, offer: OfferSpec, action: str, rng: Rng
@@ -581,39 +603,90 @@ class RolloutPlanner:
     def _expand_outcome_scenarios(
         self, state: GameState, outcome: OutcomeSpec
     ) -> list[tuple[OutcomeSpec, float]] | None:
-        branch_effects: list[tuple[tuple[EffectSpec, ...], float]]
-        if outcome.random is None:
-            branch_effects = [((), 1.0)]
-        elif isinstance(outcome.random, BernoulliSpec):
-            probability = resolve_probability(outcome.random.p, state, self.data)
-            probability = min(1.0, max(0.0, probability))
-            branch_effects = [
-                (tuple(outcome.random.then_effects), probability),
-                (tuple(outcome.random.else_effects), 1.0 - probability),
-            ]
-        elif isinstance(outcome.random, CategoricalSpec):
-            total_weight = sum(choice.weight for choice in outcome.random.choices)
-            if total_weight <= 0:
-                return None
-            branch_effects = [
-                (tuple(choice.effects), choice.weight / total_weight)
-                for choice in outcome.random.choices
-            ]
-        else:
+        base_scenarios = self._expand_effect_scenarios(outcome.effects)
+        if base_scenarios is None:
             return None
-
         scenarios: list[tuple[OutcomeSpec, float]] = []
-        for branch, branch_probability in branch_effects:
-            if branch_probability <= 0:
+        for base, base_probability in base_scenarios:
+            if outcome.random is None:
+                scenarios.append((OutcomeSpec(effects=base), base_probability))
                 continue
-            expanded = self._expand_effect_scenarios(outcome.effects + branch)
-            if expanded is None:
+            if isinstance(outcome.random, BernoulliSpec):
+                after_base = state
+                if not isinstance(outcome.random.p, (int, float)):
+                    base_rng = Rng(0)
+                    after_base = apply_effects(state, base, self.data, base_rng)
+                    if base_rng.state().draws:
+                        return None
+                probability = resolve_probability(
+                    outcome.random.p, after_base, self.data
+                )
+                probability = min(1.0, max(0.0, probability))
+                branches = [
+                    (outcome.random.then_effects, probability),
+                    (outcome.random.else_effects, 1.0 - probability),
+                ]
+            elif isinstance(outcome.random, CategoricalSpec):
+                total_weight = sum(choice.weight for choice in outcome.random.choices)
+                if total_weight <= 0:
+                    return None
+                branches = [
+                    (choice.effects, choice.weight / total_weight)
+                    for choice in outcome.random.choices
+                ]
+            else:
                 return None
-            scenarios.extend(
-                (OutcomeSpec(effects=effects), branch_probability * probability)
-                for effects, probability in expanded
-            )
+            for branch, branch_probability in branches:
+                if branch_probability <= 0:
+                    continue
+                expanded = self._expand_effect_scenarios(branch)
+                if expanded is None:
+                    return None
+                scenarios.extend(
+                    (
+                        OutcomeSpec(effects=base + effects),
+                        base_probability * branch_probability * probability,
+                    )
+                    for effects, probability in expanded
+                )
         return scenarios
+
+    def _exact_action_scores(
+        self, state: GameState, offer: OfferSpec
+    ) -> list[ActionScore] | None:
+        scores = []
+        for action in offer.actions_available:
+            results = self._exact_action_results(state, offer, action)
+            if results is None:
+                return None
+            if not results:
+                scores.append(ActionScore(action, float("-inf"), 0.0, 1.0, 0.0))
+                continue
+            values = [
+                (utility(next_state, self.data, self.weights), probability)
+                for next_state, probability in results
+            ]
+            expected = sum(value * probability for value, probability in values)
+            scores.append(
+                ActionScore(
+                    action=action,
+                    expected_utility=expected,
+                    expected_chests=sum(
+                        next_state.retirement_chests * probability
+                        for next_state, probability in results
+                    ),
+                    death_probability=sum(
+                        probability
+                        for next_state, probability in results
+                        if next_state.ended or next_state.mh <= 0
+                    ),
+                    variance=sum(
+                        probability * (value - expected) ** 2
+                        for value, probability in values
+                    ),
+                )
+            )
+        return scores
 
     def _expand_effect_scenarios(
         self, effects: tuple[EffectSpec, ...]

@@ -153,3 +153,26 @@ def test_shortcut_panel_displays_expected_random_chests(audit_window):
     assert window.suggestion_panel.best_label.text() == "Best: approve"
     assert "Chests 0.83" in window.suggestion_panel.metrics_label.text()
     _capture_review(window.suggestion_panel, "random-upside-expectation")
+
+
+def test_client_cool_bird_tails_preserves_last_health(audit_window):
+    window = audit_window
+    window.session.state = GameState(1, 20, 20, 1, 0, 0)
+    window.current_offer = next(o for o in window.data.offers if 54 in o.client_rows)
+    observed = []
+
+    def choose_tails():
+        dialog = QtWidgets.QApplication.activeModalWidget()
+        if isinstance(dialog, _OutcomeChoiceDialog):
+            observed.append(True)
+            dialog.findChild(QtWidgets.QComboBox).setCurrentIndex(1)
+            dialog.findChild(QtWidgets.QDialogButtonBox).button(
+                QtWidgets.QDialogButtonBox.StandardButton.Ok
+            ).click()
+
+    window._update_action_controls()
+    QtCore.QTimer.singleShot(0, choose_tails)
+    window.approve_button.click()
+    assert observed == [True]
+    assert window.session.state.mh == 1
+    _capture_review(window, "client-cool-bird-tails")

@@ -185,6 +185,8 @@ def builtin_data():
 
 @pytest.fixture
 def promised_gamble(builtin_data):
+    from dataclasses import replace
+
     from justice_sim.engine.reducer import apply_action
     from justice_sim.engine.rng import Rng
     from justice_sim.models.state import GameState
@@ -197,6 +199,20 @@ def promised_gamble(builtin_data):
     )
     state, _ = apply_action(
         GameState(1, 5, 3, 1, 0, 0), promise, "approve", builtin_data, Rng(0)
+    )
+    # Keep a truly lossy custom gamble to exercise conservative survival UI.
+    # The client-backed Cool Bird offer now correctly protects the last MH.
+    gamble = replace(
+        gamble,
+        approve=replace(
+            gamble.approve,
+            random=replace(
+                gamble.approve.random,
+                else_effects=tuple(
+                    replace(e, when=None) for e in gamble.approve.random.else_effects
+                ),
+            ),
+        ),
     )
     return state, gamble
 

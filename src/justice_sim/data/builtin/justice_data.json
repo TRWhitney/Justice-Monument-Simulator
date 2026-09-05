@@ -613,7 +613,8 @@
               "params": {
                 "resource": "mh",
                 "amount": -1
-              }
+              },
+              "when": "mh > 1"
             }
           ]
         }

@@ -66,3 +66,10 @@ def test_bean_bonus_precedes_final_resource_clamp(builtin_data):
     s = replace(s, coins=0)
     s, _ = apply_action(s, offer(builtin_data, 23), "approve", builtin_data, Draw(0.1))
     assert s.coins == 2  # Bonus 4, then the two-coin payment; no premature clamp.
+
+
+@pytest.mark.parametrize("mh", [1, 2, 5])
+@pytest.mark.parametrize("draw", [0.499999, 0.5])
+def test_cool_bird_preserves_last_health(builtin_data, mh, draw):
+    result = act(builtin_data, 54, mh=mh, draw=draw)
+    assert result.mh == (mh + 2 if draw < 0.5 else max(1, mh - 1))

@@ -467,6 +467,26 @@
               "resource": "pop",
               "amount": 5
             }
+          },
+          {
+            "type": "add_encounter_trigger",
+            "params": {
+              "label": "poppy_iou",
+              "npc_id": "scripticus",
+              "remaining_uses": 1,
+              "effects": [
+                {
+                  "type": "add_resource",
+                  "params": {
+                    "resource": "coins",
+                    "amount": {
+                      "expr": "ceil(5.4 * case_scale)",
+                      "snapshot": true
+                    }
+                  }
+                }
+              ]
+            }
           }
         ]
       },

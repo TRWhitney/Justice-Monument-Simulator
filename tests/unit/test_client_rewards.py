@@ -150,3 +150,21 @@ def test_poppy_role_model_snapshots_original_popularity(builtin_data, pop):
         result, offer(builtin_data, 79), builtin_data, Draw(0.1)
     )
     assert again == result
+
+
+@pytest.mark.parametrize(
+    "case,payment,repayment", [(1, 4, 6), (6, 8, 11), (11, 12, 17)]
+)
+def test_poppy_iou_pays_scripticus_once(builtin_data, case, payment, repayment):
+    s = act(builtin_data, 75, case_index=case)
+    assert s.coins == 20 - payment
+    result = preview_state_after_encounter_triggers(
+        s, offer(builtin_data, 23), builtin_data, Draw(0.1)
+    )
+    assert result.coins == 20 - payment + repayment
+    assert (
+        preview_state_after_encounter_triggers(
+            result, offer(builtin_data, 23), builtin_data, Draw(0.1)
+        )
+        == result
+    )

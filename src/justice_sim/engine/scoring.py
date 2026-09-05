@@ -24,7 +24,7 @@ class UtilityWeights:
     w_chests: float = 20.0
     w_death: float = 150.0
     w_low_mh: float = 8.0
-    w_insolvency: float = 60.0
+    w_insolvency: float = 30.0
     w_resources: float = 0.1
     w_dismissals: float = 3.0
     w_progress: float = 0.5

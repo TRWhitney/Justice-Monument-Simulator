@@ -1,3 +1,6 @@
+import pickle
+import random
+
 import pytest
 
 from justice_sim.engine.rng import Rng
@@ -46,3 +49,14 @@ def test_weighted_choice_does_not_select_zero_weight_at_zero_roll():
     rng = FixedRollRng(0.0)
 
     assert rng.weighted_choice([("never", 0.0), ("always", 1.0)]) == "always"
+
+
+@pytest.mark.unit
+def test_lazy_rng_matches_python_and_survives_pickle():
+    expected = random.Random(42)
+    rng = pickle.loads(pickle.dumps(Rng(42)))
+    for _ in range(10):
+        assert rng.random() == expected.random()
+    restored = pickle.loads(pickle.dumps(rng))
+    assert restored.random() == expected.random()
+    assert restored.state().draws == 11

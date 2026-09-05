@@ -19,7 +19,8 @@ class Rng:
         if seed is None:
             seed = secrets.randbelow(2**31 - 1) + 1
         self._seed = int(seed)
-        self._random = random.Random(self._seed)
+        # Most exact previews never draw. Seed the generator only when needed.
+        self._random: random.Random | None = None
         self._draws = 0
 
     @property
@@ -27,6 +28,8 @@ class Rng:
         return self._seed
 
     def random(self) -> float:
+        if self._random is None:
+            self._random = random.Random(self._seed)
         self._draws += 1
         return self._random.random()
 

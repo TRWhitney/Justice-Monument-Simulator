@@ -595,6 +595,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_offer: OfferSpec | None = None
         self.current_recommendation: PlannerRecommendation | None = None
         self._planner_generation = 0
+        self._planner_request_key: tuple[str, str] | None = None
         self._planner_process: BaseProcess | None = None
         self._planner_connection: Connection | None = None
         self._planner_process_generation: int | None = None
@@ -866,6 +867,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.offer_search.set_auto_offer_id(self._auto_offer_id)
         self.offer_search.set_show_all_visible(self._sim_mode != "full")
         self.offer_search.update_state(self.session.state, preserve_scroll=True)
+        if (
+            self.current_offer
+            and self._sim_mode != "none"
+            and self._manual_adjust_pre_state is None
+            and self._planner_request_key
+            != (self.current_offer.id, self._luck_state_key(self.session.state))
+        ):
+            self._on_offer_selected(self.current_offer)
         self._update_action_controls()
         if self._planner_progress_timer.isActive():
             self._tick_planner_progress()
@@ -1693,6 +1702,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._stop_planner_process()
         planner_state = self.session.state
         planner_state_key = self._luck_state_key(planner_state)
+        self._planner_request_key = (offer.id, planner_state_key)
 
         self._reset_planner_progress(offer)
         self._clear_planner_result()
@@ -1728,6 +1738,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super().closeEvent(event)
 
     def _stop_planner_process(self) -> None:
+        self._planner_request_key = None
         process = self._planner_process
         connection = self._planner_connection
         self._planner_process = None
@@ -2323,6 +2334,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._clear_planner_result()
         if generation != self._planner_generation:
             return
+        if (
+            self.current_offer is None
+            or offer_id != self.current_offer.id
+            or state_key != self._luck_state_key(self.session.state)
+        ):
+            return
         if error:
             self.current_recommendation = None
             self._clear_recommendation_ui()
@@ -2485,14 +2502,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if not self._commit_manual_adjust_log():
             return
         self._refresh()
-        if self.current_offer and self._sim_mode != "none":
-            self.suggestion_panel.best_label.setText("Calculating...")
-            self.suggestion_panel.metrics_label.setText("")
-            self.suggestion_panel.set_calculating(
-                True, self._planner_progress_total(self.current_offer)
-            )
-            self._start_planner(self.current_offer)
-        else:
+        if not self.current_offer or self._sim_mode == "none":
             self._clear_recommendation_ui()
 
     def _commit_manual_adjust_log(self) -> bool:

@@ -238,3 +238,74 @@ def test_recommended_button_uses_affordable_action(data_dict_factory):
 
     window.close()
     app.quit()
+
+
+class StateAwarePlanner(FakePlanner):
+    def recommend(self, state, offer, progress=None):
+        from dataclasses import replace
+
+        result = super().recommend(state, offer, progress)
+        return replace(
+            result, best_action="approve" if state.case_index == 1 else "reject"
+        )
+
+
+def _wait_for_recommendation(window):
+    deadline = time.monotonic() + 4.0
+    while window.current_recommendation is None and time.monotonic() < deadline:
+        QtWidgets.QApplication.processEvents()
+        time.sleep(0.005)
+    assert window.current_recommendation is not None
+
+
+@pytest.mark.gui
+@pytest.mark.parametrize("finish_before_skip", [False, True])
+def test_retained_selection_replans_after_skip_and_undo(
+    data_factory, finish_before_skip
+):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    window = MainWindow(data_factory())
+    window.planner = StateAwarePlanner()
+    try:
+        window.offer_search.results_list.setCurrentRow(0)
+        if finish_before_skip:
+            _wait_for_recommendation(window)
+        generation = window._planner_generation
+        window.skip_button.click()
+        assert window.session.state.case_index == 2
+        assert window.current_recommendation is None
+        assert window._planner_generation == generation + 1
+        _wait_for_recommendation(window)
+        assert window.current_recommendation.best_action == "reject"
+
+        window.log_panel.undo_button.click()
+        assert window.session.state.case_index == 1
+        assert window.current_recommendation is None
+        _wait_for_recommendation(window)
+        assert window.current_recommendation.best_action == "approve"
+    finally:
+        window.close()
+        app.quit()
+
+
+@pytest.mark.gui
+def test_result_for_previous_state_is_rejected(data_factory):
+    from dataclasses import replace
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    window = MainWindow(data_factory())
+    try:
+        offer = window.data.offers[0]
+        window.current_offer = offer
+        window._planner_result = PlannerRecommendation("approve", ())
+        window._planner_result_generation = window._planner_generation
+        window._planner_result_offer_id = offer.id
+        window._planner_result_state_key = window._luck_state_key(window.session.state)
+        window.session.state = replace(window.session.state, coins=99)
+        window._consume_planner_result()
+        assert window.current_recommendation is None
+    finally:
+        window.close()
+        app.quit()

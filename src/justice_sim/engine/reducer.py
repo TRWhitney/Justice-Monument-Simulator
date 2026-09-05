@@ -60,6 +60,33 @@ def preview_state_after_encounter_triggers(
     return _apply_encounter_triggers(state, offer, data, rng)
 
 
+def preview_state_before_outcome(
+    state: GameState, offer: OfferSpec, action: str, data: JusticeData, rng: Rng
+) -> GameState:
+    """Prepare an action using the same ordering as the reducer.
+
+    Preview callers must supply a cloned RNG so preparation cannot consume the
+    live run's randomness. The returned state has not applied the outcome yet.
+    """
+    if state.ended or state.mh <= 0:
+        raise ActionNotAllowed("Run has ended")
+    updated = _apply_encounter_triggers(state, offer, data, rng)
+    if updated.ended or updated.mh <= 0:
+        raise ActionNotAllowed("Run has ended")
+    if action not in offer.actions_available:
+        raise ActionNotAllowed(f"Action '{action}' not available")
+    if _blocked_by_status(updated, offer, action, data):
+        raise ActionNotAllowed(f"Action '{action}' blocked by status")
+    if not _can_afford_action(updated, offer, action, data):
+        raise ActionNotAllowed("Insufficient funds")
+    if updated.required_action and action != updated.required_action:
+        updated = apply_effects(
+            updated, updated.required_action_penalty_effects, data, rng
+        )
+    updated = replace(updated, required_action=None, required_action_penalty_effects=())
+    return _apply_dismissal_cost(updated, offer, action, data)
+
+
 def action_may_survive(
     state: GameState, offer: OfferSpec, action: str, data: JusticeData
 ) -> bool:
@@ -116,28 +143,9 @@ def _apply_action_with_outcome(
     rng: Rng,
     random_label_override: str | None,
 ) -> tuple[GameState, str | None]:
-    if state.ended or state.mh <= 0:
-        raise ActionNotAllowed("Run has ended")
     encounter_overrides_at_start = state.encounter_overrides
-    updated = _apply_encounter_triggers(state, offer, data, rng)
-    if updated.ended or updated.mh <= 0:
-        raise ActionNotAllowed("Run has ended")
-    if action not in offer.actions_available:
-        raise ActionNotAllowed(f"Action '{action}' not available")
-    if _blocked_by_status(updated, offer, action, data):
-        raise ActionNotAllowed(f"Action '{action}' blocked by status")
-    if not _can_afford_action(updated, offer, action, data):
-        raise ActionNotAllowed("Insufficient funds")
-
-    random_label = None
-    if updated.required_action and action != updated.required_action:
-        updated = apply_effects(
-            updated, updated.required_action_penalty_effects, data, rng
-        )
-    updated = replace(updated, required_action=None, required_action_penalty_effects=())
-
+    updated = preview_state_before_outcome(state, offer, action, data, rng)
     pre_action_state = updated
-    updated = _apply_dismissal_cost(updated, offer, action, data)
     updated, random_label = apply_outcome(updated, outcome, data, rng)
     if random_label_override is not None:
         random_label = random_label_override

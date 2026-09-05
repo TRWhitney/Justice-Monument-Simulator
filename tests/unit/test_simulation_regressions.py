@@ -11,10 +11,11 @@ from justice_sim.engine.reducer import (
     action_may_survive,
     apply_action,
     can_afford_action,
+    preview_state_before_outcome,
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import EffectSpec, OutcomeSpec
-from justice_sim.models.state import GameState
+from justice_sim.models.state import EncounterTrigger, GameState
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.planner.rollout import PlannerConfig, RolloutPlanner
 from justice_sim.ui_cli.cli import CliApp
@@ -96,3 +97,42 @@ def test_cli_allows_manual_surviving_gamble(builtin_data, promised_gamble):
     assert app.session.state.mh == 3
     assert app.session.state.required_action is None
     assert len(app.session.log.entries) == 1
+
+
+def test_cli_manual_exchange_matches_full_simulation(builtin_data, ghost_exchange):
+    state, offer = ghost_exchange
+    app = CliApp(builtin_data, SuggestedRules.empty(), console=Console(file=StringIO()))
+    app.sim_mode = "none"
+    app.session.state = state
+    app.current_offer = offer
+    app.session.rng = Rng(0)
+    expected, _ = apply_action(state, offer, "approve", builtin_data, Rng(0))
+    assert app.handle_command("approve")
+    assert app.pending_prompt is None
+    assert app.session.state == expected
+    assert (expected.coins, expected.pop) == (18, 0)
+    assert len(app.session.log.entries) == 1
+
+
+def test_preparation_preview_does_not_double_consume_trigger(data_factory):
+    data = data_factory()
+    offer = data.offers[0]
+    trigger = EncounterTrigger(
+        effects=(
+            EffectSpec(
+                "random_range_resource", {"resource": "coins", "min": 1, "max": 3}
+            ),
+        ),
+        remaining_uses=1,
+    )
+    state = GameState(1, 5, 3, 3, 0, 0, encounter_triggers=(trigger,))
+    rng = Rng(5)
+    prepared = preview_state_before_outcome(
+        state, offer, "approve", data, Rng.from_state(rng.state())
+    )
+    assert rng.state().draws == 0
+    assert state.encounter_triggers == (trigger,)
+    result, _ = apply_action(state, offer, "approve", data, rng)
+    assert result.coins == prepared.coins + 2
+    assert not result.encounter_triggers
+    assert rng.state().draws == 1

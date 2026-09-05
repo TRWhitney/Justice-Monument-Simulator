@@ -34,6 +34,7 @@ from justice_sim.engine.reducer import (
     can_afford_action,
     is_action_blocked,
     preview_state_after_encounter_triggers,
+    preview_state_before_outcome,
     skip_case,
 )
 from justice_sim.engine.rng import Rng
@@ -1761,7 +1762,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 )
             else:
                 outcome = self._select_outcome(self.current_offer, action)
-                resolved = self._resolve_outcome_randomness(outcome)
+                outcome_state = preview_state_before_outcome(
+                    self.session.state,
+                    self.current_offer,
+                    action,
+                    self.data,
+                    Rng.from_state(self.session.rng.state()),
+                )
+                resolved = self._resolve_outcome_randomness(outcome, outcome_state)
                 if resolved is None:
                     self.toast_area.show_toast("Action cancelled.")
                     return
@@ -1892,11 +1900,9 @@ class MainWindow(QtWidgets.QMainWindow):
         raise ActionNotAllowed(f"Unknown action '{action}'")
 
     def _resolve_outcome_randomness(
-        self, outcome: OutcomeSpec
+        self, outcome: OutcomeSpec, state: GameState
     ) -> tuple[OutcomeSpec, str | None] | None:
-        base_resolution = self._resolve_effects_for_manual(
-            outcome.effects, self.session.state
-        )
+        base_resolution = self._resolve_effects_for_manual(outcome.effects, state)
         if base_resolution is None:
             return None
         resolved_base, base_state = base_resolution

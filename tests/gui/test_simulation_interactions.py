@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from PySide6 import QtCore, QtWidgets
 
+from justice_sim.engine.reducer import apply_action
+from justice_sim.engine.rng import Rng
 from justice_sim.models.state import GameState
 from justice_sim.planner.rollout import PlannerConfig
 from justice_sim.ui_qt.app import create_app
@@ -95,6 +97,31 @@ def test_surviving_gamble_remains_clickable(audit_window, promised_gamble):
     assert window.session.state.mh == 3
     assert window.session.state.required_action is None
     assert len(window.session.log.entries) == 1
+
+
+def test_manual_exchange_respects_arrival_resources(
+    audit_window, ghost_exchange, monkeypatch
+):
+    window = audit_window
+    state, offer = ghost_exchange
+    window.session.state = state
+    window.session.rng = Rng(0)
+    window.current_offer = offer
+    window._update_action_controls()
+    prompts = []
+
+    def unexpected_prompt(*args):
+        prompts.append(args)
+        return 2
+
+    monkeypatch.setattr(window, "_prompt_random_value", unexpected_prompt)
+    expected, _ = apply_action(state, offer, "approve", window.data, Rng(0))
+    window.approve_button.click()
+    assert prompts == []  # Only one popularity remains, so no random choice.
+    assert window.session.state == expected
+    assert (expected.coins, expected.pop) == (18, 0)
+    assert len(window.session.log.entries) == 1
+    _capture_review(window, "exchange-after-arrival")
 
 
 def test_rounded_harbinger_payment_is_clickable(audit_window):

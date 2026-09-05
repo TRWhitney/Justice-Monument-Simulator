@@ -29,6 +29,7 @@ from justice_sim.engine.reducer import (
     action_may_survive,
     apply_action,
     apply_action_with_outcome,
+    preview_state_before_outcome,
     skip_case,
 )
 from justice_sim.engine.rng import Rng
@@ -809,7 +810,14 @@ class CliApp:
                 )
             else:
                 outcome = _select_outcome(self.current_offer, action)
-                resolver = ManualOutcomeResolver(outcome, self.session.state, self.data)
+                outcome_state = preview_state_before_outcome(
+                    self.session.state,
+                    self.current_offer,
+                    action,
+                    self.data,
+                    Rng.from_state(self.session.rng.state()),
+                )
+                resolver = ManualOutcomeResolver(outcome, outcome_state, self.data)
                 if not resolver.done:
                     self._pending_resolution = resolver
                     self._pending_action = (self.current_offer, action)

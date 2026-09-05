@@ -199,3 +199,19 @@ def promised_gamble(builtin_data):
         GameState(1, 5, 3, 1, 0, 0), promise, "approve", builtin_data, Rng(0)
     )
     return state, gamble
+
+
+@pytest.fixture
+def ghost_exchange(builtin_data):
+    from justice_sim.engine.reducer import apply_action
+    from justice_sim.engine.rng import Rng
+    from justice_sim.models.state import GameState
+
+    ghost = next(o for o in builtin_data.offers if o.id.startswith("ghost_can_you"))
+    exchange = next(
+        o for o in builtin_data.offers if o.id.startswith("rupie_slug_hai_you")
+    )
+    state, _ = apply_action(
+        GameState(6, 5, 3, 3, 0, 0), ghost, "approve", builtin_data, Rng(0)
+    )
+    return state, exchange

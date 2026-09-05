@@ -415,7 +415,7 @@ class RolloutPlanner:
             )
             if current.ended or current.mh <= 0:
                 return current
-            action = self._select_action(
+            action, transition = self._choose_action(
                 current,
                 offer,
                 rng,
@@ -424,6 +424,9 @@ class RolloutPlanner:
             )
             if action is None:
                 return self._dead_end(current)
+            if transition is not None:
+                current = transition
+                continue
             try:
                 current, _ = apply_action(
                     current,
@@ -450,6 +453,19 @@ class RolloutPlanner:
         encounter_start: GameState | None = None,
         remaining: int = 0,
     ) -> str | None:
+        return self._choose_action(
+            state, offer, rng, encounter_start=encounter_start, remaining=remaining
+        )[0]
+
+    def _choose_action(
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        rng: Rng,
+        *,
+        encounter_start: GameState | None = None,
+        remaining: int = 0,
+    ) -> tuple[str | None, GameState | None]:
         results = {
             action: self._exact_action_results(
                 state, offer, action, encounter_start=encounter_start
@@ -460,7 +476,7 @@ class RolloutPlanner:
             state, offer, results=results, encounter_start=encounter_start
         )
         if not actions:
-            return None
+            return None, None
         best_action = actions[0]
         best_value = float("-inf")
         action_biases = self._biases_for_offer(state, offer)
@@ -509,7 +525,24 @@ class RolloutPlanner:
             if value > best_value:
                 best_action = action
                 best_value = value
-        return best_action
+        outcome = self._outcome_for_action(offer, best_action)
+        exact = results[best_action]
+        # Scenario expansion can erase RNG draws even for a one-branch random
+        # outcome. Reuse only an unexpanded deterministic transition; all other
+        # randomness in preparation/commitments was checked by exact evaluation.
+        transition = None
+        if (
+            exact is not None
+            and len(exact) == 1
+            and outcome is not None
+            and outcome.random is None
+            and not any(
+                effect.type in {"random_range_resource", "random_exchange"}
+                for effect in outcome.effects
+            )
+        ):
+            transition = exact[0][0]
+        return best_action, transition
 
     def _eligible_actions(
         self,

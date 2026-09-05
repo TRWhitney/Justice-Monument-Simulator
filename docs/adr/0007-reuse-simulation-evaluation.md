@@ -20,7 +20,9 @@ and bounded future-policy behavior. Optimize the work used to evaluate it:
   proves the expressions and their scaling formulas have no resource, status,
   flag, or counter dependencies. Other formulas retain full context evaluation.
   Compilation and validation still use the existing expression interpreter.
-- Construct an RNG's underlying generator on its first draw.
+- Reuse a chosen deterministic immediate transition. A single expanded random
+  branch is insufficient: original random outcomes/ranges still consume the real
+  rollout RNG. Construct an RNG's underlying generator on its first draw.
 - Avoid state replacements that cannot change resource values or clear an
   already empty requirement. Preserve all intermediate rounding and floors.
 
@@ -46,6 +48,7 @@ it does not establish certain survival for random root actions.
 
 Compare the health probe against full actions across builtin offers, resource
 boundaries, active agreements, and random preparation. Check custom formulas and
-saved counter dependencies, bounded caches, and RNG sequences and serialization.
+saved counter dependencies, bounded caches, RNG sequences and serialization, and
+complete rollout states, samples, and draw counts with transition reuse disabled.
 Run the repository gate and the seeded benchmark independently to avoid CPU
 contention contaminating timings.

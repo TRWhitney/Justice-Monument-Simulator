@@ -192,3 +192,8 @@ def test_reinstating_ghost_ban_restores_arrival_loss(builtin_data):
     )
     assert result.pop == 20
     assert not result.encounter_triggers
+
+
+@pytest.mark.parametrize("coins,remaining", [(5, 2), (6, 3), (1, 0)])
+def test_bean_halves_coins_downward(builtin_data, coins, remaining):
+    assert act(builtin_data, 27, coins=coins).coins == remaining

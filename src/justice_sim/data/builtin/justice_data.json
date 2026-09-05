@@ -825,10 +825,12 @@
       "approve": {
         "effects": [
           {
-            "type": "multiply_resource",
+            "type": "set_resource",
             "params": {
               "resource": "coins",
-              "factor": 0.5
+              "value": {
+                "expr": "floor(coins / 2)"
+              }
             }
           },
           {

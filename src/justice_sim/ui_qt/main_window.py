@@ -10,7 +10,6 @@ from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
 import os
 from pathlib import Path
-import time
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -611,10 +610,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._planner_progress_timer.setInterval(125)
         self._planner_progress_timer.timeout.connect(self._tick_planner_progress)
         self._manual_adjust_pre_state: GameState | None = None
-        self._manual_adjust_due_at: float | None = None
         self._manual_adjust_timer_start_pending = False
         self._manual_adjust_timer = QtCore.QTimer(self)
         self._manual_adjust_timer.setSingleShot(True)
+        self._manual_adjust_timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         self._manual_adjust_timer.setInterval(350)
         self._manual_adjust_timer.timeout.connect(self._finalize_manual_adjust)
         self._dark_mode = False
@@ -2206,7 +2205,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._stop_planner_process()
         self._manual_adjust_timer.stop()
         self._manual_adjust_pre_state = None
-        self._manual_adjust_due_at = None
         self._manual_adjust_timer_start_pending = False
         self.session.reset(reseed=True)
         self.current_offer = None
@@ -2469,7 +2467,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def _schedule_manual_adjust_finalize(self) -> None:
         if self._manual_adjust_timer.isActive():
             self._manual_adjust_timer.stop()
-        self._manual_adjust_due_at = None
         if self._manual_adjust_timer_start_pending:
             return
         self._manual_adjust_timer_start_pending = True
@@ -2479,8 +2476,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._manual_adjust_timer_start_pending = False
         if self._manual_adjust_pre_state is None:
             return
-        interval_seconds = max(0.0, self._manual_adjust_timer.interval() / 1000.0)
-        self._manual_adjust_due_at = time.monotonic() + interval_seconds
         self._manual_adjust_timer.start()
 
     def _flush_manual_adjust_log(self) -> None:
@@ -2488,17 +2483,10 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         if self._manual_adjust_timer.isActive():
             self._manual_adjust_timer.stop()
-        self._manual_adjust_due_at = None
         self._manual_adjust_timer_start_pending = False
         self._commit_manual_adjust_log()
 
     def _finalize_manual_adjust(self) -> None:
-        if self._manual_adjust_due_at is not None:
-            remaining = self._manual_adjust_due_at - time.monotonic()
-            if remaining > 0:
-                self._manual_adjust_timer.start(max(1, int(remaining * 1000)))
-                return
-        self._manual_adjust_due_at = None
         if not self._commit_manual_adjust_log():
             return
         self._refresh()
@@ -2510,7 +2498,6 @@ class MainWindow(QtWidgets.QMainWindow):
         if pre_state is None:
             return False
         self._manual_adjust_pre_state = None
-        self._manual_adjust_due_at = None
         self._manual_adjust_timer_start_pending = False
         self.session.log.record_manual_adjust(
             pre_state, self.session.state, self.session.rng.state()

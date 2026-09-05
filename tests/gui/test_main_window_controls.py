@@ -441,3 +441,36 @@ def test_run_luck_indicator_aggregates_logged_deal_luck(data_factory):
 
     window.close()
     app.quit()
+
+
+@pytest.mark.gui
+def test_adjustment_delay_is_preserved_between_bursts(data_factory, monkeypatch):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    window = MainWindow(data_factory())
+    calls = []
+    monkeypatch.setattr(window, "_start_planner", lambda offer: calls.append(offer))
+    window.current_offer = window.data.offers[0]
+    timer = window._manual_adjust_timer
+    try:
+        assert timer.timerType() == QtCore.Qt.TimerType.PreciseTimer
+        for _ in range(3):
+            window._adjust_resource("coins", 1)
+            app.processEvents()
+            assert timer.interval() == 350
+            loop = QtCore.QEventLoop()
+            QtCore.QTimer.singleShot(100, loop.quit)
+            loop.exec()
+            window._adjust_resource("coins", 1)
+            app.processEvents()
+            before = len(calls)
+            QtCore.QTimer.singleShot(250, loop.quit)
+            loop.exec()
+            assert len(calls) == before
+            QtCore.QTimer.singleShot(150, loop.quit)
+            loop.exec()
+            assert len(calls) == before + 1
+            assert timer.interval() == 350
+    finally:
+        window.close()
+        app.quit()

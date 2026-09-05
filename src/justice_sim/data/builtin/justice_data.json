@@ -1453,13 +1453,6 @@
             }
           },
           {
-            "type": "add_resource",
-            "params": {
-              "resource": "pop",
-              "amount": -1
-            }
-          },
-          {
             "type": "add_status",
             "params": {
               "status": "ghost_scare"
@@ -1483,7 +1476,8 @@
                     "amount": -1
                   }
                 }
-              ]
+              ],
+              "when": "case_index % 5 != 0"
             }
           }
         ]
@@ -1531,6 +1525,13 @@
                 "expr": "4",
                 "scaling": "case"
               }
+            }
+          },
+          {
+            "type": "add_resource",
+            "params": {
+              "resource": "pop",
+              "amount": 1
             }
           },
           {

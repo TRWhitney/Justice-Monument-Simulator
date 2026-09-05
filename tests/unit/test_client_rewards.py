@@ -173,3 +173,22 @@ def test_poppy_iou_pays_scripticus_once(builtin_data, case, payment, repayment):
 def test_broke_again_dismissal_still_costs_health(builtin_data):
     result = act(builtin_data, 15, "dismiss", mh=1, coins=0)
     assert (result.mh, result.dismissals) == (0, 2)
+
+
+@pytest.mark.parametrize("case,pop", [(5, 20), (6, 19)])
+def test_ghost_only_drains_ordinary_arrivals(builtin_data, case, pop):
+    s = act(builtin_data, 50)
+    assert s.pop == 20
+    result = preview_state_after_encounter_triggers(
+        replace(s, case_index=case), offer(builtin_data, 0), builtin_data, Draw(0.1)
+    )
+    assert result.pop == pop
+
+
+def test_reinstating_ghost_ban_restores_arrival_loss(builtin_data):
+    s = act(builtin_data, 50)
+    result, _ = apply_action(
+        s, offer(builtin_data, 59), "approve", builtin_data, Draw(0.1)
+    )
+    assert result.pop == 20
+    assert not result.encounter_triggers

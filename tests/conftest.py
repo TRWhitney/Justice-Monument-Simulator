@@ -231,7 +231,7 @@ def ghost_exchange(builtin_data):
         o for o in builtin_data.offers if o.id.startswith("rupie_slug_hai_you")
     )
     state, _ = apply_action(
-        GameState(6, 5, 3, 3, 0, 0), ghost, "approve", builtin_data, Rng(0)
+        GameState(6, 5, 2, 3, 0, 0), ghost, "approve", builtin_data, Rng(0)
     )
     # Preserve random-exchange preparation coverage independently of Rupie's
     # corrected deterministic percentages.

@@ -58,3 +58,11 @@ def test_client_payment_gates(
         can_afford_action(s, offer(builtin_data, row), "approve", builtin_data)
         is allowed
     )
+
+
+def test_bean_bonus_precedes_final_resource_clamp(builtin_data):
+    s = act(builtin_data, 29, coins=0)
+    assert s.coins == 4
+    s = replace(s, coins=0)
+    s, _ = apply_action(s, offer(builtin_data, 23), "approve", builtin_data, Draw(0.1))
+    assert s.coins == 2  # Bonus 4, then the two-coin payment; no premature clamp.

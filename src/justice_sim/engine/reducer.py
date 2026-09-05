@@ -84,7 +84,10 @@ def preview_state_before_outcome(
             updated, updated.required_action_penalty_effects, data, rng
         )
     updated = replace(updated, required_action=None, required_action_penalty_effects=())
-    return _apply_dismissal_cost(updated, offer, action, data)
+    updated = _apply_dismissal_cost(updated, offer, action, data)
+    if action == "approve" and offer.approval_triggers_first:
+        updated = _apply_action_triggers(updated, offer, action, data, rng)
+    return updated
 
 
 def action_may_survive(
@@ -150,7 +153,8 @@ def _apply_action_with_outcome(
     if random_label_override is not None:
         random_label = random_label_override
 
-    updated = _apply_action_triggers(updated, offer, action, data, rng)
+    if action != "approve" or not offer.approval_triggers_first:
+        updated = _apply_action_triggers(updated, offer, action, data, rng)
     updated = _apply_harbinger_unpaid_penalty(
         updated, pre_action_state, offer, action, data, rng
     )

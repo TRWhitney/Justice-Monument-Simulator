@@ -62,16 +62,29 @@ def preview_state_after_encounter_triggers(
 
 
 def preview_state_before_outcome(
-    state: GameState, offer: OfferSpec, action: str, data: JusticeData, rng: Rng
+    state: GameState,
+    offer: OfferSpec,
+    action: str,
+    data: JusticeData,
+    rng: Rng,
+    *,
+    encounter_start: GameState | None = None,
 ) -> GameState:
     """Prepare an action using the same ordering as the reducer.
 
     Preview callers must supply a cloned RNG so preparation cannot consume the
     live run's randomness. The returned state has not applied the outcome yet.
+    Supply the original encounter_start only when state already includes its
+    arrival triggers. Rollouts use it to choose after a realized random arrival
+    without applying permanent triggers twice or consuming newly added overrides.
     """
     if state.ended or state.mh <= 0:
         raise ActionNotAllowed("Run has ended")
-    updated = _apply_encounter_triggers(state, offer, data, rng)
+    updated = (
+        state
+        if encounter_start is not None
+        else _apply_encounter_triggers(state, offer, data, rng)
+    )
     if updated.ended or updated.mh <= 0:
         raise ActionNotAllowed("Run has ended")
     if action not in offer.actions_available:
@@ -111,10 +124,19 @@ def apply_action(
     action: str,
     data: JusticeData,
     rng: Rng,
+    *,
+    encounter_start: GameState | None = None,
 ) -> tuple[GameState, str | None]:
     outcome = _select_outcome(offer, action)
     return _apply_action_with_outcome(
-        state, offer, action, outcome, data, rng, random_label_override=None
+        state,
+        offer,
+        action,
+        outcome,
+        data,
+        rng,
+        random_label_override=None,
+        encounter_start=encounter_start,
     )
 
 
@@ -132,9 +154,18 @@ def apply_action_with_outcome(
     data: JusticeData,
     rng: Rng,
     random_label: str | None = None,
+    *,
+    encounter_start: GameState | None = None,
 ) -> tuple[GameState, str | None]:
     return _apply_action_with_outcome(
-        state, offer, action, outcome, data, rng, random_label_override=random_label
+        state,
+        offer,
+        action,
+        outcome,
+        data,
+        rng,
+        random_label_override=random_label,
+        encounter_start=encounter_start,
     )
 
 
@@ -146,9 +177,14 @@ def _apply_action_with_outcome(
     data: JusticeData,
     rng: Rng,
     random_label_override: str | None,
+    encounter_start: GameState | None = None,
 ) -> tuple[GameState, str | None]:
-    encounter_overrides_at_start = state.encounter_overrides
-    updated = preview_state_before_outcome(state, offer, action, data, rng)
+    encounter_overrides_at_start = (
+        state if encounter_start is None else encounter_start
+    ).encounter_overrides
+    updated = preview_state_before_outcome(
+        state, offer, action, data, rng, encounter_start=encounter_start
+    )
     pre_action_state = updated
     updated, random_label = apply_outcome(updated, outcome, data, rng)
     if random_label_override is not None:

@@ -356,9 +356,12 @@ class RolloutPlanner:
             try:
                 next_state, _ = apply_action(state, offer, action, self.data, rng)
             except ActionNotAllowed:
-                if progress:
-                    progress(1)
-                continue
+                # Do not condition the estimate on only successful random arrivals.
+                next_state = self._dead_end(
+                    preview_state_after_encounter_triggers(
+                        state, offer, self.data, self.rng.spawn(rollout_index)
+                    )
+                )
             terminal_state = self._simulate_future(
                 next_state, rng, self.config.horizon_cases
             )
@@ -399,24 +402,54 @@ class RolloutPlanner:
             offer_id = select_encounter(current, self.data, self.encounter_model, rng)
             current = consume_forced_encounter(current, offer_id)
             offer = self.data.offers_by_id[offer_id]
-            triggered = preview_state_after_encounter_triggers(
-                current, offer, self.data, Rng.from_state(rng.state())
+            encounter_start = current
+            current = preview_state_after_encounter_triggers(
+                current, offer, self.data, rng
             )
-            if triggered.ended or triggered.mh <= 0:
-                return triggered
-            action = self._select_action(current, offer, rng)
+            if current.ended or current.mh <= 0:
+                return current
+            action = self._select_action(
+                current,
+                offer,
+                rng,
+                encounter_start=encounter_start,
+            )
             if action is None:
-                break
+                return self._dead_end(current)
             try:
-                current, _ = apply_action(current, offer, action, self.data, rng)
+                current, _ = apply_action(
+                    current,
+                    offer,
+                    action,
+                    self.data,
+                    rng,
+                    encounter_start=encounter_start,
+                )
             except ActionNotAllowed:
-                break
+                return self._dead_end(current)
         return current
 
+    @staticmethod
+    def _dead_end(state: GameState) -> GameState:
+        return replace(state, ended=True, end_reason="No available simulated action")
+
     def _select_action(
-        self, state: GameState, offer: OfferSpec, rng: Rng
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        rng: Rng,
+        *,
+        encounter_start: GameState | None = None,
     ) -> str | None:
-        actions = self._eligible_actions(state, offer)
+        results = {
+            action: self._exact_action_results(
+                state, offer, action, encounter_start=encounter_start
+            )
+            for action in offer.actions_available
+        }
+        actions = self._eligible_actions(
+            state, offer, results=results, encounter_start=encounter_start
+        )
         if not actions:
             return None
         best_action = actions[0]
@@ -424,7 +457,19 @@ class RolloutPlanner:
         action_biases = self._biases_for_offer(state, offer)
         policy_rng = rng.spawn(state.case_index)
         for action in actions:
-            value = self._expected_action_value(state, offer, action, policy_rng)
+            if results[action] is None:
+                value = self._sample_action_value(
+                    state,
+                    offer,
+                    action,
+                    policy_rng,
+                    encounter_start=encounter_start,
+                )
+            else:
+                value = sum(
+                    probability * self._cached_utility(next_state)
+                    for next_state, probability in results[action]
+                )
             if value is None:
                 continue
             value += action_biases.get(action, 0.0)
@@ -439,10 +484,13 @@ class RolloutPlanner:
         offer: OfferSpec,
         *,
         results: dict[str, list[tuple[GameState, float]] | None] | None = None,
+        encounter_start: GameState | None = None,
     ) -> tuple[str, ...]:
         if results is None:
             results = {
-                action: self._exact_action_results(state, offer, action)
+                action: self._exact_action_results(
+                    state, offer, action, encounter_start=encounter_start
+                )
                 for action in offer.actions_available
             }
         possible = tuple(
@@ -451,7 +499,9 @@ class RolloutPlanner:
             if results[action]
             or (
                 results[action] is None
-                and self._action_is_possible(state, offer, action)
+                and self._action_is_possible(
+                    state, offer, action, encounter_start=encounter_start
+                )
             )
         )
         lethal = {
@@ -621,7 +671,12 @@ class RolloutPlanner:
         )
 
     def _exact_action_results(
-        self, state: GameState, offer: OfferSpec, action: str
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        action: str,
+        *,
+        encounter_start: GameState | None = None,
     ) -> list[tuple[GameState, float]] | None:
         """Return all immediate results, or None when randomness is unexpanded."""
         outcome = self._outcome_for_action(offer, action)
@@ -634,7 +689,12 @@ class RolloutPlanner:
             preparation_rng = Rng(0)
             try:
                 prepared = preview_state_before_outcome(
-                    state, offer, action, self.data, preparation_rng
+                    state,
+                    offer,
+                    action,
+                    self.data,
+                    preparation_rng,
+                    encounter_start=encounter_start,
                 )
             except ActionNotAllowed:
                 return None if preparation_rng.state().draws else []
@@ -654,6 +714,7 @@ class RolloutPlanner:
                     scenario,
                     self.data,
                     scenario_rng,
+                    encounter_start=encounter_start,
                 )
             except ActionNotAllowed:
                 return None if scenario_rng.state().draws else []
@@ -663,14 +724,25 @@ class RolloutPlanner:
         return results
 
     def _sample_action_value(
-        self, state: GameState, offer: OfferSpec, action: str, rng: Rng
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        action: str,
+        rng: Rng,
+        *,
+        encounter_start: GameState | None = None,
     ) -> float | None:
         values: list[float] = []
         for sample_index in range(8):
             sample_rng = rng.spawn(sample_index)
             try:
                 next_state, _ = apply_action(
-                    state, offer, action, self.data, sample_rng
+                    state,
+                    offer,
+                    action,
+                    self.data,
+                    sample_rng,
+                    encounter_start=encounter_start,
                 )
             except ActionNotAllowed:
                 return None
@@ -936,11 +1008,17 @@ class RolloutPlanner:
         state: GameState,
         offer: OfferSpec,
         action: str,
+        *,
+        encounter_start: GameState | None = None,
     ) -> bool:
         if action not in offer.actions_available:
             return False
         rng = Rng(0)
-        preview = preview_state_after_encounter_triggers(state, offer, self.data, rng)
+        preview = (
+            state
+            if encounter_start is not None
+            else preview_state_after_encounter_triggers(state, offer, self.data, rng)
+        )
         if rng.state().draws:
             return True
         if preview.ended:

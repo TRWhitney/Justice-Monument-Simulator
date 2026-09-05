@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from typing import Any, Mapping, NamedTuple
 
@@ -285,3 +285,18 @@ class GameState:
             ended=self.ended,
             end_reason=self.end_reason,
         )
+
+
+_STATE_FIELDS = frozenset(f.name for f in fields(GameState))
+
+
+def replace_state(state: GameState, /, **changes: Any) -> GameState:
+    """Copy a plain state through its constructor without dataclass reflection.
+
+    Keep shallow sharing and constructor validation, exactly as replace does.
+    Subclasses and instances carrying extra attributes use the general path;
+    derived attributes must never become constructor arguments or cached state.
+    """
+    if type(state) is GameState and state.__dict__.keys() == _STATE_FIELDS:
+        return GameState(**(state.__dict__ | changes))
+    return replace(state, **changes)

@@ -26,6 +26,7 @@ from justice_sim.models.offer import (
     OutcomeSpec,
 )
 from justice_sim.models.state import (
+    replace_state,
     ActionTrigger,
     EncounterOverride,
     EncounterTrigger,
@@ -99,7 +100,7 @@ def preview_state_before_outcome(
             updated, updated.required_action_penalty_effects, data, rng
         )
     if updated.required_action is not None or updated.required_action_penalty_effects:
-        updated = replace(
+        updated = replace_state(
             updated, required_action=None, required_action_penalty_effects=()
         )
     updated = _apply_dismissal_cost(updated, offer, action, data)
@@ -355,7 +356,7 @@ def _apply_dismissal_cost(
     new_value = state.dismissals - 1
     if data.defaults.debt_mode == "clamp_to_zero" and new_value < 0:
         new_value = 0
-    return replace(state, dismissals=new_value)
+    return replace_state(state, dismissals=new_value)
 
 
 def _resources_affordable(
@@ -375,7 +376,7 @@ def _resources_affordable(
         unrounded = _preview_effect(preview, effect, data)
         # Match whole-resource deductions without clamping away unpaid costs.
         if unrounded is not preview:
-            preview = replace(
+            preview = replace_state(
                 unrounded,
                 **{
                     resource: floor(getattr(unrounded, resource) + 0.5)
@@ -396,17 +397,17 @@ def _preview_effect(
         resource = params.get("resource")
         if resource and hasattr(state, resource):
             amount = resolve_expr(params.get("amount"), state, data)
-            return replace(state, **{resource: getattr(state, resource) + amount})
+            return replace_state(state, **{resource: getattr(state, resource) + amount})
     elif effect.type == "set_resource":
         resource = params.get("resource")
         if resource and hasattr(state, resource):
             value = resolve_expr(params.get("value"), state, data)
-            return replace(state, **{resource: value})
+            return replace_state(state, **{resource: value})
     elif effect.type == "multiply_resource":
         resource = params.get("resource")
         if resource and hasattr(state, resource):
             factor = resolve_expr(params.get("factor"), state, data)
-            return replace(state, **{resource: getattr(state, resource) * factor})
+            return replace_state(state, **{resource: getattr(state, resource) * factor})
     elif effect.type == "clamp_resource":
         resource = params.get("resource")
         if resource and hasattr(state, resource):
@@ -417,7 +418,7 @@ def _preview_effect(
                 value = max(value, resolve_expr(min_value, state, data))
             if max_value is not None:
                 value = min(value, resolve_expr(max_value, state, data))
-            return replace(state, **{resource: value})
+            return replace_state(state, **{resource: value})
     elif effect.type == "random_range_resource":
         resource = params.get("resource")
         min_value = params.get("min")
@@ -426,7 +427,7 @@ def _preview_effect(
                 value = getattr(state, resource) + float(min_value)
             except (TypeError, ValueError):
                 return state
-            return replace(state, **{resource: value})
+            return replace_state(state, **{resource: value})
     elif effect.type == "random_exchange":
         take_resource = params.get("take_resource")
         give_resource = params.get("give_resource")
@@ -435,7 +436,7 @@ def _preview_effect(
         if not hasattr(state, take_resource) or not hasattr(state, give_resource):
             return state
         min_value = resolve_expr(params.get("min"), state, data)
-        preview = replace(
+        preview = replace_state(
             state,
             **{
                 take_resource: getattr(state, take_resource) - min_value,
@@ -481,7 +482,7 @@ def _apply_chain(
                 once=step.once,
             )
         )
-    return replace(state, forced_encounters=tuple(forced))
+    return replace_state(state, forced_encounters=tuple(forced))
 
 
 def _increment_action_counters(
@@ -499,7 +500,7 @@ def _increment_action_counters(
     if alias:
         alias_key = f"{alias}_{suffix}"
         counters[alias_key] = counters.get(alias_key, 0) + 1
-    return replace(state, counters=counters)
+    return replace_state(state, counters=counters)
 
 
 def _counter_alias(npc_id: str) -> str | None:
@@ -555,7 +556,7 @@ def _apply_encounter_triggers(
         current = apply_effects(current, trigger.effects, data, rng)
         if data.special_rules.client_encounters and trigger.label == "ghost_scare_pop":
             # This is an explicit client arrival clamp, not the PermaPop floor.
-            current = replace(current, pop=max(0, current.pop))
+            current = replace_state(current, pop=max(0, current.pop))
         current = _decrement_encounter_trigger_use(current, trigger)
     return current
 
@@ -612,7 +613,7 @@ def _consume_encounter_overrides(
         uses -= 1
         if uses > 0:
             remaining.append(replace(override, remaining_uses=uses))
-    return replace(state, encounter_overrides=tuple(remaining))
+    return replace_state(state, encounter_overrides=tuple(remaining))
 
 
 def _decrement_action_trigger_use(
@@ -633,7 +634,7 @@ def _decrement_action_trigger_use(
         updated.append(current)
     if not decremented:
         return state
-    return replace(state, action_triggers=tuple(updated))
+    return replace_state(state, action_triggers=tuple(updated))
 
 
 def _decrement_encounter_trigger_use(
@@ -654,7 +655,7 @@ def _decrement_encounter_trigger_use(
         updated.append(current)
     if not decremented:
         return state
-    return replace(state, encounter_triggers=tuple(updated))
+    return replace_state(state, encounter_triggers=tuple(updated))
 
 
 def _predicate_allows(predicate: object, state: GameState, data: JusticeData) -> bool:

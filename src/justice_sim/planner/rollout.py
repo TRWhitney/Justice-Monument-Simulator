@@ -36,7 +36,7 @@ from justice_sim.models.offer import (
     OfferSpec,
     OutcomeSpec,
 )
-from justice_sim.models.state import GameState
+from justice_sim.models.state import replace_state, GameState
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.planner.cache import ValueCache
 from justice_sim.util import expr as expr_util
@@ -464,7 +464,9 @@ class RolloutPlanner:
 
     @staticmethod
     def _dead_end(state: GameState) -> GameState:
-        return replace(state, ended=True, end_reason="No available simulated action")
+        return replace_state(
+            state, ended=True, end_reason="No available simulated action"
+        )
 
     def _select_action(
         self,

@@ -9,7 +9,12 @@ from typing import Mapping
 from justice_sim.engine.effects import resolve_probability
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData, OfferSpec
-from justice_sim.models.state import EncounterModifier, EncounterOverride, GameState
+from justice_sim.models.state import (
+    replace_state,
+    EncounterModifier,
+    EncounterOverride,
+    GameState,
+)
 from justice_sim.util import expr as expr_util
 
 
@@ -172,8 +177,6 @@ def possible_encounter_offers(
 
 
 def consume_forced_encounter(state: GameState, offer_id: str) -> GameState:
-    from dataclasses import replace
-
     remaining = []
     consumed = False
     for forced in state.forced_encounters:
@@ -187,7 +190,7 @@ def consume_forced_encounter(state: GameState, offer_id: str) -> GameState:
                 continue
         remaining.append(forced)
     if consumed:
-        return replace(state, forced_encounters=tuple(remaining))
+        return replace_state(state, forced_encounters=tuple(remaining))
     return state
 
 

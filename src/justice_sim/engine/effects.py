@@ -20,6 +20,7 @@ from justice_sim.models.offer import (
     OutcomeSpec,
 )
 from justice_sim.models.state import (
+    replace_state,
     ActionTrigger,
     EncounterModifier,
     EncounterOverride,
@@ -120,7 +121,7 @@ def advance_case(
         elif pending_events is not None:
             pending_events.append(event)
 
-    advanced = replace(
+    advanced = replace_state(
         state,
         case_index=next_case,
         statuses=state.statuses if statuses is None else statuses,
@@ -190,7 +191,7 @@ def _schedule_single_effect(
     event = ScheduledEvent(
         trigger_case_index=trigger_case, effects=(stripped,), label=effect.label
     )
-    return replace(state, scheduled_events=state.scheduled_events + (event,))
+    return replace_state(state, scheduled_events=state.scheduled_events + (event,))
 
 
 def _apply_effect(
@@ -232,7 +233,7 @@ def _apply_effect(
             return state
         value_a = getattr(state, resource_a)
         value_b = getattr(state, resource_b)
-        updated = replace(state, **{resource_a: value_b, resource_b: value_a})
+        updated = replace_state(state, **{resource_a: value_b, resource_b: value_a})
         updated = _set_resource(updated, resource_a, getattr(updated, resource_a), data)
         return _set_resource(updated, resource_b, getattr(updated, resource_b), data)
 
@@ -240,13 +241,13 @@ def _apply_effect(
         flag = str(params.get("flag"))
         flags = set(state.flags)
         flags.add(flag)
-        return replace(state, flags=frozenset(flags))
+        return replace_state(state, flags=frozenset(flags))
 
     if effect_type == "remove_flag":
         flag = str(params.get("flag"))
         flags = set(state.flags)
         flags.discard(flag)
-        return replace(state, flags=frozenset(flags))
+        return replace_state(state, flags=frozenset(flags))
 
     if effect_type == "add_status":
         status_name = str(params.get("status"))
@@ -259,26 +260,26 @@ def _apply_effect(
             remaining_cases=int(duration),
             data=data,
         )
-        return replace(state, statuses=statuses)
+        return replace_state(state, statuses=statuses)
 
     if effect_type == "remove_status":
         status_name = str(params.get("status"))
         statuses = dict(state.statuses)
         statuses.pop(status_name, None)
-        return replace(state, statuses=statuses)
+        return replace_state(state, statuses=statuses)
 
     if effect_type == "set_resource_floor":
         resource = params.get("resource")
         minimum = resolve_expr(params.get("min"), state, data)
         floors = dict(state.resource_floors)
         floors[resource] = float(minimum)
-        return replace(state, resource_floors=floors)
+        return replace_state(state, resource_floors=floors)
 
     if effect_type == "clear_resource_floor":
         resource = params.get("resource")
         floors = dict(state.resource_floors)
         floors.pop(resource, None)
-        return replace(state, resource_floors=floors)
+        return replace_state(state, resource_floors=floors)
 
     if effect_type == "schedule_effects":
         after_cases = int(params.get("after_cases", 0))
@@ -292,7 +293,7 @@ def _apply_effect(
             effects=effects,
             label=params.get("label"),
         )
-        return replace(state, scheduled_events=state.scheduled_events + (event,))
+        return replace_state(state, scheduled_events=state.scheduled_events + (event,))
 
     if effect_type == "schedule_recurring_effects":
         after_cases = int(params.get("after_cases", 0))
@@ -315,14 +316,16 @@ def _apply_effect(
             )
         if not events:
             return state
-        return replace(state, scheduled_events=state.scheduled_events + tuple(events))
+        return replace_state(
+            state, scheduled_events=state.scheduled_events + tuple(events)
+        )
 
     if effect_type == "require_next_action":
         action = str(params.get("action"))
         penalty_effects = tuple(
             _coerce_effect_spec(effect) for effect in params.get("penalty_effects", [])
         )
-        return replace(
+        return replace_state(
             state,
             required_action=action,
             required_action_penalty_effects=penalty_effects,
@@ -330,7 +333,7 @@ def _apply_effect(
 
     if effect_type == "add_action_trigger":
         trigger = _coerce_action_trigger(params, state, data)
-        return replace(state, action_triggers=state.action_triggers + (trigger,))
+        return replace_state(state, action_triggers=state.action_triggers + (trigger,))
 
     if effect_type == "remove_action_trigger":
         label = params.get("label")
@@ -339,11 +342,13 @@ def _apply_effect(
         remaining = tuple(
             trigger for trigger in state.action_triggers if trigger.label != label
         )
-        return replace(state, action_triggers=remaining)
+        return replace_state(state, action_triggers=remaining)
 
     if effect_type == "add_encounter_trigger":
         trigger = _coerce_encounter_trigger(params, state, data)
-        return replace(state, encounter_triggers=state.encounter_triggers + (trigger,))
+        return replace_state(
+            state, encounter_triggers=state.encounter_triggers + (trigger,)
+        )
 
     if effect_type == "remove_encounter_trigger":
         label = params.get("label")
@@ -352,11 +357,11 @@ def _apply_effect(
         remaining = tuple(
             trigger for trigger in state.encounter_triggers if trigger.label != label
         )
-        return replace(state, encounter_triggers=remaining)
+        return replace_state(state, encounter_triggers=remaining)
 
     if effect_type == "add_encounter_override":
         override = _coerce_encounter_override(params)
-        return replace(
+        return replace_state(
             state, encounter_overrides=state.encounter_overrides + (override,)
         )
 
@@ -369,7 +374,7 @@ def _apply_effect(
             for override in state.encounter_overrides
             if override.label != label
         )
-        return replace(state, encounter_overrides=remaining)
+        return replace_state(state, encounter_overrides=remaining)
 
     if effect_type == "modify_encounter_weights":
         modifier = EncounterModifier(
@@ -378,13 +383,13 @@ def _apply_effect(
             mode=params.get("mode", "multiply"),
             remaining_cases=effect.duration_cases,
         )
-        return replace(
+        return replace_state(
             state, encounter_modifiers=state.encounter_modifiers + (modifier,)
         )
 
     if effect_type == "end_run":
         reason = params.get("reason") if isinstance(params, Mapping) else None
-        return replace(state, ended=True, end_reason=reason)
+        return replace_state(state, ended=True, end_reason=reason)
 
     if effect_type == "random_range_resource":
         resource = params.get("resource")
@@ -417,20 +422,20 @@ def _apply_effect(
         value = resolve_expr(params.get("value"), state, data)
         counters = dict(state.counters)
         counters[name] = float(value)
-        return replace(state, counters=counters)
+        return replace_state(state, counters=counters)
 
     if effect_type == "add_counter":
         name = str(params.get("counter"))
         value = resolve_expr(params.get("amount"), state, data)
         counters = dict(state.counters)
         counters[name] = float(counters.get(name, 0.0) + float(value))
-        return replace(state, counters=counters)
+        return replace_state(state, counters=counters)
 
     if effect_type == "clear_counter":
         name = str(params.get("counter"))
         counters = dict(state.counters)
         counters.pop(name, None)
-        return replace(state, counters=counters)
+        return replace_state(state, counters=counters)
 
     if effect_type in {"noop", "raw_effect"}:
         return state
@@ -577,7 +582,7 @@ def normalize_action_resources(state: GameState, data: JusticeData) -> GameState
         value = normalized_action_resource(state, resource, data)
         if value != getattr(state, resource):
             values[resource] = value
-    return replace(state, **values) if values else state
+    return replace_state(state, **values) if values else state
 
 
 def normalized_action_resource(
@@ -600,7 +605,9 @@ def _update_resource(
 ) -> GameState:
     value = getattr(state, resource)
     new_value = coerce_resource_value(state, resource, value + state_delta, data)
-    return replace(state, **{resource: new_value}) if new_value != value else state
+    return (
+        replace_state(state, **{resource: new_value}) if new_value != value else state
+    )
 
 
 def _set_resource(
@@ -608,7 +615,7 @@ def _set_resource(
 ) -> GameState:
     new_value = coerce_resource_value(state, resource, value, data)
     return (
-        replace(state, **{resource: new_value})
+        replace_state(state, **{resource: new_value})
         if new_value != getattr(state, resource)
         else state
     )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from functools import lru_cache
 
 from justice_sim.engine.effects import (
@@ -15,7 +15,7 @@ from justice_sim.engine.effects import (
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData, OfferSpec
-from justice_sim.models.state import ContractKey, GameState
+from justice_sim.models.state import replace_state, ContractKey, GameState
 from justice_sim.util.dependencies import referenced_counter_names
 
 
@@ -96,7 +96,7 @@ def _next_harbinger_risk(
     if offset and not (
         state.statuses or state.scheduled_events or state.encounter_modifiers
     ):
-        projected = replace(state, case_index=state.case_index + offset)
+        projected = replace_state(state, case_index=state.case_index + offset)
     else:
         projection_rng = Rng(0)
         for _ in range(offset):

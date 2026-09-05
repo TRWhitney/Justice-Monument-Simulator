@@ -272,6 +272,7 @@ def _apply_effect(
         event = ScheduledEvent(
             trigger_case_index=state.case_index + after_cases,
             effects=effects,
+            label=params.get("label"),
         )
         return replace(state, scheduled_events=state.scheduled_events + (event,))
 
@@ -288,7 +289,11 @@ def _apply_effect(
         for index in range(max(repeat, 0)):
             trigger_case = state.case_index + after_cases + (index * every_cases)
             events.append(
-                ScheduledEvent(trigger_case_index=trigger_case, effects=effects)
+                ScheduledEvent(
+                    trigger_case_index=trigger_case,
+                    effects=effects,
+                    label=params.get("label"),
+                )
             )
         if not events:
             return state

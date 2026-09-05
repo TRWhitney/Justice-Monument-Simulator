@@ -85,6 +85,9 @@ def _next_harbinger_risk(state: GameState, data: JusticeData) -> float:
         if projected.ended or projected.mh <= 0:
             return 0.0
 
+    if data.special_rules.client_encounters:
+        return _client_harbinger_risk(projected, data)
+
     if (
         projected.dismissals > 0
         and "cannot_dismiss_harbinger" not in projected.statuses
@@ -104,7 +107,7 @@ def _next_harbinger_risk(state: GameState, data: JusticeData) -> float:
 
     grateful_probability = 0.0
     grateful_rule = data.special_rules.gratefulbinger
-    if grateful_rule:
+    if grateful_rule and projected.pop >= grateful_rule.minimum_pop:
         grateful_probability = resolve_probability(
             {
                 "expr": grateful_rule.replace_harbinger_probability_expr,
@@ -115,3 +118,30 @@ def _next_harbinger_risk(state: GameState, data: JusticeData) -> float:
         )
     grateful_probability = min(1.0, max(0.0, grateful_probability))
     return 1.0 - grateful_probability
+
+
+def _client_harbinger_risk(state: GameState, data: JusticeData) -> float:
+    # Use the actual variant pool: a dismissal cannot save Broke Again, and
+    # Busted Bills may be payable in popularity despite having no coins.
+    from justice_sim.engine.encounter import (
+        UniformEncounterModel,
+        client_encounter_probabilities,
+    )
+    from justice_sim.engine.reducer import ActionNotAllowed, apply_action
+
+    distribution = client_encounter_probabilities(state, data, UniformEncounterModel())
+    risk = 0.0
+    for key, probability in distribution.items():
+        offer = data.offers_by_id[key]
+        safe = False
+        for action in offer.actions_available:
+            try:
+                result, _ = apply_action(state, offer, action, data, Rng(0))
+            except ActionNotAllowed:
+                continue
+            if result.mh >= state.mh and not result.ended:
+                safe = True
+                break
+        if not safe:
+            risk += probability
+    return risk

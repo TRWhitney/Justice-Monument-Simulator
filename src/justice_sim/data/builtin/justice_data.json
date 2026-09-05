@@ -508,7 +508,10 @@
         75
       ],
       "payment_resource": "coins",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "conditions": [
+        "not has_pending('poppy_iou')"
+      ]
     },
     {
       "id": "concerned_poppy_ummm_greetings_your_honor_would_you_have_9045f50a",
@@ -968,7 +971,10 @@
         29
       ],
       "payment_resource": "none",
-      "approval_triggers_first": false
+      "approval_triggers_first": false,
+      "conditions": [
+        "not has_pending('bean_approve_bonus')"
+      ]
     },
     {
       "id": "esquire_bored_bean_mmmm_yeeees_charmed_your_honor_perchance_59fd29ac",
@@ -997,6 +1003,12 @@
                       "snapshot": true
                     }
                   }
+                },
+                {
+                  "type": "remove_encounter_override",
+                  "params": {
+                    "label": "bean_loan_return"
+                  }
                 }
               ],
               "remaining_uses": 1
@@ -1006,10 +1018,10 @@
             "type": "add_encounter_override",
             "params": {
               "label": "bean_loan_return",
-              "offer_id": "esquire_bored_bean_mmmm_yeeees_charmed_your_honor_perchance_59fd29ac",
               "remaining_uses": 1,
               "probability": 0.15,
-              "allow_harbinger": false
+              "allow_harbinger": false,
+              "npc_id": "esquire_bored_bean"
             }
           },
           {
@@ -1039,7 +1051,10 @@
         26
       ],
       "payment_resource": "none",
-      "approval_triggers_first": false
+      "approval_triggers_first": false,
+      "conditions": [
+        "not has_pending('bean_loan_payback')"
+      ]
     },
     {
       "id": "esquire_bored_bean_ohohoho_i_have_heard_the_stories_about_y_d2bcd717",
@@ -1065,13 +1080,6 @@
                 "scaling": "case"
               }
             }
-          },
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "fizarre_drink_approves",
-              "value": 0
-            }
           }
         ]
       },
@@ -1086,33 +1094,33 @@
                 "scaling": "case"
               }
             }
-          },
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "fizarre_drink_approves",
-              "value": 0
-            }
           }
         ]
       },
       "notes": "Happens immediately after accepting a 3rd Fizarre Drink",
       "dismiss": {
-        "effects": [
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "fizarre_drink_approves",
-              "value": 0
-            }
-          }
-        ]
+        "effects": []
       },
       "client_rows": [
         61
       ],
       "payment_resource": "none",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "encounter_weight": 0,
+      "arrival_effects": [
+        {
+          "type": "clear_counter",
+          "params": {
+            "counter": "fizarre_drink_approves"
+          }
+        },
+        {
+          "type": "remove_encounter_override",
+          "params": {
+            "label": "bean_secret"
+          }
+        }
+      ]
     },
     {
       "id": "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_1f67196f",
@@ -1151,7 +1159,7 @@
               "offer_id": "esquire_bored_bean_ohohoho_i_have_heard_the_stories_about_y_d2bcd717",
               "remaining_uses": 1,
               "allow_harbinger": false,
-              "priority": 10
+              "priority": 5
             }
           },
           {
@@ -1212,7 +1220,7 @@
               "offer_id": "esquire_bored_bean_ohohoho_i_have_heard_the_stories_about_y_d2bcd717",
               "remaining_uses": 1,
               "allow_harbinger": false,
-              "priority": 10
+              "priority": 5
             }
           },
           {
@@ -1273,7 +1281,7 @@
               "offer_id": "esquire_bored_bean_ohohoho_i_have_heard_the_stories_about_y_d2bcd717",
               "remaining_uses": 1,
               "allow_harbinger": false,
-              "priority": 10
+              "priority": 5
             }
           }
         ],
@@ -1338,7 +1346,7 @@
               "offer_id": "esquire_bored_bean_ohohoho_i_have_heard_the_stories_about_y_d2bcd717",
               "remaining_uses": 1,
               "allow_harbinger": false,
-              "priority": 10
+              "priority": 5
             }
           },
           {
@@ -1354,7 +1362,7 @@
               "allow_harbinger": false,
               "npc_id": "retirement_chester",
               "remaining_uses": 3,
-              "priority": 5
+              "priority": 10
             }
           }
         ]
@@ -1370,7 +1378,10 @@
         55
       ],
       "payment_resource": "coins",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "conditions": [
+        "not has_pending('chest_magnetizer')"
+      ]
     },
     {
       "id": "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_d8c926e1",
@@ -1402,7 +1413,7 @@
               "offer_id": "esquire_bored_bean_ohohoho_i_have_heard_the_stories_about_y_d2bcd717",
               "remaining_uses": 1,
               "allow_harbinger": false,
-              "priority": 10
+              "priority": 5
             }
           },
           {
@@ -1630,7 +1641,8 @@
         87
       ],
       "payment_resource": "coins",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "encounter_weight": 2
     },
     {
       "id": "grumblo_me_like_coin_me_collect_coin_you_give_me_871448f0",
@@ -1779,7 +1791,8 @@
         71
       ],
       "payment_resource": "coins",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "encounter_weight": 5
     },
     {
       "id": "head_honcho_of_big_biz_llc_good_afternoon_i_am_seeking_invesetment__482cacba",
@@ -1814,7 +1827,8 @@
                     "amount": 2
                   }
                 }
-              ]
+              ],
+              "label": "honcho_hedgefund"
             }
           }
         ]
@@ -1837,7 +1851,10 @@
         53
       ],
       "payment_resource": "retirement_chests",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "conditions": [
+        "not has_pending('honcho_hedgefund')"
+      ]
     },
     {
       "id": "head_honcho_of_big_biz_llc_good_afternoon_i_represent_a_third_party_99301182",
@@ -1937,7 +1954,10 @@
         85
       ],
       "payment_resource": "none",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "conditions": [
+        "not has_status('cannot_dismiss_harbinger')"
+      ]
     },
     {
       "id": "head_honcho_of_big_biz_llc_greetings_i_come_to_you_today_seeking_a__55d424ba",
@@ -1977,7 +1997,8 @@
                     }
                   }
                 }
-              ]
+              ],
+              "label": "honcho_time"
             }
           }
         ]
@@ -2000,7 +2021,10 @@
         36
       ],
       "payment_resource": "coins",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "conditions": [
+        "not has_pending('honcho_time')"
+      ]
     },
     {
       "id": "head_honcho_of_big_biz_llc_greetings_i_come_to_you_today_seeking_a__7c4eb020",
@@ -2095,7 +2119,8 @@
                     "amount": 1
                   }
                 }
-              ]
+              ],
+              "label": "honcho_crypto"
             }
           },
           {
@@ -2125,7 +2150,10 @@
         43
       ],
       "payment_resource": "coins",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "conditions": [
+        "not has_pending('honcho_crypto')"
+      ]
     },
     {
       "id": "head_honcho_of_big_biz_llc_you_aren_t_looking_too_well_my_friend_pe_82709538",
@@ -2198,7 +2226,10 @@
         72
       ],
       "payment_resource": "none",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "conditions": [
+        "mh <= 1"
+      ]
     },
     {
       "id": "head_honcho_of_big_biz_llc_your_honor_i_seek_an_investment_of_x_coi_39b860c2",
@@ -3079,7 +3110,10 @@
         63
       ],
       "payment_resource": "none",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "conditions": [
+        "not has_status('cannot_approve')"
+      ]
     },
     {
       "id": "mister_bribe_hey_friendo_is_me_again_what_s_good_i_go_d8db8dcb",
@@ -3914,6 +3948,13 @@
                 "expr": "ceil(0.8 * pop)"
               }
             }
+          },
+          {
+            "type": "add_counter",
+            "params": {
+              "counter": "rupie_magic_progress",
+              "amount": 1
+            }
           }
         ]
       },
@@ -3946,6 +3987,13 @@
             "params": {
               "resource": "pop",
               "amount": 2
+            }
+          },
+          {
+            "type": "add_counter",
+            "params": {
+              "counter": "rupie_magic_progress",
+              "amount": 1
             }
           }
         ]
@@ -4000,6 +4048,13 @@
                 "expr": "6",
                 "scaling": "case"
               }
+            }
+          },
+          {
+            "type": "add_counter",
+            "params": {
+              "counter": "rupie_magic_progress",
+              "amount": 1
             }
           }
         ]
@@ -4066,6 +4121,13 @@
                 "expr": "ceil(0.8 * coins)"
               }
             }
+          },
+          {
+            "type": "add_counter",
+            "params": {
+              "counter": "rupie_magic_progress",
+              "amount": 1
+            }
           }
         ]
       },
@@ -4104,6 +4166,13 @@
             "type": "add_resource",
             "params": {
               "resource": "mh",
+              "amount": 1
+            }
+          },
+          {
+            "type": "add_counter",
+            "params": {
+              "counter": "rupie_magic_progress",
               "amount": 1
             }
           }
@@ -4146,6 +4215,12 @@
               "resource": "mh",
               "amount": 1
             }
+          },
+          {
+            "type": "clear_counter",
+            "params": {
+              "counter": "rupie_magic_progress"
+            }
           }
         ]
       },
@@ -4160,7 +4235,10 @@
         86
       ],
       "payment_resource": "none",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "conditions": [
+        "counters.rupie_magic_progress >= 3"
+      ]
     },
     {
       "id": "scripticus_can_i_get_a_x_coin_loan_to_buy_my_next_k_0674de6d",
@@ -4543,7 +4621,15 @@
         13
       ],
       "payment_resource": "coins",
-      "approval_triggers_first": true
+      "approval_triggers_first": true,
+      "arrival_effects": [
+        {
+          "type": "clear_counter",
+          "params": {
+            "counter": "timmy_rejects"
+          }
+        }
+      ]
     },
     {
       "id": "the_harbinger_shark_attack_during_a_weekend_hike_in_th_a936f412",
@@ -5005,12 +5091,20 @@
           },
           "label": "Default unpaid penalty (revisit if incorrect)."
         }
+      ],
+      "priority_offers": [
+        "the_harbinger_uh_oh_looks_like_your_bills_finally_got__606f838b",
+        "the_harbinger_you_re_broke_again_i_even_gave_you_a_coi_1c0ee0c9",
+        "the_harbinger_no_no_i_m_not_here_for_you_it_s_well_it__52e91e3f",
+        "the_harbinger_someone_you_rejected_is_putting_their_pl_df84c7ab"
       ]
     },
     "gratefulbinger": {
       "offer_id": "the_gratefulbinger_i_ve_been_watching_you_closely_and_i_wan_d49e05c5",
       "replace_harbinger_probability_expr": "(40*pop)/(pop+20)",
-      "format": "percent"
-    }
+      "format": "percent",
+      "minimum_pop": 3
+    },
+    "client_encounters": true
   }
 }

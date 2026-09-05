@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Client case representation</title>
+<style>body{font:18px system-ui;max-width:760px;margin:3rem auto;padding:1rem;background:#15202b;color:#ecf2f8}select,button,input{font:inherit;padding:.5rem;margin:.5rem}output{display:block;white-space:pre-wrap;background:#213244;padding:1rem}</style>
+<h1>Client case representation</h1>
+<p>Review the representation tradeoff. This page does not modify the simulator.</p>
+<label>Representation <select id="mode"><option value="grouped">85 grouped offers, preserve 90 row weights</option><option value="expanded">90 separate offers, duplicate dialogue</option><option value="legacy">85 offers, one weight each</option></select></label>
+<p><label>Ordinary encounters to compare <input id="count" type="number" min="1" value="1000"></label></p>
+<output id="result"></output><button id="export">Export selection</button>
+<script>
+const mode=document.querySelector('#mode'),count=document.querySelector('#count'),result=document.querySelector('#result');
+function selection(){const correct=mode.value!=='legacy';return {representation:mode.value,ordinaryEncounters:Math.max(1,Number(count.value)||1),grumbloProbability:correct?7/71:2/68,duplicateDialogue:mode.value==='expanded',baseline:'MH 5, coins 20, popularity 20; no active effects or overrides'}}
+function render(){const v=selection();result.textContent=`Expected Grumblo encounters: ${(v.ordinaryEncounters*v.grumbloProbability).toFixed(2)}\nDuplicate dialogue entries: ${v.duplicateDialogue?'yes':'no'}\n${v.baseline}`}
+mode.onchange=count.oninput=render;document.querySelector('#export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(selection(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='client-case-representation.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};render();
+</script></html>

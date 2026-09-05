@@ -165,6 +165,7 @@ def build_predicate_context(
     statuses: set[str],
     counters: Mapping[str, float],
     extra_vars: Mapping[str, Any] | None = None,
+    pending: set[str] | None = None,
 ) -> ExprContext:
     variables: dict[str, Any] = {
         "case_index": case_index,
@@ -191,6 +192,7 @@ def build_predicate_context(
     functions: dict[str, Callable[..., Any]] = {
         "has_flag": has_flag,
         "has_status": has_status,
+        "has_pending": lambda name: name in (pending or ()),
     }
 
     return ExprContext(variables=variables, functions=functions)

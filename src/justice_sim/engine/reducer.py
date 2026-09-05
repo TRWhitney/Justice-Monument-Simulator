@@ -407,6 +407,7 @@ def _apply_harbinger_unpaid_penalty(
 def _apply_encounter_triggers(
     state: GameState, offer: OfferSpec, data: JusticeData, rng: Rng
 ) -> GameState:
+    state = apply_effects(state, offer.arrival_effects, data, rng)
     if not state.encounter_triggers:
         return state
     current = state

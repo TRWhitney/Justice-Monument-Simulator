@@ -34,7 +34,11 @@ class UniformEncounterModel(EncounterModel):
         offers = self.eligible_offers(state, data)
         if not offers:
             raise ValueError("No eligible offers")
-        return rng.choice(offers)
+        if all(data.offers_by_id[key].encounter_weight == 1 for key in offers):
+            return rng.choice(offers)
+        return rng.weighted_choice(
+            [(key, data.offers_by_id[key].encounter_weight) for key in offers]
+        )
 
 
 @dataclass
@@ -50,8 +54,10 @@ class WeightedEncounterModel(EncounterModel):
         choices: list[tuple[str, float]] = []
         for offer_id in offers:
             offer = data.offers_by_id[offer_id]
-            weight = self.npc_weights.get(offer.npc_id, 1.0) * self.offer_weights.get(
-                offer_id, 1.0
+            weight = (
+                offer.encounter_weight
+                * self.npc_weights.get(offer.npc_id, 1.0)
+                * self.offer_weights.get(offer_id, 1.0)
             )
             weight = _apply_modifiers(weight, offer, state.encounter_modifiers)
             if weight > 0:
@@ -76,7 +82,7 @@ class LearnedEncounterModel(EncounterModel):
             prior = self.priors.get(offer_id, 1.0)
             count = self.counts.get(offer_id, 0.0)
             offer = data.offers_by_id[offer_id]
-            weight = (prior + count) * _apply_modifiers(
+            weight = (prior * offer.encounter_weight + count) * _apply_modifiers(
                 1.0, offer, state.encounter_modifiers
             )
             if weight > 0:
@@ -107,6 +113,11 @@ def select_encounter(
     if forced_offer:
         return forced_offer
 
+    if data.special_rules.client_encounters:
+        return rng.weighted_choice(
+            list(client_encounter_probabilities(state, data, encounter_model).items())
+        )
+
     harbinger_rule = data.special_rules.harbinger
     harbinger_case = state.case_index % harbinger_rule.cadence_modulus == 0
 
@@ -133,6 +144,9 @@ def possible_encounter_offers(
     forced_offer = _forced_encounter_for_case(state)
     if forced_offer:
         return [forced_offer]
+
+    if data.special_rules.client_encounters:
+        return sorted(client_encounter_probabilities(state, data, encounter_model))
 
     harbinger_rule = data.special_rules.harbinger
     harbinger_case = state.case_index % harbinger_rule.cadence_modulus == 0
@@ -262,7 +276,7 @@ def _override_candidate_offer_ids(
 
 def _evaluate_gratefulbinger_probability(state: GameState, data: JusticeData) -> float:
     rule = data.special_rules.gratefulbinger
-    if not rule:
+    if not rule or state.pop < rule.minimum_pop:
         return 0.0
     return resolve_probability(
         {"expr": rule.replace_harbinger_probability_expr, "format": rule.format},
@@ -312,7 +326,8 @@ def _eligible_regular_offer_ids(
     return [
         offer.id
         for offer in candidates
-        if not offer.conditions or _offer_conditions_allow(offer, state)
+        if offer.encounter_weight > 0
+        and (not offer.conditions or _offer_conditions_allow(offer, state))
     ]
 
 
@@ -347,6 +362,7 @@ def _offer_conditions_allow(offer: OfferSpec, state: GameState) -> bool:
                 flags=set(state.flags),
                 statuses=set(state.statuses.keys()),
                 counters=state.counters,
+                pending=_pending_labels(state),
             )
             if not expr_util.evaluate_predicate(predicate, ctx):
                 return False
@@ -369,20 +385,16 @@ def _harbinger_offer_pool(data: JusticeData) -> list[str]:
 
 
 def _select_harbinger_offer(state: GameState, data: JusticeData, rng: Rng) -> str:
-    pool = _harbinger_offer_pool(data)
-    eligible: list[str] = []
-    for offer_id in pool:
+    return rng.choice(eligible_harbinger_offers(state, data))
+
+
+def eligible_harbinger_offers(state: GameState, data: JusticeData) -> list[str]:
+    for offer_id in data.special_rules.harbinger.priority_offers:
         offer = data.offers_by_id.get(offer_id)
         if offer and _is_offer_eligible_internal(
             offer, state, data, allow_harbinger=True
         ):
-            eligible.append(offer_id)
-    if not eligible:
-        return data.special_rules.harbinger.offer_id
-    return rng.choice(eligible)
-
-
-def eligible_harbinger_offers(state: GameState, data: JusticeData) -> list[str]:
+            return [offer_id]
     pool = _harbinger_offer_pool(data)
     eligible: list[str] = []
     for offer_id in pool:
@@ -394,3 +406,134 @@ def eligible_harbinger_offers(state: GameState, data: JusticeData) -> list[str]:
     if not eligible and data.special_rules.harbinger.offer_id:
         return [data.special_rules.harbinger.offer_id]
     return eligible
+
+
+def _pending_labels(state: GameState) -> set[str]:
+    return {
+        item.label
+        for items in (
+            state.scheduled_events,
+            state.encounter_triggers,
+            state.action_triggers,
+            state.encounter_overrides,
+        )
+        for item in items
+        if item.label
+    }
+
+
+def client_encounter_probabilities(
+    state: GameState, data: JusticeData, model: EncounterModel
+) -> dict[str, float]:
+    """Integrate the client's row proposals and ordered replacements exactly.
+
+    Merged, indistinguishable rows retain their multiplicity. Rejected loan
+    proposals retain the base distribution, just as a client reroll does.
+    Custom learned/weighted models remain usable for the ordinary proposal.
+    """
+    forced = _forced_encounter_for_case(state)
+    if forced:
+        return {forced: 1.0}
+    harbinger_case = (
+        state.case_index % data.special_rules.harbinger.cadence_modulus == 0
+    )
+    if harbinger_case:
+        pool = eligible_harbinger_offers(state, data)
+        distribution = {key: 1 / len(pool) for key in pool}
+        grateful = data.special_rules.gratefulbinger
+        if grateful:
+            distribution = _mix_distribution(
+                distribution,
+                {grateful.offer_id: 1},
+                _evaluate_gratefulbinger_probability(state, data),
+            )
+    else:
+        weights = {}
+        for key in model.eligible_offers(state, data):
+            offer = data.offers_by_id[key]
+            weight = offer.encounter_weight
+            if isinstance(model, WeightedEncounterModel):
+                weight *= model.npc_weights.get(
+                    offer.npc_id, 1
+                ) * model.offer_weights.get(key, 1)
+                weight = _apply_modifiers(weight, offer, state.encounter_modifiers)
+            elif isinstance(model, LearnedEncounterModel):
+                weight = model.priors.get(key, 1) * weight + model.counts.get(key, 0)
+                weight = _apply_modifiers(weight, offer, state.encounter_modifiers)
+            if weight > 0:
+                weights[key] = weight
+        distribution = _normalize_weights(weights)
+        if "bean_loan_payback" in _pending_labels(state):
+            proposal = {}
+            for row in (27, 28, 29):
+                candidates = _client_row_offers(data, (row,))
+                key = next(iter(candidates), None)
+                if key and _is_offer_eligible(data.offers_by_id[key], state, data):
+                    proposal[key] = proposal.get(key, 0) + 1 / 3
+                else:
+                    for base_key, probability in distribution.items():
+                        proposal[base_key] = proposal.get(base_key, 0) + probability / 3
+            distribution = _mix_distribution(distribution, proposal, 0.15)
+        if state.case_index > 5 and state.case_index % 5 == 1:
+            distribution = _mix_distribution(
+                distribution, _client_row_offers(data, (21, 22)), 0.4
+            )
+        magnet = next(
+            (o for o in state.encounter_overrides if o.label == "chest_magnetizer"),
+            None,
+        )
+        if magnet:
+            distribution = (
+                _client_row_offers(data, (21, 22, 33, 37, 39, 52)) or distribution
+            )
+        elif state.counters.get("fizarre_drink_approves", 0) >= 3:
+            distribution = _client_row_offers(data, (61,)) or distribution
+    # Keep user/custom overrides, including their original priority semantics.
+    overrides = sorted(
+        enumerate(state.encounter_overrides),
+        key=lambda item: (item[1].priority, -item[0]),
+    )
+    for _, override in overrides:
+        if override.label in {"bean_loan_return", "chest_magnetizer", "bean_secret"}:
+            continue
+        if harbinger_case and not override.allow_harbinger:
+            continue
+        candidates = _override_candidate_offer_ids(override, state, data)
+        if candidates:
+            probability = (
+                1
+                if override.probability is None
+                else resolve_probability(override.probability, state, data)
+            )
+            distribution = _mix_distribution(
+                distribution,
+                {key: 1 / len(candidates) for key in candidates},
+                probability,
+            )
+    return distribution
+
+
+def _client_row_offers(data: JusticeData, rows: tuple[int, ...]) -> dict[str, float]:
+    weights = {
+        offer.id: len(set(offer.client_rows).intersection(rows))
+        for offer in data.offers
+    }
+    return _normalize_weights(
+        {key: weight for key, weight in weights.items() if weight}
+    )
+
+
+def _normalize_weights(weights: Mapping[str, float]) -> dict[str, float]:
+    total = sum(weights.values())
+    return {key: weight / total for key, weight in weights.items()} if total else {}
+
+
+def _mix_distribution(
+    base: dict[str, float], replacement: dict[str, float], probability: float
+) -> dict[str, float]:
+    if not replacement:
+        return base
+    result = {key: value * (1 - probability) for key, value in base.items()}
+    for key, value in replacement.items():
+        result[key] = result.get(key, 0) + value * probability
+    return {key: value for key, value in result.items() if value > 0}

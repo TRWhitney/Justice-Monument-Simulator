@@ -197,3 +197,7 @@ def test_reinstating_ghost_ban_restores_arrival_loss(builtin_data):
 @pytest.mark.parametrize("coins,remaining", [(5, 2), (6, 3), (1, 0)])
 def test_bean_halves_coins_downward(builtin_data, coins, remaining):
     assert act(builtin_data, 27, coins=coins).coins == remaining
+
+
+def test_fan_slug_rejection_does_not_scale(builtin_data):
+    assert act(builtin_data, 69, "reject", case_index=31).pop == 15

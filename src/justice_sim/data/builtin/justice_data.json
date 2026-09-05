@@ -3956,10 +3956,7 @@
             "type": "add_resource",
             "params": {
               "resource": "pop",
-              "amount": {
-                "expr": "-5",
-                "scaling": "case"
-              }
+              "amount": -5
             }
           }
         ]

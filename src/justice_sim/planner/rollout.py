@@ -131,7 +131,11 @@ class RolloutPlanner:
         if fast_path is not None:
             return fast_path
         raw_scores = self._score_actions(
-            state, offer, self.config.rollouts_per_action, progress=progress
+            state,
+            offer,
+            self.config.rollouts_per_action,
+            progress=progress,
+            actions=eligible_actions,
         )
         scores = self._apply_action_biases(state, offer, raw_scores)
         adaptive_actions = self._adaptive_actions(scores, eligible_actions)
@@ -168,7 +172,18 @@ class RolloutPlanner:
         ]
         best = max(eligible_scores, key=lambda s: s.expected_utility)
         return PlannerRecommendation(
-            best_action=best.action, action_scores=tuple(scores)
+            best_action=best.action,
+            action_scores=self._include_excluded_scores(offer, scores),
+        )
+
+    @staticmethod
+    def _include_excluded_scores(
+        offer: OfferSpec, scores: list[ActionScore]
+    ) -> tuple[ActionScore, ...]:
+        by_action = {score.action: score for score in scores}
+        return tuple(
+            by_action.get(action, ActionScore(action, float("-inf"), 0.0, 1.0, 0.0))
+            for action in offer.actions_available
         )
 
     def _fast_path_recommendation(
@@ -188,7 +203,7 @@ class RolloutPlanner:
         )
         if not terminal and upside_action is None:
             return None
-        scores = self._exact_action_scores(state, offer)
+        scores = self._exact_action_scores(state, offer, actions=eligible_actions)
         if not scores:
             return None
         scores = self._apply_action_biases(state, offer, scores)
@@ -198,10 +213,12 @@ class RolloutPlanner:
             ]
             best = max(eligible_scores, key=lambda score: score.expected_utility)
             return PlannerRecommendation(
-                best_action=best.action, action_scores=tuple(scores)
+                best_action=best.action,
+                action_scores=self._include_excluded_scores(offer, scores),
             )
         return PlannerRecommendation(
-            best_action=upside_action, action_scores=tuple(scores)
+            best_action=upside_action,
+            action_scores=self._include_excluded_scores(offer, scores),
         )
 
     def _scores_need_more_samples(
@@ -286,6 +303,11 @@ class RolloutPlanner:
     def reset_cache(self) -> None:
         self.cache = ValueCache()
 
+    def rollout_work_total(self, state: GameState, offer: OfferSpec) -> int:
+        return (
+            len(self._eligible_actions(state, offer)) * self.config.rollouts_per_action
+        )
+
     def _score_actions(
         self,
         state: GameState,
@@ -297,7 +319,7 @@ class RolloutPlanner:
         rollout_start: int = 0,
     ) -> list[ActionScore]:
         scores: list[ActionScore] = []
-        selected_actions = actions or offer.actions_available
+        selected_actions = offer.actions_available if actions is None else actions
         action_indexes = {
             action: index for index, action in enumerate(offer.actions_available)
         }
@@ -652,10 +674,14 @@ class RolloutPlanner:
         return scenarios
 
     def _exact_action_scores(
-        self, state: GameState, offer: OfferSpec
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        *,
+        actions: tuple[str, ...] | None = None,
     ) -> list[ActionScore] | None:
         scores = []
-        for action in offer.actions_available:
+        for action in offer.actions_available if actions is None else actions:
             results = self._exact_action_results(state, offer, action)
             if results is None:
                 return None

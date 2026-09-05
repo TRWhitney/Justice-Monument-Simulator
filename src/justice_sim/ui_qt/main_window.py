@@ -2242,9 +2242,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self._start_planner(self.current_offer)
 
     def _planner_progress_total(self, offer: OfferSpec) -> int | None:
-        if self.planner.config.adaptive_rollouts:
+        if self.planner.config.adaptive_rollouts or self._is_game_over():
             return None
-        return len(offer.actions_available) * self.planner.config.rollouts_per_action
+        return self.planner.rollout_work_total(self.session.state, offer)
 
     def _reset_planner_progress(self, offer: OfferSpec) -> int | None:
         total = self._planner_progress_total(offer)

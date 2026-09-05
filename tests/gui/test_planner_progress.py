@@ -25,6 +25,9 @@ class FakePlanner:
             risk_preset="balanced",
         )
 
+    def rollout_work_total(self, state, offer):
+        return len(offer.actions_available) * self.config.rollouts_per_action
+
     def recommend(self, state, offer, progress=None):
         total = len(offer.actions_available) * self.config.rollouts_per_action
         for _ in range(total):
@@ -54,6 +57,26 @@ class CpuBoundPlanner(FakePlanner):
             accumulator = (accumulator * 3 + 1) % 1_000_003
         assert accumulator >= 0
         return super().recommend(state, offer, progress=progress)
+
+
+@pytest.mark.gui
+def test_progress_total_excludes_fatal_and_unaffordable_actions(builtin_data):
+    app = create_app()
+    window = MainWindow(builtin_data)
+    try:
+        offer = next(
+            o for o in builtin_data.offers if o.title == "Harbinger: Shark Attack"
+        )
+        window.session.state = GameState(5, 100, 0, 1, 0, 0)
+        window.current_offer = offer
+        window.planner.config = PlannerConfig(
+            horizon_cases=1, rollouts_per_action=4, adaptive_rollouts=False
+        )
+        assert window._planner_progress_total(offer) == 4
+    finally:
+        window.close()
+        window.deleteLater()
+        app.processEvents()
 
 
 @pytest.mark.gui

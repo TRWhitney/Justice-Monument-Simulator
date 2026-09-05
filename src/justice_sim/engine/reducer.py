@@ -60,6 +60,20 @@ def preview_state_after_encounter_triggers(
     return _apply_encounter_triggers(state, offer, data, rng)
 
 
+def action_may_survive(
+    state: GameState, offer: OfferSpec, action: str, data: JusticeData
+) -> bool:
+    """Keep uncertain actions available; one random loss cannot prove game over."""
+    if state.ended or state.mh <= 0 or action not in offer.actions_available:
+        return False
+    rng = Rng(0)
+    try:
+        next_state, _ = apply_action(state, offer, action, data, rng)
+    except ActionNotAllowed:
+        return rng.state().draws > 0
+    return rng.state().draws > 0 or (not next_state.ended and next_state.mh > 0)
+
+
 def apply_action(
     state: GameState,
     offer: OfferSpec,

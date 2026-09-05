@@ -10,7 +10,7 @@ from PySide6 import QtCore, QtWidgets
 from justice_sim.models.state import GameState
 from justice_sim.planner.rollout import PlannerConfig
 from justice_sim.ui_qt.app import create_app
-from justice_sim.ui_qt.main_window import MainWindow
+from justice_sim.ui_qt.main_window import MainWindow, _OutcomeChoiceDialog
 
 pytestmark = pytest.mark.gui
 
@@ -63,6 +63,38 @@ def _capture_review(widget, name):
         directory = Path(destination)
         directory.mkdir(parents=True, exist_ok=True)
         assert widget.grab().save(str(directory / f"{name}.png"))
+
+
+def test_surviving_gamble_remains_clickable(audit_window, promised_gamble):
+    window = audit_window
+    state, offer = promised_gamble
+    window.session.state = state
+    window.current_offer = offer
+    window._update_action_controls()
+    assert window.game_over_label.isHidden()
+    assert not window.approve_button.isHidden()
+    before_rng = window.session.rng.state()
+    observed = []
+
+    def choose_survival():
+        dialog = QtWidgets.QApplication.activeModalWidget()
+        if not isinstance(dialog, _OutcomeChoiceDialog):
+            if dialog:
+                dialog.close()
+            return
+        observed.append((window.session.state, window.session.rng.state()))
+        _capture_review(dialog, "surviving-gamble-choice")
+        dialog.findChild(QtWidgets.QComboBox).setCurrentIndex(0)
+        buttons = dialog.findChild(QtWidgets.QDialogButtonBox)
+        buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).click()
+
+    _capture_review(window, "surviving-gamble-controls")
+    QtCore.QTimer.singleShot(0, choose_survival)
+    window.approve_button.click()
+    assert observed == [(state, before_rng)]
+    assert window.session.state.mh == 3
+    assert window.session.state.required_action is None
+    assert len(window.session.log.entries) == 1
 
 
 def test_rounded_harbinger_payment_is_clickable(audit_window):

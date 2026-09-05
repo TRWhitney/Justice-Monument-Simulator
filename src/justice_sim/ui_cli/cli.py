@@ -26,6 +26,7 @@ from justice_sim.engine.effects import (
 from justice_sim.engine.luck import EncounterLuck, rank_encounter_offer
 from justice_sim.engine.reducer import (
     ActionNotAllowed,
+    action_may_survive,
     apply_action,
     apply_action_with_outcome,
     skip_case,
@@ -1344,7 +1345,7 @@ class CliApp:
         return self.data.offers_by_id.get(offer_id)
 
     def _is_game_over(self) -> bool:
-        if self.session.state.mh <= 0:
+        if self.session.state.ended or self.session.state.mh <= 0:
             return True
         if not self.current_offer:
             return False
@@ -1354,13 +1355,9 @@ class CliApp:
         return not any(self._action_survives(action) for action in actions)
 
     def _action_survives(self, action: str) -> bool:
-        try:
-            preview_state, _ = apply_action(
-                self.session.state, self.current_offer, action, self.data, Rng(0)
-            )
-        except ActionNotAllowed:
-            return False
-        return preview_state.mh > 0
+        return action_may_survive(
+            self.session.state, self.current_offer, action, self.data
+        )
 
     def _format_delta(
         self, before: GameState, after: GameState, *, action: str | None = None

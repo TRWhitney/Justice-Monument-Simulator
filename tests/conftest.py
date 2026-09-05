@@ -181,3 +181,21 @@ def builtin_data():
     from justice_sim.config import load_builtin_data
 
     return load_builtin_data()
+
+
+@pytest.fixture
+def promised_gamble(builtin_data):
+    from justice_sim.engine.reducer import apply_action
+    from justice_sim.engine.rng import Rng
+    from justice_sim.models.state import GameState
+
+    promise = next(
+        o for o in builtin_data.offers if o.id.startswith("scripticus_hey_it_s")
+    )
+    gamble = next(
+        o for o in builtin_data.offers if "cool_bird_sup_heads_you_the_man" in o.id
+    )
+    state, _ = apply_action(
+        GameState(1, 5, 3, 1, 0, 0), promise, "approve", builtin_data, Rng(0)
+    )
+    return state, gamble

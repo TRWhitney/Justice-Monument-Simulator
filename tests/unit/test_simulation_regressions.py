@@ -1,18 +1,23 @@
 """Regressions from the simulation audit, including real offer combinations."""
 
 from dataclasses import replace
+from io import StringIO
 
 import pytest
+from rich.console import Console
 
 from justice_sim.engine.reducer import (
     ActionNotAllowed,
+    action_may_survive,
     apply_action,
     can_afford_action,
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import EffectSpec, OutcomeSpec
 from justice_sim.models.state import GameState
+from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.planner.rollout import PlannerConfig, RolloutPlanner
+from justice_sim.ui_cli.cli import CliApp
 
 pytestmark = pytest.mark.unit
 
@@ -63,3 +68,31 @@ def test_affordability_does_not_charge_inactive_or_deferred_effects(
     result, _ = apply_action(state, offer, "approve", data, Rng(0))
     assert result.coins == 0
     assert bool(result.scheduled_events) is scheduled
+
+
+def test_survival_preview_keeps_last_chance_gamble(builtin_data, promised_gamble):
+    state, offer = promised_gamble
+    assert apply_action(state, offer, "approve", builtin_data, Rng(0))[0].mh == 0
+    assert apply_action(state, offer, "approve", builtin_data, Rng(1))[0].mh == 3
+    assert action_may_survive(state, offer, "approve", builtin_data)
+    assert not action_may_survive(state, offer, "reject", builtin_data)
+    assert not action_may_survive(
+        replace(state, ended=True), offer, "approve", builtin_data
+    )
+
+
+def test_cli_allows_manual_surviving_gamble(builtin_data, promised_gamble):
+    state, offer = promised_gamble
+    app = CliApp(builtin_data, SuggestedRules.empty(), console=Console(file=StringIO()))
+    app.sim_mode = "none"
+    app.session.state = state
+    app.current_offer = offer
+    before_rng = app.session.rng.state()
+    assert app.handle_command("approve")
+    assert app.pending_prompt.kind == "choice"
+    assert app.session.state == state
+    assert app.session.rng.state() == before_rng
+    assert app.handle_command("choose 1")
+    assert app.session.state.mh == 3
+    assert app.session.state.required_action is None
+    assert len(app.session.log.entries) == 1

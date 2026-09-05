@@ -28,6 +28,7 @@ from justice_sim.engine.effects import (
 )
 from justice_sim.engine.reducer import (
     ActionNotAllowed,
+    action_may_survive,
     apply_action,
     apply_action_with_outcome,
     can_afford_action,
@@ -2545,7 +2546,7 @@ class MainWindow(QtWidgets.QMainWindow):
         return self.suggestion_panel.last_action
 
     def _is_game_over(self) -> bool:
-        if self.session.state.mh <= 0:
+        if self.session.state.ended or self.session.state.mh <= 0:
             return True
         if not self.current_offer:
             return False
@@ -2555,13 +2556,9 @@ class MainWindow(QtWidgets.QMainWindow):
         return not any(self._action_survives(action) for action in actions)
 
     def _action_survives(self, action: str) -> bool:
-        try:
-            preview_state, _ = apply_action(
-                self.session.state, self.current_offer, action, self.data, Rng(0)
-            )
-        except ActionNotAllowed:
-            return False
-        return preview_state.mh > 0
+        return action_may_survive(
+            self.session.state, self.current_offer, action, self.data
+        )
 
     def _export_run(self) -> None:
         path = self._select_run_file("Export Run", save=True)

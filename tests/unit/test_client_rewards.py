@@ -168,3 +168,8 @@ def test_poppy_iou_pays_scripticus_once(builtin_data, case, payment, repayment):
         )
         == result
     )
+
+
+def test_broke_again_dismissal_still_costs_health(builtin_data):
+    result = act(builtin_data, 15, "dismiss", mh=1, coins=0)
+    assert (result.mh, result.dismissals) == (0, 2)

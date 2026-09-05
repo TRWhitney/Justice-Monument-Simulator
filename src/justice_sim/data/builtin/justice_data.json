@@ -4905,6 +4905,13 @@
       "dismiss": {
         "effects": [
           {
+            "type": "add_resource",
+            "params": {
+              "resource": "mh",
+              "amount": -1
+            }
+          },
+          {
             "type": "set_counter",
             "params": {
               "counter": "harbinger_broke_stage",

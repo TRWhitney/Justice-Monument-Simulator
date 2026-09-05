@@ -1,90 +1,40 @@
 # Justice Monument Data: Open Questions
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-09-05.
 
-## Scope and sources
+The [case JSON audit](audits/justice-case-json-2026-09.md) now compares the builtin
+data directly with the official deployed web client. All 90 client rows map to
+the existing 85 simulator offers; Grumblo's indistinguishable rows are grouped
+with their original selection multiplicity.
 
-This document tracks Justice Monument behavior that cannot currently be settled
-from the available public sources. The audit compared all 85 local encounter
-texts with the 85 Justice Monument interaction rows on the IdleOn Wiki's
-[The Caverns](https://idleon.wiki/wiki/The_Caverns#tabber-Monument_Of_Justice)
-page. References to the same NPCs in other caverns are intentionally excluded.
+## Resolved from executable client code
 
-The deployed [IdleOn Justice helper](https://idleon-justice.vercel.app/) and its
-[source repository](https://github.com/rcoopr/idleon-justice) are useful
-secondary references, but they are not treated as authoritative when they
-conflict with the Justice Monument table.
+- Cool Bird uses 50/50 flips; the health flip preserves the last MH on tails.
+- Glass Gamble is one in three despite the one-in-four dialogue.
+- Billionaire's reward probabilities are 30% two chests, 63% three chests,
+  3.5% two dismissals, and 3.5% two coins.
+- Grumblo's conditional gift weights are equal; Mystery Gift rejection loses
+  one popularity on two of the five underlying rows.
+- Rupie's ordinary exchanges use deterministic percentage formulas.
+- Poppy's Humble Lesson adds 160% of original popularity, rounded to nearest;
+  her IOU is repaid by the next Scripticus at 135%, rounded upward.
+- Life Insurance preserves retirement chests.
+- Ordinary row multiplicity, eligibility, forced Harbinger variants, the
+  post-Harbinger chest bias, and magnet/Secret ordering have client evidence.
 
-## Unresolved behavior
+These findings are implemented and regression-tested. The prior uniform-offer
+assumption is superseded for the builtin client-backed dataset. Existing custom
+datasets retain their generic defaults unless they opt into the new rules.
 
-The [September 2026 simulation audit](simulation-audit-2026-09.md#game-evidence)
-located additional primary evidence in the official web client for Rupie
-exchanges and Billionaire rewards. The model below remains unchanged pending
-a dedicated data review; those entries now have a concrete code source to check.
+## Remaining issues from the subsequent JSON audit
 
-### Fizarre Drink: Glass Gamble probability
+1. Hand arrival penalties are clamped too early, changing the final popularity
+   of some follow-up approvals.
+2. Never Uncool's popularity floor is enforced during arrivals; the client can
+   temporarily fall below the floor until an action resolves.
+3. Gratefulbinger rejection can record negative MH rather than the client's zero.
+4. Several wiki-derived notes remain stale or incomplete.
 
-- Wiki encounter text and outcome: 1-in-4 chance.
-- Wiki note and current simulator: 1-in-3 chance.
-- Current behavior: `p = 1/3`.
-- Needed evidence: an in-game data extraction, code reference, or sufficiently
-  large controlled sample of Glass Gamble results.
-
-### Concerned Poppy: Humble Lesson repayment
-
-- The wiki only says that Popularity is set to 1 and more is returned at the
-  next Poppy encounter.
-- Current behavior: restore 180% of the Popularity removed when the deal was
-  accepted.
-- Unknowns: the multiplier, rounding point, and whether later Popularity gains
-  affect the repayment.
-- Needed evidence: before/after captures covering multiple starting Popularity
-  values, preferably including values that produce fractional results.
-
-### Concerned Poppy: IOU Request follow-up
-
-- Poppy's dialogue says Scripticus will repay the coins.
-- The wiki outcome table lists only the immediate `-4x` coins and `+5`
-  Popularity, with no later repayment.
-- Current behavior: immediate effects only; no Scripticus trigger.
-- Needed evidence: observation of the next Scripticus encounter after accepting
-  the IOU, or confirmation that the dialogue is flavor text.
-
-### Rupie Slug exchange amount
-
-- Both Rupie exchange rows say that "some" of one resource is removed and the
-  other is given in return, without a range or distribution.
-- Current behavior: exchange a uniformly selected whole amount from 1 through
-  the ordinary case multiplier, at a 1:1 rate.
-- Unknowns: minimum, maximum, distribution, exchange rate, and rounding.
-- Needed evidence: repeated in-game exchanges at several case ranges.
-
-### Random reward weights
-
-The wiki lists possible rewards but not their probabilities for:
-
-- Billionaire Chester: the three reward categories and the 2-3 chest range.
-- Grumblo: Double Dip's two rewards.
-- Grumblo: Mystery Gift's five rewards.
-
-Current behavior gives each listed category equal weight and uses a uniform
-integer roll for the chest range. Needed evidence is an in-game data reference
-or a sufficiently large sample for each encounter.
-
-## Accepted simulation assumption
-
-Ordinary eligible encounters, including Harbinger offers, are treated as equally
-likely by the full simulation because no encounter-weight data is available.
-This is an intentional approximation for the simulator's non-core, exploratory
-mode and should not be changed without new evidence.
-
-## Resolved during the 2026-08-06 audit
-
-The following are no longer open questions:
-
-- Concerned Poppy: Fan Mail rejection is a flat `-40` Popularity.
-- Cool Bird: Chest Flip awards 2 chests or removes 1 chest.
-- Ordinary `x` scaling, Harbinger coin scaling, and Gratefulbinger probability
-  match the formulas displayed by the wiki.
-- Confirmed encounter-value, duration, override-lifecycle, solvency, rounding,
-  and probability-boundary defects have regression coverage in the unit suite.
+The audit report gives reproductions, affected rows, verification limits, and
+source provenance. The first three issues concern the engine's interpretation
+of otherwise correct resource values, rather than unknown game mechanics.

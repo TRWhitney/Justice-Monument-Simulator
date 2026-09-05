@@ -101,3 +101,22 @@ def test_billionaire_reward_boundaries(builtin_data, draw, resource, amount):
 )
 def test_grumblo_rejection_uses_hidden_row(builtin_data, draw, pop_loss):
     assert act(builtin_data, 44, "reject", draw=draw).pop == 20 - pop_loss
+
+
+@pytest.mark.parametrize("row,coins,pop", [(65, 26, 16), (66, 16, 26)])
+def test_rupie_exchanges_are_deterministic(builtin_data, row, coins, pop):
+    for seed in range(5):
+        rng = Rng(seed)
+        result, _ = apply_action(
+            state(), offer(builtin_data, row), "approve", builtin_data, rng
+        )
+        assert (result.coins, result.pop) == (coins, pop)
+        assert rng.state().draws == 0
+
+
+def test_rupie_exchange_includes_existing_bean_bonus(builtin_data):
+    s = replace(act(builtin_data, 29), coins=20, pop=20)
+    result, _ = apply_action(
+        s, offer(builtin_data, 66), "approve", builtin_data, Draw(0.1)
+    )
+    assert (result.coins, result.pop) == (20, 27)

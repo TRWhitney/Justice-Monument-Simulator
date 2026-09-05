@@ -219,6 +219,9 @@ def promised_gamble(builtin_data):
 
 @pytest.fixture
 def ghost_exchange(builtin_data):
+    from dataclasses import replace
+    from justice_sim.models.offer import EffectSpec, OutcomeSpec
+
     from justice_sim.engine.reducer import apply_action
     from justice_sim.engine.rng import Rng
     from justice_sim.models.state import GameState
@@ -229,5 +232,23 @@ def ghost_exchange(builtin_data):
     )
     state, _ = apply_action(
         GameState(6, 5, 3, 3, 0, 0), ghost, "approve", builtin_data, Rng(0)
+    )
+    # Preserve random-exchange preparation coverage independently of Rupie's
+    # corrected deterministic percentages.
+    exchange = replace(
+        exchange,
+        approve=OutcomeSpec(
+            effects=(
+                EffectSpec(
+                    "random_exchange",
+                    {
+                        "take_resource": "pop",
+                        "give_resource": "coins",
+                        "min": 1,
+                        "max": {"expr": "1", "scaling": "case"},
+                    },
+                ),
+            )
+        ),
     )
     return state, exchange

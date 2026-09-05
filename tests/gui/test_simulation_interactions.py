@@ -155,6 +155,21 @@ def test_shortcut_panel_displays_expected_random_chests(audit_window):
     _capture_review(window.suggestion_panel, "random-upside-expectation")
 
 
+def test_client_rupie_exchange_needs_no_random_prompt(audit_window, monkeypatch):
+    window = audit_window
+    window.session.state = GameState(1, 20, 20, 5, 1, 0)
+    window.current_offer = next(o for o in window.data.offers if 65 in o.client_rows)
+
+    def unexpected_prompt(*args):
+        pytest.fail("The client exchange has no random outcome")
+
+    monkeypatch.setattr(window, "_prompt_random_value", unexpected_prompt)
+    window._update_action_controls()
+    window.approve_button.click()
+    assert (window.session.state.coins, window.session.state.pop) == (26, 16)
+    _capture_review(window, "client-rupie-exchange")
+
+
 def test_client_cool_bird_tails_preserves_last_health(audit_window):
     window = audit_window
     window.session.state = GameState(1, 20, 20, 1, 0, 0)

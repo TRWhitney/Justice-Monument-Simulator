@@ -3882,14 +3882,20 @@
       "approve": {
         "effects": [
           {
-            "type": "random_exchange",
+            "type": "add_resource",
             "params": {
-              "take_resource": "pop",
-              "give_resource": "coins",
-              "min": 1,
-              "max": {
-                "expr": "1",
-                "scaling": "case"
+              "resource": "coins",
+              "amount": {
+                "expr": "ceil(0.3 * pop)"
+              }
+            }
+          },
+          {
+            "type": "set_resource",
+            "params": {
+              "resource": "pop",
+              "value": {
+                "expr": "ceil(0.8 * pop)"
               }
             }
           }
@@ -4031,14 +4037,20 @@
       "approve": {
         "effects": [
           {
-            "type": "random_exchange",
+            "type": "add_resource",
             "params": {
-              "take_resource": "coins",
-              "give_resource": "pop",
-              "min": 1,
-              "max": {
-                "expr": "1",
-                "scaling": "case"
+              "resource": "pop",
+              "amount": {
+                "expr": "ceil(min(pop / 3, 0.3 * coins))"
+              }
+            }
+          },
+          {
+            "type": "set_resource",
+            "params": {
+              "resource": "coins",
+              "value": {
+                "expr": "ceil(0.8 * coins)"
               }
             }
           }

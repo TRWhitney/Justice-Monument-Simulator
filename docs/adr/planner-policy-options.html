@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Future policy work comparison</title>
+<style>
+body{font:17px system-ui;max-width:820px;margin:3rem auto;padding:0 1rem;line-height:1.5;color:#203047;background:#f4f7fa}
+label{display:block;margin:1rem 0}input,select,button{font:inherit;padding:.4rem}output{display:block;background:white;padding:1rem;border:1px solid #bcc9d6}button{margin-top:1rem}
+</style>
+<h1>Future policy work comparison</h1>
+<p>This comparison estimates a maximum number of simulated cases per root sample.
+It does not change application settings or predict seconds on a particular machine.</p>
+<label>Future cases <input id="horizon" type="number" min="1" max="100" value="12"></label>
+<label>Eligible actions per choice <input id="actions" type="number" min="1" max="3" value="2"></label>
+<label>Fraction of choices with future effects <input id="fraction" type="range" min="0" max="1" step="0.05" value="0.25"> <span id="fractionText"></span></label>
+<label>Policy <select id="samples"><option value="0">Immediate policy</option><option value="1">One continuation (alternative)</option><option value="2" selected>Two continuations (selected)</option></select></label>
+<output id="result" aria-live="polite"></output>
+<p>Inner continuations use the immediate policy. Rewards outside the chosen horizon
+remain excluded. Two inner samples can still miss rare consequences.</p>
+<button id="export">Export this comparison</button>
+<script>
+const ids=['horizon','actions','fraction','samples'];
+function selection(){return Object.fromEntries(ids.map(id=>[id,Number(document.getElementById(id).value)]));}
+function update(){const s=selection();const extra=s.samples*s.actions*s.fraction*s.horizon*(s.horizon-1)/2;
+document.getElementById('fractionText').textContent=`${Math.round(s.fraction*100)}%`;
+document.getElementById('result').textContent=`Baseline: ${s.horizon} future cases. Estimated extra case transitions: ${extra.toFixed(1)}. Total: ${(s.horizon+extra).toFixed(1)} per root sample. Actual work falls when paths terminate or fewer choices qualify.`;}
+ids.forEach(id=>document.getElementById(id).addEventListener('input',update));
+document.getElementById('export').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(selection(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='future-policy-comparison.json';a.click();URL.revokeObjectURL(url);});update();
+</script>
+</html>

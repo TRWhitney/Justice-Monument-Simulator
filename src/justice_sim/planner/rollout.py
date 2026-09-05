@@ -394,9 +394,11 @@ class RolloutPlanner:
             utility_samples=tuple(utilities),
         )
 
-    def _simulate_future(self, state: GameState, rng: Rng, remaining: int) -> GameState:
+    def _simulate_future(
+        self, state: GameState, rng: Rng, remaining: int, *, improve_policy: bool = True
+    ) -> GameState:
         current = state
-        for _ in range(remaining):
+        for step in range(remaining):
             if current.ended or current.mh <= 0:
                 break
             offer_id = select_encounter(current, self.data, self.encounter_model, rng)
@@ -413,6 +415,7 @@ class RolloutPlanner:
                 offer,
                 rng,
                 encounter_start=encounter_start,
+                remaining=remaining - step - 1 if improve_policy else 0,
             )
             if action is None:
                 return self._dead_end(current)
@@ -440,6 +443,7 @@ class RolloutPlanner:
         rng: Rng,
         *,
         encounter_start: GameState | None = None,
+        remaining: int = 0,
     ) -> str | None:
         results = {
             action: self._exact_action_results(
@@ -456,8 +460,32 @@ class RolloutPlanner:
         best_value = float("-inf")
         action_biases = self._biases_for_offer(state, offer)
         policy_rng = rng.spawn(state.case_index)
+        compare_futures = (
+            remaining > 0
+            and len(actions) > 1
+            and (
+                any(results[action] is None for action in actions)
+                or self._future_sensitive(
+                    state,
+                    [
+                        result
+                        for action in actions
+                        for result, _ in (results[action] or [])
+                    ],
+                )
+            )
+        )
         for action in actions:
-            if results[action] is None:
+            if compare_futures:
+                value = self._continuation_value(
+                    state,
+                    offer,
+                    action,
+                    policy_rng,
+                    remaining,
+                    encounter_start=encounter_start,
+                )
+            elif results[action] is None:
                 value = self._sample_action_value(
                     state,
                     offer,
@@ -591,6 +619,37 @@ class RolloutPlanner:
             )
             or len({self._non_resource_signature(result) for result in results}) > 1
         )
+
+    def _continuation_value(
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        action: str,
+        rng: Rng,
+        remaining: int,
+        *,
+        encounter_start: GameState | None,
+    ) -> float:
+        """Compare two paired continuations without recursively improving their policy."""
+        values = []
+        for sample_index in range(2):
+            sample_rng = rng.spawn(sample_index)
+            try:
+                next_state, _ = apply_action(
+                    state,
+                    offer,
+                    action,
+                    self.data,
+                    sample_rng,
+                    encounter_start=encounter_start,
+                )
+            except ActionNotAllowed:
+                next_state = self._dead_end(state)
+            terminal = self._simulate_future(
+                next_state, sample_rng, remaining, improve_policy=False
+            )
+            values.append(self._cached_utility(terminal))
+        return mean(values)
 
     def _action_outcome_profile(
         self,
@@ -1083,7 +1142,6 @@ class RolloutPlanner:
 
 
 _COUNTER_REFERENCE = re.compile(r"\bcounters\.([A-Za-z_][A-Za-z0-9_]*)\b")
-
 _RESOURCE_REFERENCE = re.compile(r"\b(coins|pop|mh|dismissals|retirement_chests)\b")
 
 

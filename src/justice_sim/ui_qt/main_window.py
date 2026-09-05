@@ -2592,10 +2592,16 @@ class MainWindow(QtWidgets.QMainWindow):
         path = self._select_run_file("Import Run", save=False)
         if path is None:
             return
-        run_state = load_run_state(path)
+        try:
+            run_state = load_run_state(path)
+            rng = Rng.from_state(run_state.rng_state)
+            log = SessionLog.from_list(run_state.log)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+            self.toast_area.show_toast(f"Import failed: {exc}")
+            return
         self.session.state = run_state.state
-        self.session.rng = Rng.from_state(run_state.rng_state)
-        self.session.log = SessionLog.from_list(run_state.log)
+        self.session.rng = rng
+        self.session.log = log
         self._simulated_offer_scores.clear()
         self.current_recommendation = None
         self._refresh()

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Action preparation options — ADR 0001</title>
+<style>
+  body { max-width: 48rem; margin: 3rem auto; padding: 0 1rem; font: 1rem/1.6 system-ui; color: #223; }
+  label { display: block; margin-top: 1rem; }
+  select, input, button { font: inherit; padding: .4rem; }
+  pre { padding: 1rem; background: #f1f3f5; white-space: pre-wrap; }
+</style>
+<h1>Action preparation options</h1>
+<p>Review the alternatives in <a href="0001-consistent-action-preparation.md">ADR 0001</a>
+  and export a decision record. This page does not change the simulator.</p>
+<label for="approach">Approach</label>
+<select id="approach">
+  <option value="shared_preparation">Shared preparation and exact shortcuts — implemented</option>
+  <option value="always_rollout">Always use rollouts — alternative</option>
+  <option value="separate_preparation">Separate preparation in each caller — alternative</option>
+</select>
+<p id="tradeoff"></p>
+<label for="horizon">Future cases for fallback rollouts</label>
+<input id="horizon" type="number" min="0" max="100" value="12">
+<label for="rollouts">Initial rollouts per action</label>
+<input id="rollouts" type="number" min="1" max="20000" value="200">
+<p>The implemented approach uses no rollouts for a proven shortcut. These values
+  apply to its fallback simulation. Adaptive sampling remains a separate setting.</p>
+<pre id="record" aria-live="polite"></pre>
+<button id="export" type="button">Export selection as JSON</button>
+<script>
+  const approach = document.querySelector('#approach');
+  const horizon = document.querySelector('#horizon');
+  const rollouts = document.querySelector('#rollouts');
+  const tradeoffs = {
+    shared_preparation: 'One preparation sequence keeps prompts and probabilities consistent. Fully resolved outcomes retain immediate recommendations.',
+    always_rollout: 'Sampling every action loses immediate recommendations and cannot prove that a rare surviving outcome is impossible.',
+    separate_preparation: 'Independent preparation can preserve immediate recommendations but duplicates ordering rules and their maintenance.'
+  };
+  function selection() {
+    return {
+      document: 'ADR 0001 review selection',
+      approach: approach.value,
+      horizon_cases: Number(horizon.value),
+      rollouts_per_action: Number(rollouts.value)
+    };
+  }
+  function render() {
+    document.querySelector('#tradeoff').textContent = tradeoffs[approach.value];
+    document.querySelector('#record').textContent = JSON.stringify(selection(), null, 2);
+  }
+  [approach, horizon, rollouts].forEach(element => element.addEventListener('input', render));
+  document.querySelector('#export').addEventListener('click', () => {
+    if (!horizon.reportValidity() || !rollouts.reportValidity()) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(selection(), null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'action-preparation-review.json';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  render();
+</script>
+</html>

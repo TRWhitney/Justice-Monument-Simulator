@@ -17,6 +17,11 @@ conflict with the Justice Monument table.
 
 ## Unresolved behavior
 
+The [September 2026 simulation audit](simulation-audit-2026-09.md#game-evidence)
+located additional primary evidence in the official web client for Rupie
+exchanges and Billionaire rewards. The model below remains unchanged pending
+a dedicated data review; those entries now have a concrete code source to check.
+
 ### Fizarre Drink: Glass Gamble probability
 
 - Wiki encounter text and outcome: 1-in-4 chance.

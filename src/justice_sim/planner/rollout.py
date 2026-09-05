@@ -433,31 +433,39 @@ class RolloutPlanner:
                 best_value = value
         return best_action
 
-    def _eligible_actions(self, state: GameState, offer: OfferSpec) -> tuple[str, ...]:
-        survivable_actions, lethal_actions = self._deterministic_survival_actions(
-            state, offer
-        )
-        base_actions = (
-            tuple(
-                action
+    def _eligible_actions(
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        *,
+        results: dict[str, list[tuple[GameState, float]] | None] | None = None,
+    ) -> tuple[str, ...]:
+        if results is None:
+            results = {
+                action: self._exact_action_results(state, offer, action)
                 for action in offer.actions_available
-                if action not in lethal_actions
+            }
+        possible = tuple(
+            action
+            for action in offer.actions_available
+            if results[action]
+            or (
+                results[action] is None
+                and self._action_is_possible(state, offer, action)
             )
-            if survivable_actions
-            else offer.actions_available
         )
-        constrained_actions = self._apply_action_constraints(state, offer, base_actions)
-        possible_actions = tuple(
+        lethal = {
             action
-            for action in constrained_actions
-            if self._action_is_possible(state, offer, action)
-        )
-        possible_base_actions = tuple(
-            action
-            for action in base_actions
-            if self._action_is_possible(state, offer, action)
-        )
-        return possible_actions or possible_base_actions
+            for action in possible
+            if results[action]
+            and all(
+                next_state.ended or next_state.mh <= 0
+                for next_state, _ in results[action]
+            )
+        }
+        # A chance to survive is enough to prefer it to proven certain death.
+        alternatives = tuple(action for action in possible if action not in lethal)
+        return self._apply_action_constraints(state, offer, alternatives or possible)
 
     def _guaranteed_upside_action(
         self,
@@ -776,37 +784,16 @@ class RolloutPlanner:
             return offer.dismiss or offer.reject
         return None
 
-    def _deterministic_survival_actions(
-        self, state: GameState, offer: OfferSpec
-    ) -> tuple[set[str], set[str]]:
-        survivable: set[str] = set()
-        lethal: set[str] = set()
-        for action in offer.actions_available:
-            preview = self._action_preview(state, offer, action)
-            if preview is None:
-                continue
-            next_state, draws = preview
-            if draws != 0:
-                continue
-            if next_state.ended or next_state.mh <= 0:
-                lethal.add(action)
-            else:
-                survivable.add(action)
-        return survivable, lethal
-
     def _is_terminal_offer_state(self, state: GameState, offer: OfferSpec) -> bool:
         if state.ended or state.mh <= 0:
             return True
         if not offer.actions_available:
             return True
         for action in offer.actions_available:
-            preview = self._action_preview(state, offer, action)
-            if preview is None:
-                continue
-            next_state, draws = preview
-            if draws != 0:
+            results = self._exact_action_results(state, offer, action)
+            if results is None:
                 return False
-            if not (next_state.ended or next_state.mh <= 0):
+            if any(not result.ended and result.mh > 0 for result, _ in results):
                 return False
         return True
 
@@ -891,22 +878,24 @@ class RolloutPlanner:
         constrained = tuple(action for action in actions if action not in forbidden)
         if required:
             possible_required = tuple(
-                action
-                for action in constrained
-                if action in required and self._action_is_possible(state, offer, action)
+                action for action in constrained if action in required
             )
             if possible_required:
                 return possible_required
         return constrained or actions
 
     def _action_is_possible(
-        self, state: GameState, offer: OfferSpec, action: str
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        action: str,
     ) -> bool:
         if action not in offer.actions_available:
             return False
-        preview = preview_state_after_encounter_triggers(
-            state, offer, self.data, Rng(0)
-        )
+        rng = Rng(0)
+        preview = preview_state_after_encounter_triggers(state, offer, self.data, rng)
+        if rng.state().draws:
+            return True
         if preview.ended:
             return False
         if is_action_blocked(preview, offer, action, self.data):

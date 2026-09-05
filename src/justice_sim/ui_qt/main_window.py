@@ -2404,8 +2404,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._set_button_dimmed(self.best_button, True)
 
     def _adjust_resource(self, resource: str, delta: int) -> None:
-        if not self._manual_adjust_timer.isActive():
-            self._stop_planner_process()
+        self._stop_planner_process()
         if self._manual_adjust_pre_state is None:
             self._manual_adjust_pre_state = self.session.state
         state = self.session.state
@@ -2454,12 +2453,9 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             return
         self.current_recommendation = None
+        self._clear_recommendation_ui()
         if self.current_offer and self._sim_mode != "none":
             self.suggestion_panel.best_label.setText("Adjusting...")
-            self.suggestion_panel.metrics_label.setText("")
-            self.suggestion_panel.set_calculating(False)
-        else:
-            self._clear_recommendation_ui()
         self.state_panel.update_state(self.session.state)
         self._update_action_controls()
         self._schedule_manual_adjust_finalize()
@@ -2542,6 +2538,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.suggestion_panel.clear_recommendation()
 
     def _recommended_action(self) -> str | None:
+        if self._manual_adjust_pre_state is not None:
+            return None
         if self.current_recommendation:
             return self.current_recommendation.best_action
         if self.suggestion_panel.is_calculating():

@@ -474,3 +474,37 @@ def test_adjustment_delay_is_preserved_between_bursts(data_factory, monkeypatch)
     finally:
         window.close()
         app.quit()
+
+
+@pytest.mark.gui
+def test_adjustment_cannot_apply_the_previous_recommendation(data_factory):
+    from justice_sim.planner.rollout import ActionScore, PlannerRecommendation
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = create_app()
+    window = MainWindow(data_factory())
+    try:
+        window.current_offer = window.data.offers[0]
+        recommendation = PlannerRecommendation(
+            "approve", (ActionScore("approve", 1, 0, 0, 0),)
+        )
+        window.current_recommendation = recommendation
+        window.suggestion_panel.update_recommendation(recommendation)
+        window.state_panel.findChild(
+            QtWidgets.QPushButton, "resource_coins_increase"
+        ).click()
+        assert window.suggestion_panel.best_label.text() == "Adjusting..."
+        assert window.suggestion_panel.last_action is None
+        assert window._recommended_action() is None
+        assert window.best_button.styleSheet() == "color: #8a8a8a;"
+        state = window.session.state
+        window.best_button.click()
+        assert window.session.state is state
+        assert not window.session.log.entries
+        # Even after another control flushes the adjustment, no stale fallback returns.
+        window._flush_manual_adjust_log()
+        assert window._recommended_action() is None
+    finally:
+        window._manual_adjust_timer.stop()
+        window.close()
+        app.quit()

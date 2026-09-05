@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from collections import OrderedDict
 from collections.abc import Callable
 import json
 import multiprocessing
 from multiprocessing.connection import Connection
 from multiprocessing.process import BaseProcess
 import os
+import pickle
 from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -603,6 +605,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._planner_result_offer_id: str | None = None
         self._planner_result_state_key: str | None = None
         self._planner_result_error: str | None = None
+        self._planner_result_cache_key: tuple | None = None
+        self._recommendations: OrderedDict[tuple, PlannerRecommendation] = OrderedDict()
         self._simulated_offer_scores: dict[str, dict[str, float]] = {}
         self._planner_progress_value = 0
         self._planner_progress_total_value: int | None = None
@@ -1705,6 +1709,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._reset_planner_progress(offer)
         self._clear_planner_result()
+        self._planner_result_offer_id = offer.id
+        self._planner_result_state_key = planner_state_key
+        cache_key = self._recommendation_cache_key(offer, planner_state_key)
+        self._planner_result_cache_key = cache_key
+        cached = self._recommendations.get(cache_key) if cache_key is not None else None
+        if cached is not None:
+            self._recommendations.move_to_end(cache_key)
+            self._planner_result = cached
+            self._planner_result_generation = generation
+            self._consume_planner_result()
+            return
         context = multiprocessing.get_context("spawn")
         receiver, sender = context.Pipe(duplex=False)
         process = context.Process(
@@ -1729,6 +1744,24 @@ class MainWindow(QtWidgets.QMainWindow):
             self._planner_result_error = str(exc)
         finally:
             sender.close()
+
+    def _recommendation_cache_key(
+        self, offer: OfferSpec, state_key: str
+    ) -> tuple | None:
+        if not isinstance(self.planner, RolloutPlanner):
+            return None
+        # Capture actual planner inputs, including custom/learned model weights.
+        # This is an in-memory key only; no pickle is loaded or persisted.
+        settings = pickle.dumps(
+            (
+                self.planner.config,
+                self.planner.weights,
+                self.planner.rng.state(),
+                self.planner.encounter_model,
+                self.planner.suggested_rules,
+            )
+        )
+        return id(self.planner.data), id(offer), state_key, settings
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         self._stop_planner_process()
@@ -2210,6 +2243,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_offer = None
         self.current_recommendation = None
         self._simulated_offer_scores.clear()
+        self._recommendations.clear()
         self._auto_offer_id = None
         self._auto_offer_case = None
         self.offer_search.clear_selection()
@@ -2320,6 +2354,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._planner_result_offer_id = None
         self._planner_result_state_key = None
         self._planner_result_error = None
+        self._planner_result_cache_key = None
 
     def _consume_planner_result(self) -> None:
         generation = self._planner_result_generation
@@ -2329,6 +2364,7 @@ class MainWindow(QtWidgets.QMainWindow):
         offer_id = self._planner_result_offer_id
         state_key = self._planner_result_state_key
         error = self._planner_result_error
+        cache_key = self._planner_result_cache_key
         self._clear_planner_result()
         if generation != self._planner_generation:
             return
@@ -2347,6 +2383,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self._update_action_controls()
             return
         if recommendation:
+            if cache_key is not None:
+                self._recommendations[cache_key] = recommendation
+                self._recommendations.move_to_end(cache_key)
+                if len(self._recommendations) > 32:
+                    self._recommendations.popitem(last=False)
             if offer_id and state_key:
                 self._record_simulated_offer_score(state_key, offer_id, recommendation)
                 self.offer_search.set_simulated_scores(

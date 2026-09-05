@@ -146,20 +146,6 @@
       "notes": "Avoid approving when the three-case approval lock would still be active on a Harbinger case."
     },
     {
-      "id": "cool_bird_sanity_flip_low_health",
-      "offer_ids": [
-        "cool_bird_sup_heads_you_the_man_and_get_2_mental_h_80b6c9c3"
-      ],
-      "biases": [
-        {
-          "action": "approve",
-          "amount": -5,
-          "when": "mh <= 2"
-        }
-      ],
-      "notes": "Prefer not to approve at low health."
-    },
-    {
       "id": "fizarre_drink_prefer_approve",
       "offer_ids": [
         "fizarre_drink_i_m_not_a_free_drink_x_coin_please_my_ef_1f67196f",

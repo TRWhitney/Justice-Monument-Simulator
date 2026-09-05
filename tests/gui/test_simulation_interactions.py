@@ -151,7 +151,7 @@ def test_shortcut_panel_displays_expected_random_chests(audit_window):
     window.suggestion_panel.update_recommendation(recommendation)
     assert progress == []
     assert window.suggestion_panel.best_label.text() == "Best: approve"
-    assert "Chests 0.83" in window.suggestion_panel.metrics_label.text()
+    assert "Chests 2.49" in window.suggestion_panel.metrics_label.text()
     _capture_review(window.suggestion_panel, "random-upside-expectation")
 
 

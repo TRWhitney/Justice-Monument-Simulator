@@ -148,17 +148,17 @@ def test_random_upside_scores_are_exact_without_rollouts(builtin_data):
     score = next(s for s in result.action_scores if s.action == "approve")
     # This checks the configured distribution independently of the planner.
     outcomes = [
-        (replace(state, case_index=2, retirement_chests=2), 1 / 6),
-        (replace(state, case_index=2, retirement_chests=3), 1 / 6),
-        (replace(state, case_index=2, dismissals=3), 1 / 3),
-        (replace(state, case_index=2, coins=6), 1 / 3),
+        (replace(state, case_index=2, retirement_chests=2), 0.30),
+        (replace(state, case_index=2, retirement_chests=3), 0.63),
+        (replace(state, case_index=2, dismissals=3), 0.035),
+        (replace(state, case_index=2, coins=7), 0.035),
     ]
     values = [(utility(s, builtin_data, planner.weights), p) for s, p in outcomes]
     expected = sum(v * p for v, p in values)
     assert result.best_action == "approve"
     assert progress == []
     assert score.sample_count == 0
-    assert score.expected_chests == pytest.approx(5 / 6)
+    assert score.expected_chests == pytest.approx(2.49)
     assert score.expected_utility == pytest.approx(expected)
     assert score.variance == pytest.approx(
         sum(p * (v - expected) ** 2 for v, p in values)

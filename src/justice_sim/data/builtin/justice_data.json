@@ -128,20 +128,31 @@
           "type": "categorical",
           "choices": [
             {
-              "weight": 1,
+              "weight": 30,
               "effects": [
                 {
-                  "type": "random_range_resource",
+                  "type": "add_resource",
                   "params": {
                     "resource": "retirement_chests",
-                    "min": 2,
-                    "max": 3
+                    "amount": 2
                   }
                 }
               ]
             },
             {
-              "weight": 1,
+              "weight": 63,
+              "effects": [
+                {
+                  "type": "add_resource",
+                  "params": {
+                    "resource": "retirement_chests",
+                    "amount": 3
+                  }
+                }
+              ]
+            },
+            {
+              "weight": 3.5,
               "effects": [
                 {
                   "type": "add_resource",
@@ -153,13 +164,13 @@
               ]
             },
             {
-              "weight": 1,
+              "weight": 3.5,
               "effects": [
                 {
                   "type": "add_resource",
                   "params": {
                     "resource": "coins",
-                    "amount": 1
+                    "amount": 2
                   }
                 }
               ]

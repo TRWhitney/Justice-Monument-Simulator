@@ -73,3 +73,24 @@ def test_bean_bonus_precedes_final_resource_clamp(builtin_data):
 def test_cool_bird_preserves_last_health(builtin_data, mh, draw):
     result = act(builtin_data, 54, mh=mh, draw=draw)
     assert result.mh == (mh + 2 if draw < 0.5 else max(1, mh - 1))
+
+
+@pytest.mark.parametrize(
+    "draw,resource,amount",
+    [
+        (0, "retirement_chests", 2),
+        (0.29999, "retirement_chests", 2),
+        (0.3, "retirement_chests", 3),
+        (0.92999, "retirement_chests", 3),
+        (0.93, "dismissals", 2),
+        (0.96499, "dismissals", 2),
+        (0.965, "coins", 2),
+        (0.99999, "coins", 2),
+    ],
+)
+def test_billionaire_reward_boundaries(builtin_data, draw, resource, amount):
+    result = act(builtin_data, 80, draw=draw)
+    for name in ("coins", "pop", "mh", "dismissals", "retirement_chests"):
+        assert getattr(result, name) - getattr(state(), name) == (
+            amount if name == resource else 0
+        )

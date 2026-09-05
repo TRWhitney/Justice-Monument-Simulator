@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Mapping
 
@@ -267,10 +268,14 @@ def _override_candidate_offer_ids(
         return []
     if not override.npc_id:
         return []
+    conditions = _OfferConditions(state)
+    excluded = _harbinger_offer_ids(data)
+    if data.special_rules.gratefulbinger:
+        excluded.add(data.special_rules.gratefulbinger.offer_id)
     return [
         offer.id
-        for offer in data.offers
-        if offer.npc_id == override.npc_id and _is_offer_eligible(offer, state, data)
+        for offer in _encounter_index(data).by_npc.get(override.npc_id, ())
+        if offer.id not in excluded and conditions.allows(offer)
     ]
 
 
@@ -309,26 +314,82 @@ def _is_offer_eligible(offer: OfferSpec, state: GameState, data: JusticeData) ->
     return _is_offer_eligible_internal(offer, state, data, allow_harbinger=False)
 
 
+@dataclass
+class _EncounterIndex:
+    regular: tuple[OfferSpec, ...]
+    harbingers: tuple[OfferSpec, ...]
+    priority: tuple[OfferSpec, ...]
+    by_npc: dict[str, tuple[OfferSpec, ...]]
+    row_distributions: dict[tuple[int, ...], dict[str, float]]
+
+
+# Identity-scoped static data only; mutable learned/model weights stay live.
+# Bounding retained datasets also bounds the lifetime of custom loaded content.
+_ENCOUNTER_INDEXES: OrderedDict[int, tuple[JusticeData, _EncounterIndex]] = (
+    OrderedDict()
+)
+
+
+def _encounter_index(data: JusticeData) -> _EncounterIndex:
+    cached = _ENCOUNTER_INDEXES.get(id(data))
+    if cached is not None and cached[0] is data:
+        return cached[1]
+    excluded = _harbinger_offer_ids(data)
+    if data.special_rules.gratefulbinger:
+        excluded.add(data.special_rules.gratefulbinger.offer_id)
+    by_npc: dict[str, list[OfferSpec]] = {}
+    for offer in data.offers:
+        by_npc.setdefault(offer.npc_id, []).append(offer)
+    rows = {}
+    for group in ((27,), (28,), (29,), (21, 22), (21, 22, 33, 37, 39, 52), (61,)):
+        weights = {
+            offer.id: len(set(offer.client_rows).intersection(group))
+            for offer in data.offers
+        }
+        rows[group] = _normalize_weights({k: v for k, v in weights.items() if v})
+    index = _EncounterIndex(
+        regular=tuple(
+            o for o in data.offers if o.id not in excluded and o.encounter_weight > 0
+        ),
+        harbingers=tuple(
+            data.offers_by_id[k]
+            for k in _harbinger_offer_pool(data)
+            if k in data.offers_by_id
+        ),
+        priority=tuple(
+            data.offers_by_id[k]
+            for k in data.special_rules.harbinger.priority_offers
+            if k in data.offers_by_id
+        ),
+        by_npc={k: tuple(v) for k, v in by_npc.items()},
+        row_distributions=rows,
+    )
+    if len(_ENCOUNTER_INDEXES) >= 8:
+        _ENCOUNTER_INDEXES.popitem(last=False)
+    _ENCOUNTER_INDEXES[id(data)] = (data, index)
+    return index
+
+
+class _OfferConditions:
+    """Build the read-only predicate context once for an eligibility scan."""
+
+    def __init__(self, state: GameState) -> None:
+        self.state = state
+        self.context: expr_util.ExprContext | None = None
+
+    def allows(self, offer: OfferSpec) -> bool:
+        if not offer.conditions:
+            return True
+        if self.context is None:
+            self.context = _condition_context(self.state)
+        return _offer_conditions_allow(offer, self.state, self.context)
+
+
 def _eligible_regular_offer_ids(
     encounter_model: EncounterModel, state: GameState, data: JusticeData
 ) -> list[str]:
-    cached = getattr(encounter_model, "_regular_offer_candidates_cache", None)
-    if cached is None or cached[0] is not data:
-        excluded_offer_ids = _harbinger_offer_ids(data)
-        if data.special_rules.gratefulbinger:
-            excluded_offer_ids.add(data.special_rules.gratefulbinger.offer_id)
-        candidates = tuple(
-            offer for offer in data.offers if offer.id not in excluded_offer_ids
-        )
-        cached = (data, candidates)
-        setattr(encounter_model, "_regular_offer_candidates_cache", cached)
-    candidates = cached[1]
-    return [
-        offer.id
-        for offer in candidates
-        if offer.encounter_weight > 0
-        and (not offer.conditions or _offer_conditions_allow(offer, state))
-    ]
+    conditions = _OfferConditions(state)
+    return [o.id for o in _encounter_index(data).regular if conditions.allows(o)]
 
 
 def _is_offer_eligible_internal(
@@ -349,22 +410,29 @@ def _is_offer_eligible_internal(
     return _offer_conditions_allow(offer, state)
 
 
-def _offer_conditions_allow(offer: OfferSpec, state: GameState) -> bool:
+def _condition_context(state: GameState) -> expr_util.ExprContext:
+    return expr_util.build_predicate_context(
+        case_index=state.case_index,
+        coins=state.coins,
+        pop=state.pop,
+        mh=state.mh,
+        dismissals=state.dismissals,
+        retirement_chests=state.retirement_chests,
+        flags=set(state.flags),
+        statuses=set(state.statuses.keys()),
+        counters=state.counters,
+        pending=_pending_labels(state),
+    )
+
+
+def _offer_conditions_allow(
+    offer: OfferSpec, state: GameState, context: expr_util.ExprContext | None = None
+) -> bool:
     for predicate in offer.conditions:
         if isinstance(predicate, str):
-            ctx = expr_util.build_predicate_context(
-                case_index=state.case_index,
-                coins=state.coins,
-                pop=state.pop,
-                mh=state.mh,
-                dismissals=state.dismissals,
-                retirement_chests=state.retirement_chests,
-                flags=set(state.flags),
-                statuses=set(state.statuses.keys()),
-                counters=state.counters,
-                pending=_pending_labels(state),
-            )
-            if not expr_util.evaluate_predicate(predicate, ctx):
+            if context is None:
+                context = _condition_context(state)
+            if not expr_util.evaluate_predicate(predicate, context):
                 return False
     return True
 
@@ -389,20 +457,12 @@ def _select_harbinger_offer(state: GameState, data: JusticeData, rng: Rng) -> st
 
 
 def eligible_harbinger_offers(state: GameState, data: JusticeData) -> list[str]:
-    for offer_id in data.special_rules.harbinger.priority_offers:
-        offer = data.offers_by_id.get(offer_id)
-        if offer and _is_offer_eligible_internal(
-            offer, state, data, allow_harbinger=True
-        ):
-            return [offer_id]
-    pool = _harbinger_offer_pool(data)
-    eligible: list[str] = []
-    for offer_id in pool:
-        offer = data.offers_by_id.get(offer_id)
-        if offer and _is_offer_eligible_internal(
-            offer, state, data, allow_harbinger=True
-        ):
-            eligible.append(offer_id)
+    index = _encounter_index(data)
+    conditions = _OfferConditions(state)
+    for offer in index.priority:
+        if conditions.allows(offer):
+            return [offer.id]
+    eligible = [offer.id for offer in index.harbingers if conditions.allows(offer)]
     if not eligible and data.special_rules.harbinger.offer_id:
         return [data.special_rules.harbinger.offer_id]
     return eligible
@@ -514,6 +574,9 @@ def client_encounter_probabilities(
 
 
 def _client_row_offers(data: JusticeData, rows: tuple[int, ...]) -> dict[str, float]:
+    cached = _encounter_index(data).row_distributions.get(rows)
+    if cached is not None:
+        return dict(cached)
     weights = {
         offer.id: len(set(offer.client_rows).intersection(rows))
         for offer in data.offers

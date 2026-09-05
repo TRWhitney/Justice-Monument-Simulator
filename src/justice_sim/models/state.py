@@ -96,30 +96,37 @@ class GameState:
         """Return a hashable key for planner caches."""
 
         def freeze(value: Any) -> Any:
-            if isinstance(value, dict):
+            if isinstance(value, Mapping):
                 return tuple(sorted((k, freeze(v)) for k, v in value.items()))
             if isinstance(value, (list, tuple)):
                 return tuple(freeze(v) for v in value)
-            if isinstance(value, set):
+            if isinstance(value, (set, frozenset)):
                 return tuple(sorted(freeze(v) for v in value))
             return value
 
+        def effect_key(effect: EffectSpec) -> tuple[Any, ...]:
+            return (
+                effect.type,
+                freeze(effect.params),
+                freeze(effect.when),
+                effect.duration_cases,
+                effect.schedule_after_cases,
+                effect.label,
+            )
+
         statuses_key = tuple(
             sorted(
-                (name, status.remaining_cases, tuple(sorted(status.data.items())))
+                (name, status.remaining_cases, freeze(status.data))
                 for name, status in self.statuses.items()
             )
         )
         scheduled_key = tuple(
-            sorted(
-                (
-                    event.trigger_case_index,
-                    tuple(
-                        (effect.type, freeze(effect.params)) for effect in event.effects
-                    ),
-                )
-                for event in self.scheduled_events
+            (
+                event.trigger_case_index,
+                tuple(effect_key(effect) for effect in event.effects),
+                event.label,
             )
+            for event in self.scheduled_events
         )
         modifiers_key = tuple(
             (
@@ -142,9 +149,7 @@ class GameState:
                 trigger.offer_id,
                 trigger.remaining_uses,
                 trigger.when,
-                tuple(
-                    (effect.type, freeze(effect.params)) for effect in trigger.effects
-                ),
+                tuple(effect_key(effect) for effect in trigger.effects),
             )
             for trigger in self.action_triggers
         )
@@ -155,9 +160,7 @@ class GameState:
                 trigger.offer_id,
                 trigger.remaining_uses,
                 trigger.when,
-                tuple(
-                    (effect.type, freeze(effect.params)) for effect in trigger.effects
-                ),
+                tuple(effect_key(effect) for effect in trigger.effects),
             )
             for trigger in self.encounter_triggers
         )
@@ -189,8 +192,7 @@ class GameState:
             forced_key,
             self.required_action,
             tuple(
-                (effect.type, freeze(effect.params))
-                for effect in self.required_action_penalty_effects
+                effect_key(effect) for effect in self.required_action_penalty_effects
             ),
             counters_key,
             resource_floors_key,

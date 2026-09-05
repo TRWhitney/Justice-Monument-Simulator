@@ -119,6 +119,7 @@ class SpecialRules:
     harbinger: HarbingerRule
     gratefulbinger: GratefulbingerRule | None = None
     client_encounters: bool = False
+    normalize_after_action: bool = False
 
 
 @dataclass(frozen=True)
@@ -307,6 +308,7 @@ def _parse_special_rules(data: Mapping[str, Any]) -> SpecialRules:
         harbinger=harbinger,
         gratefulbinger=grateful,
         client_encounters=bool(data.get("client_encounters", False)),
+        normalize_after_action=bool(data.get("normalize_after_action", False)),
     )
 
 

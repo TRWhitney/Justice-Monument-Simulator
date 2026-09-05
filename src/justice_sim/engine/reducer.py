@@ -11,6 +11,7 @@ from justice_sim.engine.effects import (
     advance_case,
     apply_effects,
     apply_outcome,
+    normalize_action_resources,
     outcome_additive_resource_cost,
     resolve_expr,
     resolve_probability,
@@ -163,6 +164,7 @@ def _apply_action_with_outcome(
     updated = consume_forced_encounter(updated, offer.id)
     updated = _increment_action_counters(updated, offer, action)
     updated = _consume_encounter_overrides(updated, offer, encounter_overrides_at_start)
+    updated = normalize_action_resources(updated, data)
     updated = advance_case(updated, data, rng)
     return updated, random_label
 
@@ -411,7 +413,12 @@ def _apply_encounter_triggers(
     if not state.encounter_triggers:
         return state
     current = state
-    for trigger in tuple(state.encounter_triggers):
+    triggers = state.encounter_triggers
+    if data.special_rules.client_encounters:
+        # Scaring happens before NPC-specific arrivals, regardless of which
+        # agreement was accepted first. Keep saved trigger payloads compatible.
+        triggers = tuple(sorted(triggers, key=lambda t: t.label != "ghost_scare_pop"))
+    for trigger in triggers:
         if trigger not in current.encounter_triggers:
             continue
         if trigger.offer_id and trigger.offer_id != offer.id:
@@ -421,6 +428,9 @@ def _apply_encounter_triggers(
         if trigger.when and not _predicate_allows(trigger.when, current, data):
             continue
         current = apply_effects(current, trigger.effects, data, rng)
+        if data.special_rules.client_encounters and trigger.label == "ghost_scare_pop":
+            # This is an explicit client arrival clamp, not the PermaPop floor.
+            current = replace(current, pop=max(0, current.pop))
         current = _decrement_encounter_trigger_use(current, trigger)
     return current
 

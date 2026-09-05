@@ -10,6 +10,7 @@ pytestmark = pytest.mark.unit
 def test_legacy_data_keeps_original_rule_defaults(data_factory):
     data = data_factory()
     assert not data.special_rules.client_encounters
+    assert not data.special_rules.normalize_after_action
     assert data.special_rules.gratefulbinger.minimum_pop == 0
     assert data.special_rules.harbinger.priority_offers == ()
     for offer in data.offers:
@@ -30,10 +31,12 @@ def test_client_rule_fields_are_parsed(data_dict_factory):
         arrival_effects=[{"type": "clear_counter", "params": {"counter": "test"}}],
     )
     raw["special_rules"]["client_encounters"] = True
+    raw["special_rules"]["normalize_after_action"] = True
     raw["special_rules"]["gratefulbinger"]["minimum_pop"] = 3
     raw["special_rules"]["harbinger"]["priority_offers"] = ["harbinger_offer"]
     data = JusticeData.from_dict(raw)
     assert data.special_rules.client_encounters
+    assert data.special_rules.normalize_after_action
     assert data.special_rules.gratefulbinger.minimum_pop == 3
     assert data.special_rules.harbinger.priority_offers == ("harbinger_offer",)
     offer = data.offers[0]

@@ -1,8 +1,9 @@
 # Case JSON audit against the deployed client
 
 Reviewed September 5, 2026, after implementing the preceding behavior audit.
-This final pass audits the remaining differences; it does not implement the new
-boundary findings below.
+The original pass identified the boundary findings below. The subsequent
+correction resolves all three runtime findings; annotation cleanup is listed
+separately.
 
 ## Source and coverage
 
@@ -39,11 +40,11 @@ matrix; separate regression tests cover the other reward branches and probabilit
 boundaries. Encounter eligibility and interactions with existing deals are
 covered separately, not claimed to be exhaustive by this immediate-result matrix.
 
-The final matrix had **5,708 matching results**. The other **25** all concern the
+The original matrix had **5,708 matching results**. The other **25** all concern the
 Gratefulbinger health boundary described below. Additional targeted client
 arrival/action probes confirmed the two popularity-boundary findings.
 
-## Remaining findings
+## Findings and corrections
 
 ### 1. Hand's arrival penalty is clamped too early
 
@@ -51,16 +52,20 @@ arrival/action probes confirmed the two popularity-boundary findings.
 
 With Above the Law active, zero popularity, and ten coins, the next Reanimated
 Hand arrival produces fourteen coins and temporarily **-2 popularity** in the
-client. Approving Five Finger Discount at case 2 adds one popularity, then the
+client. Approving Waive the Fine at case 2 adds one popularity, then the
 client clamps the final result to **0**.
 
-The simulator's arrival effect clamps popularity to zero immediately. Approval
-then raises it to **1**. The JSON's -2 arrival penalty and +1 approval reward are
+Before correction, the simulator clamped arrival popularity to zero immediately.
+Approval then raised it to **1**. The JSON's -2 arrival penalty and +1 approval reward are
 individually correct; their interpretation at the resource boundary is not.
+
+**Resolved:** intermediate popularity survives through action evaluation. Ghost
+still clamps its own drain to zero before Hand arrives, regardless of agreement
+order. Final normalization then clamps Hand's result.
 
 Relevant client rows: 62 (agreement), 1 (follow-up example). Relevant simulation
 paths: `preview_state_after_encounter_triggers`, `apply_effects`, and
-`coerce_resource_value`. A correction should preserve the client's intermediate
+`coerce_resource_value`. The correction preserves the client's intermediate
 values until the appropriate normalization boundary, including manual previews
 and affordability checks.
 
@@ -74,12 +79,15 @@ five popularity. The client's ordinary arrival drain reduces popularity to
 Pop for Chest requires **5**, so approval is unavailable at that point. The
 client reapplies the popularity floor after resolving an action.
 
-The simulator clamps the arrival drain back to **5**, making approval appear
-affordable. The floor value is correct in the JSON; its continuous enforcement
-is not equivalent to the client's post-action enforcement.
+Before correction, the simulator clamped the arrival drain back to **5**, making
+approval appear affordable. The floor value is correct in the JSON; its continuous
+enforcement is not equivalent to the client's post-action enforcement.
+
+**Resolved:** affordability and action formulas use the below-floor arrival value;
+the permanent floor returns after the action resolves.
 
 Relevant rows: 58, 50, 22. This shares the normalization-timing problem with
-finding 1 and should be addressed as a coherent engine change with tests for
+finding 1 and is addressed by one engine change with tests for
 intermediate values, final values, manual resolution, and planner shortcuts.
 
 ### 3. Gratefulbinger rejection retains negative mental health
@@ -87,13 +95,16 @@ intermediate values, final values, manual resolution, and planner shortcuts.
 **Impact: incorrect final state and exaggerated low-health utility penalties.**
 
 Rejecting Gratefulbinger from five MH yields **0 MH** in the client and **-994 MH**
-in the simulator. Both terminate survival, but the recorded resource value and
-utility differ. The JSON's -999 penalty agrees with the client table; the client
+in the original simulator. Both terminate survival, but the recorded resource
+value and utility differ. The JSON's -999 penalty agrees with the client table; the client
 also applies a final nonnegative clamp to MH. This accounts for all 25 remaining
 immediate-result differences in the diagnostic.
 
-Relevant row: 25. Custom datasets and the simulator's explicit debt modes should
-retain their documented behavior when introducing client-specific normalization.
+**Resolved:** the builtin dataset now clamps final MH to zero. Generic datasets
+and explicit `allow_negative` debt mode retain their behavior.
+
+Relevant row: 25. Regression tests preserve custom-dataset and explicit debt-mode
+behavior alongside the corrected builtin default.
 
 ### 4. Several wiki-derived notes are stale or incomplete
 
@@ -121,7 +132,7 @@ correct conditional chance is **40%, not 60%**. This was corrected, tested, and
 folded into the existing local Grumblo correction commit before this report.
 The earlier finding that an always-free rejection was incorrect still holds.
 
-## Verification of the implemented changes
+## Verification of the preceding implementation
 
 The implementation passed `./scripts/validate_repo.sh`: formatting, linting,
 schema validation, **264 unit tests**, **47 GUI tests**, and smoke launch.
@@ -135,6 +146,22 @@ saved pending-effect payloads are not rewritten retrospectively; they retain
 their stored amounts. The existing 85 offer IDs remain stable. Client row
 probabilities are reproduced, but the browser's PRNG stream is not copied.
 
-See [ADR 0002](../adr/0002-client-case-distributions.md) for the representation
-choice. The three new runtime findings and stale annotations above remain open
-after this final audit.
+## Verification of the boundary correction
+
+A fresh official client download retained the pinned hash. Re-running the same
+immediate-result diagnostic produced **5,733 matches out of 5,733** and zero
+mismatches across all **6,750 payment gates**. Targeted extracted-client probes
+confirmed Hand/Ghost arrival ordering, the below-floor Rupie result (16 coins,
+6 popularity), and Gratefulbinger's zero MH. The original tracked row matrix is
+retained as evidence of the pre-correction audit.
+
+The correction passed `./scripts/validate_repo.sh`: formatting, linting, both
+schemas, **282 unit tests**, **50 GUI tests**, and smoke launch. The directly
+affected unit suites passed **126 tests**; all **9** audit GUI interactions passed,
+including the three new boundary paths. Short-circuit tests still require exact
+expectations with zero rollouts.
+
+See [ADR 0002](../adr/0002-client-case-distributions.md) for row representation and
+[ADR 0003](../adr/0003-resource-normalization-boundaries.md) for normalization
+configuration and compatibility. The stale annotations above remain to be
+corrected.

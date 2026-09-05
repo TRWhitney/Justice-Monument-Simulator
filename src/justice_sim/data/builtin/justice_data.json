@@ -5105,6 +5105,7 @@
       "format": "percent",
       "minimum_pop": 3
     },
-    "client_encounters": true
+    "client_encounters": true,
+    "normalize_after_action": true
   }
 }

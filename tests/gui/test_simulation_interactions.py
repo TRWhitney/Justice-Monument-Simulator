@@ -39,7 +39,9 @@ def audit_window(builtin_data, monkeypatch):
     offers = tuple(
         offer
         for offer in builtin_data.offers
-        if offer.id.startswith(prefixes) or offer.id in special_ids
+        if offer.id.startswith(prefixes)
+        or offer.id in special_ids
+        or set(offer.client_rows) & {1, 22}
     )
     data = replace(builtin_data, offers=offers, offers_by_id={o.id: o for o in offers})
     window = MainWindow(data, theme_override=False, ui_scale_override="medium")
@@ -191,3 +193,53 @@ def test_client_cool_bird_tails_preserves_last_health(audit_window):
     assert observed == [True]
     assert window.session.state.mh == 1
     _capture_review(window, "client-cool-bird-tails")
+
+
+def test_hand_manual_approval_clamps_after_reward(audit_window, builtin_data):
+    window = audit_window
+    agreement = next(o for o in builtin_data.offers if 62 in o.client_rows)
+    state, _ = apply_action(
+        GameState(1, 10, 5, 5, 3, 7), agreement, "approve", builtin_data, Rng(0)
+    )
+    window.session.state = replace(state, coins=10, pop=0)
+    window.current_offer = next(o for o in window.data.offers if 1 in o.client_rows)
+    window._update_action_controls()
+    assert window._preview_state_for_offer().pop == -2
+    window.approve_button.click()
+    assert (window.session.state.coins, window.session.state.pop) == (14, 0)
+    assert len(window.session.log.entries) == 1
+    _capture_review(window, "client-hand-popularity-boundary")
+
+
+def test_floor_does_not_enable_unaffordable_chest(audit_window, builtin_data):
+    window = audit_window
+    state = GameState(1, 20, 5, 5, 3, 7)
+    for row in (58, 50):
+        offer = next(o for o in builtin_data.offers if row in o.client_rows)
+        state, _ = apply_action(state, offer, "approve", builtin_data, Rng(0))
+    state = replace(state, case_index=21, coins=20, pop=5)
+    window.session.state = state
+    window.current_offer = next(o for o in window.data.offers if 22 in o.client_rows)
+    window._update_action_controls()
+    assert window._preview_state_for_offer().pop == 4
+    assert window.approve_button.styleSheet() != ""
+    assert window.reject_button.styleSheet() == ""
+    _capture_review(window, "client-popularity-floor-payment")
+    window.approve_button.click()
+    assert window.session.state == state
+    assert not window.session.log.entries
+    window.reject_button.click()
+    assert (window.session.state.pop, window.session.state.retirement_chests) == (5, 7)
+    assert len(window.session.log.entries) == 1
+
+
+def test_grateful_rejection_records_zero_health(audit_window):
+    window = audit_window
+    window.session.state = GameState(5, 20, 5, 5, 3, 7)
+    window.current_offer = next(o for o in window.data.offers if 25 in o.client_rows)
+    window._update_action_controls()
+    window.reject_button.click()
+    assert window.session.state.mh == 0
+    assert len(window.session.log.entries) == 1
+    assert not window.game_over_label.isHidden()
+    _capture_review(window, "client-grateful-health-boundary")

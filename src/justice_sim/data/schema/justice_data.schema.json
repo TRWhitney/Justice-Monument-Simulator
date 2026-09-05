@@ -1592,6 +1592,11 @@
         "client_encounters": {
           "type": "boolean",
           "default": false
+        },
+        "normalize_after_action": {
+          "type": "boolean",
+          "default": false,
+          "description": "Defer implicit resource bounds until an action resolves. In clamp_to_zero mode all main resources, including mental health, are then nonnegative; permanent floors are applied afterward."
         }
       }
     },

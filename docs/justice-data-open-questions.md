@@ -26,15 +26,14 @@ These findings are implemented and regression-tested. The prior uniform-offer
 assumption is superseded for the builtin client-backed dataset. Existing custom
 datasets retain their generic defaults unless they opt into the new rules.
 
-## Remaining issues from the subsequent JSON audit
+## Subsequent JSON audit corrections
 
-1. Hand arrival penalties are clamped too early, changing the final popularity
-   of some follow-up approvals.
-2. Never Uncool's popularity floor is enforced during arrivals; the client can
-   temporarily fall below the floor until an action resolves.
-3. Gratefulbinger rejection can record negative MH rather than the client's zero.
-4. Several wiki-derived notes remain stale or incomplete.
+Hand's temporary popularity debt and Never Uncool's floor now survive until the
+client's post-action normalization boundary. Ghost retains its explicit arrival
+zero clamp and runs before Hand, regardless of agreement order. Gratefulbinger
+rejection records zero MH under the builtin default; custom datasets and explicit
+debt modes retain their behavior.
 
-The audit report gives reproductions, affected rows, verification limits, and
-source provenance. The first three issues concern the engine's interpretation
-of otherwise correct resource values, rather than unknown game mechanics.
+The immediate-result comparison now matches all 5,733 permitted actions and all
+6,750 payment gates. See the audit for source provenance and coverage limits.
+Several wiki-derived annotations remain to be corrected separately.

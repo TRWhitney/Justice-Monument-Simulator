@@ -532,6 +532,10 @@ def coerce_resource_value(
     state: GameState, resource: str, value: float, data: JusticeData
 ) -> float:
     new_value = value
+    if data.special_rules.normalize_after_action:
+        # Client arrivals and action expressions can observe values below zero
+        # or a permanent floor. Explicit clamp effects still apply immediately.
+        return math.floor(new_value + 0.5) if resource in MAIN_RESOURCES else new_value
     if (
         resource in NON_NEGATIVE_RESOURCES
         and data.defaults.debt_mode == "clamp_to_zero"
@@ -544,6 +548,22 @@ def coerce_resource_value(
     if resource in MAIN_RESOURCES:
         new_value = math.floor(new_value + 0.5)
     return new_value
+
+
+def normalize_action_resources(state: GameState, data: JusticeData) -> GameState:
+    """Apply the client's resource bounds after the complete action resolves."""
+    if not data.special_rules.normalize_after_action:
+        return state
+    values = {}
+    for resource in MAIN_RESOURCES:
+        value = getattr(state, resource)
+        if data.defaults.debt_mode == "clamp_to_zero":
+            value = max(0, value)
+        minimum = state.resource_floors.get(resource)
+        if minimum is not None:
+            value = max(minimum, value)
+        values[resource] = math.floor(value + 0.5)
+    return replace(state, **values)
 
 
 def _update_resource(

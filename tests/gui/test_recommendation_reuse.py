@@ -97,6 +97,25 @@ def test_mid_reuses_completed_offer_then_recalculates_changed_state(
     assert len(starts) == 4
 
 
+def test_mid_apply_waits_for_next_offer_without_starting_worker(window, monkeypatch):
+    _select(window, "offer1")
+    _wait_for_result(window)
+    before = window.session.state.case_index
+    calls = []
+    monkeypatch.setattr(window, "_start_planner", lambda offer: calls.append(offer.id))
+    window.approve_button.click()
+    QtWidgets.QApplication.processEvents()
+    assert window.session.state.case_index == before + 1
+    assert window.current_offer is None
+    assert window.current_recommendation is None
+    assert window.offer_search.results_list.currentRow() == -1
+    assert not calls
+    assert window._planner_process is None
+    _capture(window, "mid-awaiting-next-offer")
+    _select(window, "offer1")
+    assert calls == ["offer1"]
+
+
 def test_recommendation_key_tracks_seed_rules_model_and_offer(window):
     from justice_sim.engine.encounter import WeightedEncounterModel
     from justice_sim.models.suggested_rules import SuggestedRules

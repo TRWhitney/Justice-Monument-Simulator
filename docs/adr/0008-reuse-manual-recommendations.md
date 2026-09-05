@@ -11,7 +11,11 @@ weights, planner RNG state, encounter model, and suggested rules. Restore it
 through the same result-consumption path as a worker result. Never cache worker
 errors or incomplete calculations. Keep generation and current-state checks.
 
-Resource adjustments continue to debounce before recalculating a selected offer.
+After successfully applying a case in Mid mode, clear the completed offer's
+selection and recommendation. Wait for the next manual selection to calculate.
+Full mode continues automatically selecting the next encounter. None mode's
+manual workflow is unchanged. Resource adjustments continue to debounce before
+recalculating a selected offer.
 
 ## Alternatives
 
@@ -19,6 +23,7 @@ Resource adjustments continue to debounce before recalculating a selected offer.
 | --- | --- |
 | Bounded completed-result reuse (selected) | Switching back to an unchanged offer avoids calculation and process startup. |
 | Persistent worker | Could retain more internal caches, but introduces additional cancellation and lifecycle complexity. |
+| Retain completed Mid selection | Can start expensive work for an encounter that the user has already applied. |
 
 The application itself exposes Full, Mid, and None as configurable workflows.
 The direct interaction artifact workflow below captures the selected behavior.
@@ -26,7 +31,7 @@ The direct interaction artifact workflow below captures the selected behavior.
 ## Verification
 
 Run `tests/gui/test_recommendation_reuse.py` for real selection and process
-completion, switching away/back, changed state/settings, and planner-input invalidation.
+completion, switching away/back, changed state/settings, and applying a case.
 Use `JUSTICE_OPTIMIZATION_ARTIFACT_DIR=/tmp/justice-optimization-review` for the
 explicit optional screenshot workflow. Ordinary tests produce no success images.
 Keep the progress, cancellation, close, main-window control, and simulation

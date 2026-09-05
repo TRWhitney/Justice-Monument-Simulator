@@ -1836,6 +1836,9 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.current_recommendation = None
         self._clear_recommendation_ui()
+        if self._sim_mode == "mid":
+            self._on_offer_selected(None)
+            self.offer_search.clear_selection()
         self._refresh()
 
     def _current_offer_luck(self, state: GameState) -> EncounterLuck | None:

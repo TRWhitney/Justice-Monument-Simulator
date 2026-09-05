@@ -174,3 +174,10 @@ def data_factory(data_dict_factory):
         return JusticeData.from_dict(data_dict_factory(**kwargs))
 
     return _factory
+
+
+@pytest.fixture(scope="session")
+def builtin_data():
+    from justice_sim.config import load_builtin_data
+
+    return load_builtin_data()

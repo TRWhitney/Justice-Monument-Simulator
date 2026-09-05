@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from math import floor
 
 from justice_sim.engine.effects import (
+    MAIN_RESOURCES,
     NON_NEGATIVE_RESOURCES,
     advance_case,
     apply_effects,
@@ -207,7 +209,21 @@ def _resources_affordable(
     allow_negative_resources = allow_negative_resources or set()
     preview = state
     for effect in outcome.effects:
-        preview = _preview_effect(preview, effect, data)
+        if effect.when and not _predicate_allows(effect.when, preview, data):
+            continue
+        if effect.schedule_after_cases is not None:
+            continue
+        unrounded = _preview_effect(preview, effect, data)
+        # Match whole-resource deductions without clamping away unpaid costs.
+        if unrounded is not preview:
+            preview = replace(
+                unrounded,
+                **{
+                    resource: floor(getattr(unrounded, resource) + 0.5)
+                    for resource in MAIN_RESOURCES
+                    if getattr(unrounded, resource) != getattr(preview, resource)
+                },
+            )
         if _has_negative_resources(preview, allow_negative_resources):
             return False
     return True

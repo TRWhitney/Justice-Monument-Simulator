@@ -7,6 +7,23 @@ import pytest
 from justice_sim.models.offer import JusticeData
 
 
+@pytest.fixture(autouse=True)
+def isolate_gui_font(request, monkeypatch):
+    """UI scaling must not compound through the shared QApplication across tests."""
+    if request.node.get_closest_marker("gui") is None:
+        yield
+        return
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from justice_sim.ui_qt.app import create_app
+
+    app = create_app()
+    font = app.font()
+    try:
+        yield
+    finally:
+        app.setFont(font)
+
+
 def build_data_dict(
     *,
     debt_mode: str = "clamp_to_zero",

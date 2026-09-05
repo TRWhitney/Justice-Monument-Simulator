@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Adaptive sampling comparison</title>
+<style>
+body{font:17px system-ui;max-width:850px;margin:3rem auto;padding:0 1rem;line-height:1.5;color:#203047;background:#f4f7fa}
+label{display:block;margin:1rem 0}input,button{font:inherit;padding:.4rem}input{width:7rem}th,td{text-align:left;padding:.5rem}output{display:block;background:white;padding:1rem;border:1px solid #bcc9d6}
+</style>
+<h1>Adaptive sampling comparison</h1>
+<p>Compare sampling every plausible contender with checking only the two highest
+means. This illustration uses independent sample variances; the planner uses
+paired differences when equal-length paired samples are available.</p>
+<label>Samples per action <input id="count" type="number" min="2" max="20000" value="200"></label>
+<table><thead><tr><th>Action</th><th>Mean utility</th><th>Sample variance</th></tr></thead>
+<tbody><tr><th>A</th><td><input aria-label="A mean" id="m0" type="number" value="10"></td><td><input aria-label="A variance" id="v0" type="number" min="0" value="0"></td></tr>
+<tr><th>B</th><td><input aria-label="B mean" id="m1" type="number" value="9"></td><td><input aria-label="B variance" id="v1" type="number" min="0" value="0"></td></tr>
+<tr><th>C</th><td><input aria-label="C mean" id="m2" type="number" value="8"></td><td><input aria-label="C variance" id="v2" type="number" min="0" value="10000"></td></tr></tbody></table>
+<output id="result" aria-live="polite"></output>
+<p>A sampling request remains subject to the per-action cap. These intervals are
+heuristics, not guarantees; unobserved rare outcomes and approximate future policy
+can still affect the answer. This page changes no application settings.</p>
+<button id="export">Export this comparison</button>
+<script>
+function selection(){return {samples:Math.max(2,Number(document.getElementById('count').value)),actions:[0,1,2].map(i=>({name:'ABC'[i],mean:Number(document.getElementById('m'+i).value),variance:Math.max(0,Number(document.getElementById('v'+i).value))}))};}
+function update(){const s=selection(),ranked=[...s.actions].sort((a,b)=>b.mean-a.mean),top=ranked[0];const overlaps=a=>top.mean-a.mean<=Math.max(.05,1.96*Math.sqrt((top.variance+a.variance)/s.samples));const contenders=ranked.slice(1).filter(overlaps);const requested=contenders.length?[top,...contenders].map(a=>a.name).join(', '):'none';const old=overlaps(ranked[1])?[top.name,ranked[1].name].join(', '):'none';document.getElementById('result').textContent=`Every contender: ${requested}. Top two only: ${old}.`;}
+document.querySelectorAll('input').forEach(input=>input.addEventListener('input',update));
+document.getElementById('export').addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(selection(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='adaptive-sampling-comparison.json';a.click();URL.revokeObjectURL(url);});update();
+</script>
+</html>

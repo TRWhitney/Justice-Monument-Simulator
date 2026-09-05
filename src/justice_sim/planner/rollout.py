@@ -146,12 +146,20 @@ class RolloutPlanner:
             actions=eligible_actions,
         )
         scores = self._apply_action_biases(state, offer, raw_scores)
-        adaptive_actions = self._adaptive_actions(scores, eligible_actions)
-        if (
+        while (
             self.config.adaptive_rollouts
             and self.config.adaptive_rollouts_max > self.config.rollouts_per_action
-            and adaptive_actions
         ):
+            # A top-up can change the leader and expose another contender.
+            # Each action receives only its original, still-unused seed range.
+            counts = {score.action: score.sample_count for score in raw_scores}
+            adaptive_actions = tuple(
+                action
+                for action in self._adaptive_actions(scores, eligible_actions)
+                if counts[action] < self.config.adaptive_rollouts_max
+            )
+            if not adaptive_actions:
+                break
             additional_rollouts = (
                 self.config.adaptive_rollouts_max - self.config.rollouts_per_action
             )
@@ -247,31 +255,38 @@ class RolloutPlanner:
         ]
         if len(eligible_scores) < 2:
             return ()
-        top, second = sorted(
+        ranked = sorted(
             eligible_scores, key=lambda score: score.expected_utility, reverse=True
-        )[:2]
-        gap = top.expected_utility - second.expected_utility
+        )
+        top = ranked[0]
+        contenders = tuple(
+            score.action
+            for score in ranked[1:]
+            if top.expected_utility - score.expected_utility
+            <= max(
+                self.config.epsilon, 1.96 * self._difference_standard_error(top, score)
+            )
+        )
+        return (top.action, *contenders) if contenders else ()
+
+    @staticmethod
+    def _difference_standard_error(top: ActionScore, other: ActionScore) -> float:
         if (
             top.utility_samples
-            and len(top.utility_samples) == len(second.utility_samples)
+            and len(top.utility_samples) == len(other.utility_samples)
             and len(top.utility_samples) > 1
         ):
             differences = [
                 top_value - second_value
                 for top_value, second_value in zip(
-                    top.utility_samples, second.utility_samples, strict=True
+                    top.utility_samples, other.utility_samples, strict=True
                 )
             ]
-            standard_error = sqrt(variance(differences) / len(differences))
-        else:
-            standard_error = sqrt(
-                (top.variance / max(top.sample_count, 1))
-                + (second.variance / max(second.sample_count, 1))
-            )
-        uncertainty_threshold = 1.96 * standard_error
-        if gap <= max(self.config.epsilon, uncertainty_threshold):
-            return (top.action, second.action)
-        return ()
+            return sqrt(variance(differences) / len(differences))
+        return sqrt(
+            (top.variance / max(top.sample_count, 1))
+            + (other.variance / max(other.sample_count, 1))
+        )
 
     def _combine_scores(self, first: ActionScore, second: ActionScore) -> ActionScore:
         if second.sample_count <= 0:

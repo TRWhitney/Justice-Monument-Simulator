@@ -510,6 +510,7 @@ class RolloutPlanner:
                     policy_rng,
                     remaining,
                     encounter_start=encounter_start,
+                    exact_results=results[action],
                 )
             elif results[action] is None:
                 value = self._sample_action_value(
@@ -694,10 +695,33 @@ class RolloutPlanner:
         remaining: int,
         *,
         encounter_start: GameState | None,
+        exact_results: list[tuple[GameState, float]] | None = None,
     ) -> float:
-        """Compare two paired continuations without recursively improving their policy."""
+        """Integrate known branches, pairing two full continuations per branch.
+
+        Exact evaluation proves that preparation and completion contain no
+        unexpanded randomness. Its branch probabilities must not be replaced
+        with two random draws: rare losses would routinely disappear. Future
+        encounters still use sampled, nonrecursive immediate-value policy.
+        """
         values = []
         for sample_index in range(2):
+            if exact_results is not None:
+                values.append(
+                    sum(
+                        probability
+                        * self._cached_utility(
+                            self._simulate_future(
+                                next_state,
+                                rng.spawn(sample_index),
+                                remaining,
+                                improve_policy=False,
+                            )
+                        )
+                        for next_state, probability in exact_results
+                    )
+                )
+                continue
             sample_rng = rng.spawn(sample_index)
             try:
                 next_state, _ = apply_action(

@@ -2149,13 +2149,6 @@
                     "resource": "mh",
                     "value": 1
                   }
-                },
-                {
-                  "type": "set_resource",
-                  "params": {
-                    "resource": "retirement_chests",
-                    "value": 1
-                  }
                 }
               ],
               "remaining_uses": 1

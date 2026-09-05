@@ -7,6 +7,7 @@ import pytest
 from justice_sim.engine.reducer import (
     apply_action,
     can_afford_action,
+    preview_state_after_encounter_triggers,
 )
 from justice_sim.engine.rng import Rng
 from justice_sim.models.state import GameState
@@ -120,3 +121,16 @@ def test_rupie_exchange_includes_existing_bean_bonus(builtin_data):
         s, offer(builtin_data, 66), "approve", builtin_data, Draw(0.1)
     )
     assert (result.coins, result.pop) == (20, 27)
+
+
+def test_life_insurance_preserves_chests(builtin_data):
+    s = act(builtin_data, 72, mh=1)
+    result = preview_state_after_encounter_triggers(
+        s, offer(builtin_data, 2), builtin_data, Draw(0.1)
+    )
+    assert (result.coins, result.pop, result.mh, result.retirement_chests) == (
+        1,
+        1,
+        1,
+        7,
+    )

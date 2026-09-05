@@ -36,4 +36,6 @@ debt modes retain their behavior.
 
 The immediate-result comparison now matches all 5,733 permitted actions and all
 6,750 payment gates. See the audit for source provenance and coverage limits.
-Several wiki-derived annotations remain to be corrected separately.
+The five stale wiki-derived case notes and the legacy unpaid-penalty label have
+also been corrected. No findings from this audit remain open; its coverage is
+not an exhaustive proof of every possible combination of active agreements.

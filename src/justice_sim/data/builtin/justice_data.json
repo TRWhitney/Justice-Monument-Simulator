@@ -797,7 +797,7 @@
           }
         ]
       },
-      "notes": "The answer to the riddle is to",
+      "notes": "Dismiss the case to solve the riddle and receive one retirement chest; this consumes one dismissal.",
       "dismiss": {
         "effects": [
           {
@@ -1043,7 +1043,7 @@
       "reject": {
         "effects": []
       },
-      "notes": "Has a 15% chance to reappear every case until he does so",
+      "notes": "While the loan is pending, ordinary cases have a 15% proposal chance for a Bean row. Eligibility rerolls, chest replacement, Chest Magnet, and The Secret can replace that proposal. Any Bean encounter, including a naturally selected one, repays the loan.",
       "dismiss": {
         "effects": []
       },
@@ -1097,7 +1097,7 @@
           }
         ]
       },
-      "notes": "Happens immediately after accepting a 3rd Fizarre Drink",
+      "notes": "After the third approved Fizarre Drink, appears on the next ordinary case without Chest Magnet. Harbinger rounds and active Chest Magnet delay it.",
       "dismiss": {
         "effects": []
       },
@@ -2218,7 +2218,7 @@
           }
         ]
       },
-      "notes": "Sets all currencies except dismisals to 1",
+      "notes": "On the next Honcho encounter, mental health, coins, and popularity become 1; retirement chests and dismissals are preserved.",
       "dismiss": {
         "effects": []
       },
@@ -4475,7 +4475,7 @@
           }
         ]
       },
-      "notes": "Has a (40*POP)/(POP+20)% chance to arrive every Harbinger case",
+      "notes": "Requires at least 3 popularity to replace a Harbinger; the replacement chance is (40*POP)/(POP+20)%.",
       "dismiss": {
         "effects": []
       },
@@ -5089,7 +5089,7 @@
             "resource": "mh",
             "amount": -1
           },
-          "label": "Default unpaid penalty (revisit if incorrect)."
+          "label": "Legacy unpaid penalty; builtin payment gates block this path."
         }
       ],
       "priority_offers": [

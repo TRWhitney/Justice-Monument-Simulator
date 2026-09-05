@@ -2,8 +2,7 @@
 
 Reviewed September 5, 2026, after implementing the preceding behavior audit.
 The original pass identified the boundary findings below. The subsequent
-correction resolves all three runtime findings; annotation cleanup is listed
-separately.
+correction resolves all three runtime findings and the stale case annotations.
 
 ## Source and coverage
 
@@ -106,20 +105,20 @@ and explicit `allow_negative` debt mode retain their behavior.
 Relevant row: 25. Regression tests preserve custom-dataset and explicit debt-mode
 behavior alongside the corrected builtin default.
 
-### 4. Several wiki-derived notes are stale or incomplete
+### 4. Stale or incomplete wiki-derived notes
 
-These are annotations in the JSON, rather than errors in the corrected numeric
-outcomes or encounter rules:
+These were annotations in the JSON, rather than errors in the corrected numeric
+outcomes or encounter rules. All five notes now describe the client behavior:
 
-| Row | Offer | Note discrepancy |
+| Row | Offer | Original note discrepancy |
 |---|---|---|
-| 72 | Life Insurance | Still claims all currencies except dismissals become one, although retirement chests are preserved. |
-| 26 | The Loan | Describes a flat 15% reappearance chance every case; the actual ordinary-case proposal can be replaced and naturally selected Bean encounters can also repay it. |
-| 61 | The Secret | Says it appears immediately after the third drink; Harbinger rounds and Chest Magnet can delay it. |
-| 25 | Gratefulbinger | Gives the probability formula without its minimum of three popularity. |
-| 28 | Riddle Chest | The note ends mid-sentence; the executable answer is dismissal. |
+| 72 | Life Insurance | Claimed all currencies except dismissals become one, although retirement chests are preserved. |
+| 26 | The Loan | Described a flat 15% reappearance chance every case; the actual ordinary-case proposal can be replaced and naturally selected Bean encounters can also repay it. |
+| 61 | The Secret | Said it appeared immediately after the third drink; Harbinger rounds and Chest Magnet can delay it. |
+| 25 | Gratefulbinger | Gave the probability formula without its minimum of three popularity. |
+| 28 | Riddle Chest | The note ended mid-sentence; the executable answer is dismissal. |
 
-The builtin `on_unpaid_effects` entry also retains an old speculative label. Its
+The builtin `on_unpaid_effects` entry now identifies its legacy penalty label. Its
 underfunded-approval path is now unreachable for the gated builtin Harbinger
 case. Generic custom-dataset support for unpaid effects remains in use and is
 not a reason to remove that engine capability.
@@ -163,5 +162,5 @@ expectations with zero rollouts.
 
 See [ADR 0002](../adr/0002-client-case-distributions.md) for row representation and
 [ADR 0003](../adr/0003-resource-normalization-boundaries.md) for normalization
-configuration and compatibility. The stale annotations above remain to be
-corrected.
+configuration and compatibility. All findings listed in this audit are corrected;
+the coverage limits above still apply.

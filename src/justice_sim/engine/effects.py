@@ -79,47 +79,62 @@ def advance_case(
     rng = rng or Rng(0)
     next_case = state.case_index + 1
 
-    statuses: dict[str, StatusEffect] = {}
+    # Reducers copy mappings before changing them, as for resource-only state
+    # replacements. Keep the existing collections until the first actual change.
+    statuses: dict[str, StatusEffect] | None = None
     for name, status in state.statuses.items():
         if status.remaining_cases < 0:
-            statuses[name] = status
             continue
         if status.data.get("starts_next_case"):
             applied_case = status.data.get("applied_case_index")
             if applied_case == state.case_index:
-                statuses[name] = status
                 continue
+        if statuses is None:
+            statuses = dict(state.statuses)
         remaining = status.remaining_cases - 1
         if remaining > 0:
             statuses[name] = replace(status, remaining_cases=remaining)
+        else:
+            del statuses[name]
 
-    modifiers: list[EncounterModifier] = []
-    for modifier in state.encounter_modifiers:
+    modifiers: list[EncounterModifier] | None = None
+    for index, modifier in enumerate(state.encounter_modifiers):
         if modifier.remaining_cases is None or modifier.remaining_cases < 0:
-            modifiers.append(modifier)
+            if modifiers is not None:
+                modifiers.append(modifier)
             continue
+        if modifiers is None:
+            modifiers = list(state.encounter_modifiers[:index])
         remaining = modifier.remaining_cases - 1
         if remaining > 0:
             modifiers.append(replace(modifier, remaining_cases=remaining))
 
-    pending_events = []
-    triggered_events = []
-    for event in state.scheduled_events:
+    pending_events: list[ScheduledEvent] | None = None
+    triggered_events: list[ScheduledEvent] | None = None
+    for index, event in enumerate(state.scheduled_events):
         if event.trigger_case_index == next_case:
+            if triggered_events is None:
+                pending_events = list(state.scheduled_events[:index])
+                triggered_events = []
             triggered_events.append(event)
-        else:
+        elif pending_events is not None:
             pending_events.append(event)
 
     advanced = replace(
         state,
         case_index=next_case,
-        statuses=statuses,
-        encounter_modifiers=tuple(modifiers),
-        scheduled_events=tuple(pending_events),
+        statuses=state.statuses if statuses is None else statuses,
+        encounter_modifiers=state.encounter_modifiers
+        if modifiers is None
+        else tuple(modifiers),
+        scheduled_events=state.scheduled_events
+        if pending_events is None
+        else tuple(pending_events),
     )
 
-    for event in triggered_events:
+    for event in triggered_events or ():
         advanced = apply_effects(advanced, event.effects, data, rng)
+
     return advanced
 
 

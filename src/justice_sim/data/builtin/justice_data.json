@@ -2641,7 +2641,7 @@
             "type": "set_counter",
             "params": {
               "counter": "timmy_icecream_stage",
-              "value": 0
+              "value": 4
             }
           }
         ]
@@ -2654,26 +2654,11 @@
               "resource": "pop",
               "amount": -999
             }
-          },
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "timmy_icecream_stage",
-              "value": 0
-            }
           }
         ]
       },
       "dismiss": {
-        "effects": [
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "timmy_icecream_stage",
-              "value": 0
-            }
-          }
-        ]
+        "effects": []
       },
       "client_rows": [
         84
@@ -2736,26 +2721,11 @@
                 "scaling": "case"
               }
             }
-          },
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "timmy_icecream_stage",
-              "value": 2
-            }
           }
         ]
       },
       "dismiss": {
-        "effects": [
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "timmy_icecream_stage",
-              "value": 2
-            }
-          }
-        ]
+        "effects": []
       },
       "client_rows": [
         82
@@ -2818,26 +2788,11 @@
                 "scaling": "case"
               }
             }
-          },
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "timmy_icecream_stage",
-              "value": 1
-            }
           }
         ]
       },
       "dismiss": {
-        "effects": [
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "timmy_icecream_stage",
-              "value": 1
-            }
-          }
-        ]
+        "effects": []
       },
       "client_rows": [
         81
@@ -2900,26 +2855,11 @@
                 "scaling": "case"
               }
             }
-          },
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "timmy_icecream_stage",
-              "value": 3
-            }
           }
         ]
       },
       "dismiss": {
-        "effects": [
-          {
-            "type": "set_counter",
-            "params": {
-              "counter": "timmy_icecream_stage",
-              "value": 3
-            }
-          }
-        ]
+        "effects": []
       },
       "client_rows": [
         83

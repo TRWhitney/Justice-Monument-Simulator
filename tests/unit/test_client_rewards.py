@@ -94,3 +94,10 @@ def test_billionaire_reward_boundaries(builtin_data, draw, resource, amount):
         assert getattr(result, name) - getattr(state(), name) == (
             amount if name == resource else 0
         )
+
+
+@pytest.mark.parametrize(
+    "draw,pop_loss", [(0.1, 0), (0.3, 0), (0.5, 1), (0.7, 1), (0.9, 0)]
+)
+def test_grumblo_rejection_uses_hidden_row(builtin_data, draw, pop_loss):
+    assert act(builtin_data, 44, "reject", draw=draw).pop == 20 - pop_loss

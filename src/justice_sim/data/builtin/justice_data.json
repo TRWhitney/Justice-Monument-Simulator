@@ -1702,7 +1702,48 @@
         }
       },
       "reject": {
-        "effects": []
+        "effects": [],
+        "random": {
+          "type": "categorical",
+          "choices": [
+            {
+              "weight": 1,
+              "effects": []
+            },
+            {
+              "weight": 1,
+              "effects": []
+            },
+            {
+              "weight": 1,
+              "effects": [
+                {
+                  "type": "add_resource",
+                  "params": {
+                    "resource": "pop",
+                    "amount": -1
+                  }
+                }
+              ]
+            },
+            {
+              "weight": 1,
+              "effects": [
+                {
+                  "type": "add_resource",
+                  "params": {
+                    "resource": "pop",
+                    "amount": -1
+                  }
+                }
+              ]
+            },
+            {
+              "weight": 1,
+              "effects": []
+            }
+          ]
+        }
       },
       "dismiss": {
         "effects": []

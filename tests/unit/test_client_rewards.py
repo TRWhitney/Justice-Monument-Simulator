@@ -1,6 +1,7 @@
 """Behavioral fixtures from the pinned September 2026 official client."""
 
 from dataclasses import replace
+import math
 
 import pytest
 
@@ -134,3 +135,18 @@ def test_life_insurance_preserves_chests(builtin_data):
         1,
         7,
     )
+
+
+@pytest.mark.parametrize("pop", [0, 1, 20, 23])
+def test_poppy_role_model_snapshots_original_popularity(builtin_data, pop):
+    s = act(builtin_data, 74, pop=pop)
+    assert s.pop == 1
+    s = replace(s, pop=7)
+    result = preview_state_after_encounter_triggers(
+        s, offer(builtin_data, 79), builtin_data, Draw(0.1)
+    )
+    assert result.pop == 7 + math.floor(1.6 * pop + 0.5)
+    again = preview_state_after_encounter_triggers(
+        result, offer(builtin_data, 79), builtin_data, Draw(0.1)
+    )
+    assert again == result

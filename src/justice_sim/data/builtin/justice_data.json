@@ -358,7 +358,7 @@
                   "params": {
                     "resource": "pop",
                     "amount": {
-                      "expr": "max(pop - 1, 0) * 1.8",
+                      "expr": "floor(1.6 * pop + 0.5)",
                       "snapshot": true
                     }
                   }

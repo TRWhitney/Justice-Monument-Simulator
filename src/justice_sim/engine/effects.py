@@ -558,14 +558,25 @@ def normalize_action_resources(state: GameState, data: JusticeData) -> GameState
         return state
     values = {}
     for resource in MAIN_RESOURCES:
-        value = getattr(state, resource)
-        if data.defaults.debt_mode == "clamp_to_zero":
-            value = max(0, value)
-        minimum = state.resource_floors.get(resource)
-        if minimum is not None:
-            value = max(minimum, value)
-        values[resource] = math.floor(value + 0.5)
-    return replace(state, **values)
+        value = normalized_action_resource(state, resource, data)
+        if value != getattr(state, resource):
+            values[resource] = value
+    return replace(state, **values) if values else state
+
+
+def normalized_action_resource(
+    state: GameState, resource: str, data: JusticeData
+) -> float:
+    """Normalize one final resource, also shared by health-only scoring probes."""
+    value = getattr(state, resource)
+    if not data.special_rules.normalize_after_action:
+        return value
+    if data.defaults.debt_mode == "clamp_to_zero":
+        value = max(0, value)
+    minimum = state.resource_floors.get(resource)
+    if minimum is not None:
+        value = max(minimum, value)
+    return math.floor(value + 0.5)
 
 
 def _update_resource(
@@ -573,14 +584,18 @@ def _update_resource(
 ) -> GameState:
     value = getattr(state, resource)
     new_value = coerce_resource_value(state, resource, value + state_delta, data)
-    return replace(state, **{resource: new_value})
+    return replace(state, **{resource: new_value}) if new_value != value else state
 
 
 def _set_resource(
     state: GameState, resource: str, value: float, data: JusticeData
 ) -> GameState:
     new_value = coerce_resource_value(state, resource, value, data)
-    return replace(state, **{resource: new_value})
+    return (
+        replace(state, **{resource: new_value})
+        if new_value != getattr(state, resource)
+        else state
+    )
 
 
 def resolve_expr(expr: Any, state: GameState, data: JusticeData) -> float:

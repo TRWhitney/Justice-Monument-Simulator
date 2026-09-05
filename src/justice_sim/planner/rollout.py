@@ -27,7 +27,7 @@ from justice_sim.engine.reducer import (
     preview_state_before_outcome,
 )
 from justice_sim.engine.rng import Rng
-from justice_sim.engine.scoring import utility, weights_for_preset
+from justice_sim.engine.scoring import RiskEvaluator, utility, weights_for_preset
 from justice_sim.models.offer import (
     BernoulliSpec,
     CategoricalSpec,
@@ -40,6 +40,9 @@ from justice_sim.models.state import GameState
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.planner.cache import ValueCache
 from justice_sim.util import expr as expr_util
+from justice_sim.util.dependencies import (
+    referenced_counter_names as _referenced_counter_names,
+)
 
 
 @dataclass(frozen=True)
@@ -90,6 +93,7 @@ class RolloutPlanner:
         self.encounter_model = encounter_model or UniformEncounterModel()
         self.rng = Rng(seed)
         self.cache = ValueCache()
+        self._risk_evaluator = RiskEvaluator(data)
         self.weights = weights_for_preset(config.risk_preset)
         self.suggested_rules = suggested_rules or SuggestedRules.empty()
         self._referenced_counters = _referenced_counter_names(
@@ -302,6 +306,7 @@ class RolloutPlanner:
 
     def reset_cache(self) -> None:
         self.cache = ValueCache()
+        self._risk_evaluator = RiskEvaluator(self.data)
 
     def rollout_work_total(self, state: GameState, offer: OfferSpec) -> int:
         return (
@@ -1134,14 +1139,19 @@ class RolloutPlanner:
             return False
 
     def _cached_utility(self, state: GameState) -> float:
-        cached = self.cache.get(state, 0)
-        if cached is None:
-            cached = utility(state, self.data, self.weights)
-            self.cache.set(state, 0, cached)
-        return cached
+        if self.data.special_rules.client_encounters:
+            # Client scoring already caches its expensive projected risk. A
+            # second full-state cache mostly misses on action-history changes
+            # and duplicates serialization of every hypothetical state.
+            return self._utility(state)
+        return self.cache.get_or_compute(state, 0, self._utility)
+
+    def _utility(self, state: GameState) -> float:
+        return utility(
+            state, self.data, self.weights, risk_evaluator=self._risk_evaluator
+        )
 
 
-_COUNTER_REFERENCE = re.compile(r"\bcounters\.([A-Za-z_][A-Za-z0-9_]*)\b")
 _RESOURCE_REFERENCE = re.compile(r"\b(coins|pop|mh|dismissals|retirement_chests)\b")
 
 
@@ -1172,36 +1182,3 @@ def _has_resource_expression(
             for item in value
         )
     return False
-
-
-def _referenced_counter_names(*roots: object) -> frozenset[str]:
-    """Return counters that can affect data- or rule-driven behavior."""
-    references: set[str] = set()
-    visited: set[int] = set()
-
-    def visit(value: object) -> None:
-        if isinstance(value, str):
-            references.update(_COUNTER_REFERENCE.findall(value))
-            return
-        if value is None or isinstance(value, (bool, int, float, bytes)):
-            return
-        identity = id(value)
-        if identity in visited:
-            return
-        visited.add(identity)
-        if is_dataclass(value) and not isinstance(value, type):
-            for item in fields(value):
-                visit(getattr(value, item.name))
-            return
-        if isinstance(value, Mapping):
-            for key, item in value.items():
-                visit(key)
-                visit(item)
-            return
-        if isinstance(value, (tuple, list, set, frozenset)):
-            for item in value:
-                visit(item)
-
-    for root in roots:
-        visit(root)
-    return frozenset(references)

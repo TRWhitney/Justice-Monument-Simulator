@@ -12,6 +12,7 @@ from justice_sim.engine.effects import (
     apply_effects,
     apply_outcome,
     normalize_action_resources,
+    normalized_action_resource,
     outcome_additive_resource_cost,
     resolve_expr,
     resolve_probability,
@@ -97,7 +98,10 @@ def preview_state_before_outcome(
         updated = apply_effects(
             updated, updated.required_action_penalty_effects, data, rng
         )
-    updated = replace(updated, required_action=None, required_action_penalty_effects=())
+    if updated.required_action is not None or updated.required_action_penalty_effects:
+        updated = replace(
+            updated, required_action=None, required_action_penalty_effects=()
+        )
     updated = _apply_dismissal_cost(updated, offer, action, data)
     if action == "approve" and offer.approval_triggers_first:
         updated = _apply_action_triggers(updated, offer, action, data, rng)
@@ -185,6 +189,28 @@ def _apply_action_with_outcome(
     updated = preview_state_before_outcome(
         state, offer, action, data, rng, encounter_start=encounter_start
     )
+    return _resolve_prepared_action(
+        updated,
+        offer,
+        action,
+        outcome,
+        data,
+        rng,
+        encounter_overrides_at_start,
+        random_label_override,
+    )
+
+
+def _resolve_prepared_action(
+    updated: GameState,
+    offer: OfferSpec,
+    action: str,
+    outcome: OutcomeSpec,
+    data: JusticeData,
+    rng: Rng,
+    encounter_overrides_at_start: tuple[EncounterOverride, ...],
+    random_label_override: str | None = None,
+) -> tuple[GameState, str | None]:
     pre_action_state = updated
     updated, random_label = apply_outcome(updated, outcome, data, rng)
     if random_label_override is not None:
@@ -203,6 +229,69 @@ def _apply_action_with_outcome(
     updated = normalize_action_resources(updated, data)
     updated = advance_case(updated, data, rng)
     return updated, random_label
+
+
+def action_preserves_health(
+    state: GameState, offer: OfferSpec, action: str, data: JusticeData
+) -> bool:
+    """Evaluate the scoring probe without constructing irrelevant final state.
+
+    This has the same health/ended result as apply_action with Rng(0). Complex
+    outcomes finish through the shared reducer, using the already prepared RNG.
+    It is a scoring probe, not a proof of survival for unresolved randomness.
+    """
+    outcome = _select_outcome(offer, action)
+    rng = Rng(0)
+    prepared = preview_state_before_outcome(state, offer, action, data, rng)
+    simple = (
+        outcome.random is None
+        and all(
+            effect.schedule_after_cases is None
+            and (
+                (
+                    effect.type
+                    in {
+                        "add_resource",
+                        "set_resource",
+                        "multiply_resource",
+                        "clamp_resource",
+                    }
+                    and effect.params.get("resource") in MAIN_RESOURCES - {"mh"}
+                )
+                or effect.type in {"set_counter", "increment_counter", "clear_counter"}
+            )
+            for effect in outcome.effects
+        )
+        and not any(
+            event.trigger_case_index == prepared.case_index + 1
+            for event in prepared.scheduled_events
+        )
+        and (
+            (action == "approve" and offer.approval_triggers_first)
+            or not any(
+                trigger.action in {"any", action}
+                and (not trigger.offer_id or trigger.offer_id == offer.id)
+                and (not trigger.npc_id or trigger.npc_id == offer.npc_id)
+                for trigger in prepared.action_triggers
+            )
+        )
+        and not (
+            action == "approve"
+            and offer.id == data.special_rules.harbinger.offer_id
+            and data.special_rules.harbinger.on_unpaid_effects
+            and prepared.coins
+            < outcome_additive_resource_cost(prepared, offer.approve, "coins", data)
+        )
+    )
+    if simple:
+        return (
+            normalized_action_resource(prepared, "mh", data) >= state.mh
+            and not prepared.ended
+        )
+    result, _ = _resolve_prepared_action(
+        prepared, offer, action, outcome, data, rng, state.encounter_overrides
+    )
+    return result.mh >= state.mh and not result.ended
 
 
 def _select_outcome(offer: OfferSpec, action: str) -> OutcomeSpec:

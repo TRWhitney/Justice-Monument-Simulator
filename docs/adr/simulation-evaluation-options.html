@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulation evaluation options</title>
+<style>
+body{font:17px/1.55 system-ui;max-width:850px;margin:3rem auto;padding:0 1rem;color:#252b32;background:#f8f7f3}
+label{display:block;margin:1rem 0}select,input,button{font:inherit;padding:.4rem}output{display:block;padding:1rem;background:#fff;border:1px solid #ccc}small{display:block}
+</style>
+<h1>Simulation evaluation options</h1>
+<p>Compare implementation choices and horizon work before exporting a preference.
+This page does not change application settings.</p>
+<label>Evaluation approach <select id="approach">
+<option value="shared">Shared reducer, exact shortcuts, bounded caches (implemented)</option>
+<option value="reference">Full action reductions for every score</option>
+<option value="mutable">Separate mutable simulation engine (not implemented)</option>
+</select></label>
+<label>Future cases <input id="horizon" type="number" min="1" max="100" value="20"></label>
+<label>Eligible actions <input id="actions" type="number" min="1" max="3" value="3"></label>
+<label>Fraction of future choices needing comparison <input id="fraction" type="number" min="0" max="1" step="0.05" value="0.3"></label>
+<output id="result"></output>
+<p id="tradeoff"></p>
+<small>The work estimate includes two continuations per action at sensitive choices.
+It is not a latency prediction: early termination, eligibility, and cache reuse change actual cost.</small>
+<p><button id="export">Export selection as JSON</button></p>
+<script>
+const ids=['approach','horizon','actions','fraction'];
+function selection(){return Object.fromEntries(ids.map(id=>[id,id==='approach'?document.getElementById(id).value:Number(document.getElementById(id).value)]));}
+function update(){const s=selection();const extra=s.actions*s.fraction*s.horizon*(s.horizon-1);
+document.getElementById('result').textContent=`Estimated ${Math.round(s.horizon+extra)} case transitions per root sample (${s.horizon} outer and ${Math.round(extra)} inner). Root sampling budgets remain unchanged.`;
+document.getElementById('tradeoff').textContent={shared:'The shared reducer preserves effect order. Simple health probes and deterministic transitions reuse work; complex cases retain full evaluation.',reference:'Full evaluation provides an equivalence reference, with more repeated state construction.',mutable:'A separate mutable engine could reduce allocations, but would need independent proof of all preparation, rounding, trigger, and RNG semantics.'}[s.approach];}
+ids.forEach(id=>document.getElementById(id).addEventListener('input',update));
+document.getElementById('export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(selection(),null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='simulation-evaluation-selection.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};update();
+</script>
+</html>

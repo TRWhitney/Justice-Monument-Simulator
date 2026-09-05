@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import OrderedDict
+from dataclasses import dataclass, replace
+from functools import lru_cache
 
 from justice_sim.engine.effects import (
     advance_case,
@@ -13,6 +15,7 @@ from justice_sim.engine.effects import (
 from justice_sim.engine.rng import Rng
 from justice_sim.models.offer import JusticeData
 from justice_sim.models.state import GameState
+from justice_sim.util.dependencies import referenced_counter_names
 
 
 @dataclass(frozen=True)
@@ -52,10 +55,18 @@ def weights_for_preset(preset: str) -> UtilityWeights:
     return _PRESET_WEIGHTS.get(preset, UtilityWeights())
 
 
-def utility(state: GameState, data: JusticeData, weights: UtilityWeights) -> float:
+def utility(
+    state: GameState,
+    data: JusticeData,
+    weights: UtilityWeights,
+    *,
+    risk_evaluator: RiskEvaluator | None = None,
+) -> float:
     death_penalty = 1.0 if state.ended or state.mh <= 0 else 0.0
     low_mh_penalty = max(0.0, weights.mh_threshold - state.mh)
-    insolvency_penalty = _next_harbinger_risk(state, data)
+    insolvency_penalty = _next_harbinger_risk(
+        state, data, risk_evaluator=risk_evaluator
+    )
     resources_score = state.coins + state.pop
 
     return (
@@ -69,7 +80,9 @@ def utility(state: GameState, data: JusticeData, weights: UtilityWeights) -> flo
     )
 
 
-def _next_harbinger_risk(state: GameState, data: JusticeData) -> float:
+def _next_harbinger_risk(
+    state: GameState, data: JusticeData, *, risk_evaluator: RiskEvaluator | None = None
+) -> float:
     """Estimate the unavoidable base-Harbinger risk from known state transitions."""
     if state.ended or state.mh <= 0:
         return 0.0
@@ -79,14 +92,23 @@ def _next_harbinger_risk(state: GameState, data: JusticeData) -> float:
     remainder = state.case_index % modulus
     offset = 0 if remainder == 0 else modulus - remainder
     projected = state
-    projection_rng = Rng(0)
-    for _ in range(offset):
-        projected = advance_case(projected, data, projection_rng)
-        if projected.ended or projected.mh <= 0:
-            return 0.0
+    if offset and not (
+        state.statuses or state.scheduled_events or state.encounter_modifiers
+    ):
+        projected = replace(state, case_index=state.case_index + offset)
+    else:
+        projection_rng = Rng(0)
+        for _ in range(offset):
+            projected = advance_case(projected, data, projection_rng)
+            if projected.ended or projected.mh <= 0:
+                return 0.0
 
     if data.special_rules.client_encounters:
-        return _client_harbinger_risk(projected, data)
+        return (
+            risk_evaluator.client_risk(projected)
+            if risk_evaluator is not None
+            else _client_harbinger_risk(projected, data)
+        )
 
     if (
         projected.dismissals > 0
@@ -120,6 +142,41 @@ def _next_harbinger_risk(state: GameState, data: JusticeData) -> float:
     return 1.0 - grateful_probability
 
 
+@lru_cache(maxsize=1024)
+def _contract_counters(contract_key: tuple) -> frozenset[str]:
+    return referenced_counter_names(contract_key)
+
+
+class RiskEvaluator:
+    """Cache projected risk independently of utility weights and action history.
+
+    Every state field is retained except counters unreferenced by both the data
+    and the state's own contracts. Native encounter selection also reads the
+    Fizarre counter. Instances belong to one planner/data lifetime.
+    """
+
+    def __init__(self, data: JusticeData, max_entries: int = 10000) -> None:
+        self.data = data
+        self.max_entries = max_entries
+        self.counter_names = referenced_counter_names(data) | {"fizarre_drink_approves"}
+        self._cache: OrderedDict[tuple, float] = OrderedDict()
+
+    def client_risk(self, state: GameState) -> float:
+        key = state.to_cache_key()
+        # Preserve all condition/effect payloads, their order, and their labels.
+        contract_key = key[7:13] + key[14:18]
+        names = self.counter_names | _contract_counters(contract_key)
+        counters = tuple(item for item in key[13] if item[0] in names)
+        key = key[:13] + (counters,) + key[14:]
+        cached = self._cache.get(key)
+        if cached is None:
+            cached = _client_harbinger_risk(state, self.data)
+            if len(self._cache) >= self.max_entries:
+                self._cache.popitem(last=False)
+            self._cache[key] = cached
+        return cached
+
+
 def _client_harbinger_risk(state: GameState, data: JusticeData) -> float:
     # Use the actual variant pool: a dismissal cannot save Broke Again, and
     # Busted Bills may be payable in popularity despite having no coins.
@@ -127,7 +184,7 @@ def _client_harbinger_risk(state: GameState, data: JusticeData) -> float:
         UniformEncounterModel,
         client_encounter_probabilities,
     )
-    from justice_sim.engine.reducer import ActionNotAllowed, apply_action
+    from justice_sim.engine.reducer import ActionNotAllowed, action_preserves_health
 
     distribution = client_encounter_probabilities(state, data, UniformEncounterModel())
     risk = 0.0
@@ -136,11 +193,10 @@ def _client_harbinger_risk(state: GameState, data: JusticeData) -> float:
         safe = False
         for action in offer.actions_available:
             try:
-                result, _ = apply_action(state, offer, action, data, Rng(0))
+                safe = action_preserves_health(state, offer, action, data)
             except ActionNotAllowed:
                 continue
-            if result.mh >= state.mh and not result.ended:
-                safe = True
+            if safe:
                 break
         if not safe:
             risk += probability

@@ -201,3 +201,8 @@ def test_bean_halves_coins_downward(builtin_data, coins, remaining):
 
 def test_fan_slug_rejection_does_not_scale(builtin_data):
     assert act(builtin_data, 69, "reject", case_index=31).pop == 15
+
+
+def test_busted_bills_scales_positive_harbinger_coins(builtin_data):
+    result = act(builtin_data, 14, case_index=30, coins=0)
+    assert (result.coins, result.pop) == (2, 14)

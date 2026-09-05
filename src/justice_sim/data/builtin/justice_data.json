@@ -4713,7 +4713,9 @@
             "type": "add_resource",
             "params": {
               "resource": "coins",
-              "amount": 1
+              "amount": {
+                "expr": "1 + 0.25 * floor((case_index - 1) / 13)"
+              }
             }
           },
           {

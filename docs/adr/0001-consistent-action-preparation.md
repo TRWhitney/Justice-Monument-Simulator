@@ -21,6 +21,13 @@ outcomes support exact short-circuit scores. An unclassified eligible alternativ
 or unresolved random transition sends the decision through the existing rollout
 path. A sampled death is insufficient evidence to hide the user's actions.
 
+Shortcut refinement, 2026-09-05: matching pending contracts are not enough to
+prove resource dominance. If a contract's predicate or formula reads a resource
+that differs between the immediate outcomes, use rollouts. Fixed pending payouts
+and predicates on resources that do not differ retain the shortcut. Existing
+non-resource checks still reject changes to promises, counters, or encounter
+state. Gratefulbinger and Poppy's ordinary gifts retain exact recommendations.
+
 ## Evaluated options
 
 Use the [interactive option review](preview-options.html) to configure fallback

@@ -475,14 +475,23 @@ class RolloutPlanner:
         eligible_actions: tuple[str, ...],
     ) -> str | None:
         profiles: dict[str, tuple[str, tuple]] = {}
+        next_states = []
         for action in eligible_actions:
             if not self._action_is_possible(state, offer, action):
                 continue
-            profile = self._action_outcome_profile(state, offer, action)
+            results = self._exact_action_results(state, offer, action)
+            if not results:
+                return None
+            profile = self._action_outcome_profile(
+                state, offer, action, results=results
+            )
             if profile is None:
                 # Dominance must include every eligible alternative.
                 return None
             profiles[action] = profile
+            next_states.extend(next_state for next_state, _ in results)
+        if self._future_sensitive(state, next_states):
+            return None
         if len(profiles) < 2:
             return None
         if len({signature for _, signature in profiles.values()}) != 1:
@@ -501,10 +510,48 @@ class RolloutPlanner:
             return positives[0]
         return None
 
+    def _has_resource_dependent_future(
+        self, state: GameState, resources: frozenset[str]
+    ) -> bool:
+        # Identical pending contracts can respond differently to changed resources.
+        # Literal resource names (e.g. a fixed coin payout) are not dependencies.
+        return _has_resource_expression(
+            (
+                state.scheduled_events,
+                state.action_triggers,
+                state.encounter_triggers,
+                state.encounter_overrides,
+                state.required_action_penalty_effects,
+                state.statuses,
+            ),
+            resources=resources,
+        )
+
+    def _future_sensitive(self, state: GameState, results: list[GameState]) -> bool:
+        resources = frozenset(
+            resource
+            for resource in ("coins", "pop", "mh", "dismissals", "retirement_chests")
+            if len({getattr(result, resource) for result in results}) > 1
+        )
+        return (
+            self._has_resource_dependent_future(state, resources)
+            or any(
+                self._has_resource_dependent_future(result, resources)
+                for result in results
+            )
+            or len({self._non_resource_signature(result) for result in results}) > 1
+        )
+
     def _action_outcome_profile(
-        self, state: GameState, offer: OfferSpec, action: str
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        action: str,
+        *,
+        results: list[tuple[GameState, float]] | None = None,
     ) -> tuple[str, tuple] | None:
-        results = self._exact_action_results(state, offer, action)
+        if results is None:
+            results = self._exact_action_results(state, offer, action)
         if not results:
             return None
 
@@ -958,6 +1005,37 @@ class RolloutPlanner:
 
 
 _COUNTER_REFERENCE = re.compile(r"\bcounters\.([A-Za-z_][A-Za-z0-9_]*)\b")
+
+_RESOURCE_REFERENCE = re.compile(r"\b(coins|pop|mh|dismissals|retirement_chests)\b")
+
+
+def _has_resource_expression(
+    value: object, field_name: str = "", *, resources: frozenset[str]
+) -> bool:
+    if not resources:
+        return False
+    if isinstance(value, str):
+        return field_name in {"expr", "when"} and bool(
+            resources.intersection(_RESOURCE_REFERENCE.findall(value))
+        )
+    if is_dataclass(value) and not isinstance(value, type):
+        return any(
+            _has_resource_expression(
+                getattr(value, item.name), item.name, resources=resources
+            )
+            for item in fields(value)
+        )
+    if isinstance(value, Mapping):
+        return any(
+            _has_resource_expression(item, str(key), resources=resources)
+            for key, item in value.items()
+        )
+    if isinstance(value, (tuple, list)):
+        return any(
+            _has_resource_expression(item, field_name, resources=resources)
+            for item in value
+        )
+    return False
 
 
 def _referenced_counter_names(*roots: object) -> frozenset[str]:

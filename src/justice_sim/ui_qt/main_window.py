@@ -2584,11 +2584,18 @@ class MainWindow(QtWidgets.QMainWindow):
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
             self.toast_area.show_toast(f"Import failed: {exc}")
             return
+        self._stop_planner_process()
+        self._manual_adjust_timer.stop()
+        self._manual_adjust_pre_state = None
+        self._manual_adjust_timer_start_pending = False
+        self._auto_offer_id = None
+        self._auto_offer_case = None
         self.session.state = run_state.state
         self.session.rng = rng
         self.session.log = log
         self._simulated_offer_scores.clear()
         self.current_recommendation = None
+        self.offer_search.clear_selection()
         self._refresh()
 
     def _select_run_file(self, caption: str, *, save: bool) -> Path | None:

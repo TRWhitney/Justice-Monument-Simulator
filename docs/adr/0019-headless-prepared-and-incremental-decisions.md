@@ -17,3 +17,15 @@ by absolute sample index. Reporting batches never alter the initial budget,
 adaptive contender boundaries, top-up seed ranges, maximum, risk preset or depth.
 Online intermediate moments avoid repeated full-sample scans and copies; complete
 scores use the existing arithmetic and retain the original samples.
+
+Provide the public imports through `justice_sim.headless`, and load packaged JSON
+and schemas through package-relative resources. Consumers own Idleon state
+reconstruction and worker scheduling. Neither API imports Qt.
+
+Review and export the [configurable options](headless-options.html).
+An iterator was selected over callbacks because a consumer can stop work by
+closing it and can choose when to request the next batch. A separate mutable
+simulation engine was rejected because it would duplicate reducer rules.
+
+See the [public interface](../headless/api.md). This extends ADR 0001 and preserves
+ADRs 0006, 0016 and 0017's policy and sampling decisions.

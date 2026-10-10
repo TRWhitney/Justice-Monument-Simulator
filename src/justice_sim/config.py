@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from importlib.resources import files
+from importlib.resources.abc import Traversable
 from typing import Any, Mapping
 
 import jsonschema
@@ -17,23 +19,12 @@ from justice_sim.util.validation import (
 )
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-BUILTIN_DATA_PATH = (
-    REPO_ROOT / "src" / "justice_sim" / "data" / "builtin" / "justice_data.json"
-)
-SCHEMA_PATH = (
-    REPO_ROOT / "src" / "justice_sim" / "data" / "schema" / "justice_data.schema.json"
-)
-SUGGESTED_RULES_PATH = (
-    REPO_ROOT / "src" / "justice_sim" / "data" / "builtin" / "suggested_rules.json"
-)
-SUGGESTED_RULES_SCHEMA_PATH = (
-    REPO_ROOT
-    / "src"
-    / "justice_sim"
-    / "data"
-    / "schema"
-    / "suggested_rules.schema.json"
+_DATA_RESOURCES = files("justice_sim").joinpath("data")
+BUILTIN_DATA_PATH = _DATA_RESOURCES.joinpath("builtin/justice_data.json")
+SCHEMA_PATH = _DATA_RESOURCES.joinpath("schema/justice_data.schema.json")
+SUGGESTED_RULES_PATH = _DATA_RESOURCES.joinpath("builtin/suggested_rules.json")
+SUGGESTED_RULES_SCHEMA_PATH = _DATA_RESOURCES.joinpath(
+    "schema/suggested_rules.schema.json"
 )
 
 
@@ -41,7 +32,7 @@ class DataLoadError(ValueError):
     """Raised when data loading or validation fails."""
 
 
-def _load_json(path: Path) -> Mapping[str, Any]:
+def _load_json(path: Path | Traversable) -> Mapping[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         data = json.load(handle)
     if not isinstance(data, dict):
@@ -49,13 +40,13 @@ def _load_json(path: Path) -> Mapping[str, Any]:
     return data
 
 
-def _validate_schema(data: Mapping[str, Any], schema_path: Path) -> None:
+def _validate_schema(data: Mapping[str, Any], schema_path: Path | Traversable) -> None:
     schema = _load_json(schema_path)
     jsonschema.validate(instance=data, schema=schema)
 
 
 def load_data(
-    data_path: Path,
+    data_path: Path | Traversable,
     *,
     schema_path: Path | None = None,
     validate_schema: bool = True,
@@ -76,7 +67,7 @@ def load_builtin_data() -> JusticeData:
 
 
 def load_suggested_rules(
-    rules_path: Path,
+    rules_path: Path | Traversable,
     *,
     data: JusticeData,
     schema_path: Path | None = None,

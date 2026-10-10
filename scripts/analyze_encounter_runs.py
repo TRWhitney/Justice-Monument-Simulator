@@ -20,9 +20,10 @@ from justice_sim.analysis.encounter_selection import (
     write_history,
     write_report,
 )
-from justice_sim.config import BUILTIN_DATA_PATH, REPO_ROOT, load_data
+from justice_sim.config import BUILTIN_DATA_PATH, load_data
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_HISTORY_PATH = REPO_ROOT / "analysis" / "encounter-selection-history.json"
 DEFAULT_REPORT_PATH = REPO_ROOT / "docs" / "encounter-selection-analysis.html"
 

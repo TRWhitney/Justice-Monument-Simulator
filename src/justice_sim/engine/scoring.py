@@ -151,32 +151,40 @@ def _contract_counters(contract_key: ContractKey) -> frozenset[str]:
 class RiskEvaluator:
     """Cache projected risk independently of utility weights and action history.
 
-    Every state field is retained except counters unreferenced by both the data
-    and the state's own contracts. Native encounter selection also reads the
-    Fizarre counter. Instances belong to one planner/data lifetime.
+    Deterministic client pools reuse exact payment and eligibility regions.
+    Complex states retain every field except unreferenced counters in the full
+    risk cache. Instances belong to one planner/data lifetime.
     """
 
     def __init__(self, data: JusticeData, max_entries: int = 10000) -> None:
         from justice_sim.engine.health import HealthProbeCache
+        from justice_sim.engine.risk_pool import RiskPoolCache
 
         self.data = data
         self.max_entries = max_entries
         self.counter_names = referenced_counter_names(data) | {"fizarre_drink_approves"}
         self._cache: OrderedDict[tuple, float] = OrderedDict()
         self._health_probes = HealthProbeCache(data, max_entries)
+        self._pool_safety = RiskPoolCache(data, max_entries)
 
     def client_risk(self, state: GameState) -> float:
+        pooled = self._pool_safety.risk(state, self._health_probes.can_preserve_health)
+        if pooled is not None:
+            return pooled
         contracts = state.contract_key()
         names = self.counter_names | _contract_counters(contracts)
         key = state.to_cache_key(counter_names=names, contracts=contracts)
         cached = self._cache.get(key)
         if cached is None:
             cached = _client_harbinger_risk(
-                state, self.data, health_probe=self._health_probes.can_preserve_health
+                state,
+                self.data,
+                health_probe=self._health_probes.can_preserve_health,
             )
-            if len(self._cache) >= self.max_entries:
-                self._cache.popitem(last=False)
-            self._cache[key] = cached
+            if self.max_entries > 0:
+                if len(self._cache) >= self.max_entries:
+                    self._cache.popitem(last=False)
+                self._cache[key] = cached
         return cached
 
 

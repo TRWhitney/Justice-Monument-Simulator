@@ -107,7 +107,7 @@ def test_filtered_and_non_resource_keys_match_original_state_comparisons():
     ).non_resource_key(names)
 
 
-def test_risk_builds_contract_key_once(builtin_data, monkeypatch):
+def test_fallback_risk_builds_contract_key_once(builtin_data, monkeypatch):
     original = GameState.contract_key
     calls = []
 
@@ -117,5 +117,18 @@ def test_risk_builds_contract_key_once(builtin_data, monkeypatch):
 
     monkeypatch.setattr(GameState, "contract_key", counted)
     evaluator = RiskEvaluator(builtin_data)
-    evaluator.client_risk(GameState(15, 50, 20, 8, 2, 0))
+    state = GameState(
+        15,
+        50,
+        20,
+        8,
+        2,
+        0,
+        scheduled_events=(
+            ScheduledEvent(
+                16, (EffectSpec("add_resource", {"resource": "mh", "amount": -1}),)
+            ),
+        ),
+    )
+    evaluator.client_risk(state)
     assert len(calls) == 1

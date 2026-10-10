@@ -136,7 +136,7 @@ def test_risk_cache_reuses_history_but_preserves_saved_counter_dependencies(
         evaluator.client_risk(replace(state, counters={"unread_history": 12}))
         == original
     )
-    assert len(evaluator._cache) == 1
+    assert len(evaluator._cache) + len(evaluator._pool_safety._cache) == 1
     event = ScheduledEvent(16, (EffectSpec("end_run", {}, when=f"{accessor} > 0"),))
     pending = replace(state, scheduled_events=(event,), counters={"saved_cost": 0})
     costly = replace(pending, counters={"saved_cost": 1})
@@ -162,4 +162,4 @@ def test_risk_cache_is_bounded_and_data_specific(builtin_data):
         assert evaluator.client_risk(state) == scoring._client_harbinger_risk(
             state, builtin_data
         )
-    assert len(evaluator._cache) == 2
+    assert len(evaluator._cache) + len(evaluator._pool_safety._cache) == 2

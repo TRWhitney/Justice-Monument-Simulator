@@ -690,28 +690,77 @@ def resolve_probability(prob_spec: Any, state: GameState, data: JusticeData) -> 
     if isinstance(prob_spec, (int, float)):
         return float(prob_spec)
     if isinstance(prob_spec, str):
-        _, _, functions, variables = _build_numeric_context(state, data)
-        value = expr_util.evaluate_numeric(
-            prob_spec, expr_util.build_numeric_context(variables, functions)
-        )
-        if data.defaults.default_probability_format == "percent":
-            value = value / 100.0
-        return float(value)
-    if isinstance(prob_spec, Mapping):
+        raw_expr = prob_spec
+        format_type = data.defaults.default_probability_format
+    elif isinstance(prob_spec, Mapping):
         raw_expr = str(prob_spec.get("expr"))
         format_type = (
             prob_spec.get("format") or data.defaults.default_probability_format
         )
-        case_scale_value, harbinger_cost_value, functions, variables = (
-            _build_numeric_context(state, data)
-        )
+    else:
+        raise ValueError("Unsupported probability format")
+    value = _resource_probability_value(raw_expr, state)
+    if value is None:
+        _, _, functions, variables = _build_numeric_context(state, data)
         value = expr_util.evaluate_numeric(
             raw_expr, expr_util.build_numeric_context(variables, functions)
         )
-        if format_type == "percent":
-            value = value / 100.0
-        return float(value)
-    raise ValueError("Unsupported probability format")
+    if format_type == "percent":
+        value = value / 100.0
+    return float(value)
+
+
+@lru_cache(maxsize=1024)
+def _probability_resources(expression: str) -> tuple[str, ...] | None:
+    """Prove that the numeric result cannot read contracts or scaling rules."""
+    try:
+        names = {
+            node.id
+            for node in ast.walk(ast.parse(expression, mode="eval"))
+            if isinstance(node, ast.Name)
+        }
+    except SyntaxError:
+        return None
+    resources = MAIN_RESOURCES | {"case_index"}
+    if names <= resources | {"true", "false", *_NUMERIC_FUNCTIONS}:
+        return tuple(sorted(names & resources))
+    return None
+
+
+def _resource_probability_value(expression: str, state: GameState) -> float | None:
+    resources = _probability_resources(expression)
+    if resources is None:
+        return None
+    values = tuple(
+        (name, type(getattr(state, name)), getattr(state, name)) for name in resources
+    )
+    try:
+        if not all(
+            kind in {int, float} and math.isfinite(value) for _, kind, value in values
+        ):
+            return None
+    except OverflowError:
+        return None
+    zero_signs = tuple(
+        math.copysign(1, value) < 0 if value == 0 else False for _, _, value in values
+    )
+    return _cached_resource_probability(expression, values, zero_signs)
+
+
+@lru_cache(maxsize=4096)
+def _cached_resource_probability(
+    expression: str,
+    values: tuple[tuple[str, type, int | float], ...],
+    zero_signs: tuple[bool, ...],
+) -> float:
+    # Type tags distinguish equal int/float inputs whose arithmetic can round
+    # differently. Zero signs preserve negative zero results. The original
+    # safe evaluator remains responsible for errors.
+    variables = {name: value for name, _, value in values}
+    variables.update(true=True, false=False)
+    return expr_util.evaluate_numeric(
+        expression, expr_util.build_numeric_context(variables, _NUMERIC_FUNCTIONS)
+    )
 
 
 def outcome_additive_resource_cost(

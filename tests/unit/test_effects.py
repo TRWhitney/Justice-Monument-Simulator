@@ -365,3 +365,106 @@ def test_resource_floor_prevents_pop_below_min():
     ]
     new_state = apply_effects(state, effects, data)
     assert new_state.pop == 5
+
+
+@pytest.mark.unit
+def test_probability_resources_skip_unread_numeric_context(data_factory, monkeypatch):
+    from justice_sim.engine import effects
+
+    data = data_factory()
+    state = GameState(3, 100, 10, 5, 2, 0)
+    expression = "(40*pop)/(pop+20)"
+
+    def unnecessary(*args):
+        pytest.fail(
+            "A resource-only probability does not need unrelated scaling/context"
+        )
+
+    monkeypatch.setattr(effects, "_build_numeric_context", unnecessary)
+    assert (
+        effects.resolve_probability(
+            {"expr": expression, "format": "percent"}, state, data
+        )
+        == ((40 * state.pop) / (state.pop + 20)) / 100
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "(40*pop)/(pop+20)",
+        "pop + 1",
+        "min(pop, coins) + case_index / 2",
+        "case_scale * pop",
+        "counters.stage * pop",
+        "(flags.ready and pop) or coins",
+    ],
+)
+def test_probability_cache_matches_full_numeric_context(data_factory, expression):
+    from dataclasses import replace
+    from justice_sim.engine import effects
+    from justice_sim.util import expr
+
+    data = data_factory()
+    data = replace(
+        data,
+        special_rules=replace(
+            data.special_rules,
+            case_scale=replace(data.special_rules.case_scale, expr="pop + case_index"),
+        ),
+    )
+    for value in (10, 10.0, 2**53, float(2**53), 2**53 + 2):
+        for coins in (3, 20):
+            state = GameState(
+                3,
+                coins,
+                value,
+                5,
+                2,
+                0,
+                counters={"stage": 2},
+                flags=frozenset({"ready"}),
+            )
+            _, _, functions, variables = effects._build_numeric_context(state, data)
+            expected = expr.evaluate_numeric(
+                expression, expr.build_numeric_context(variables, functions)
+            )
+            assert (
+                effects.resolve_probability(
+                    {"expr": expression, "format": "unit"}, state, data
+                )
+                == expected
+            )
+            assert (
+                effects.resolve_probability(
+                    {"expr": expression, "format": "percent"}, state, data
+                )
+                == expected / 100
+            )
+
+
+@pytest.mark.unit
+def test_probability_cache_preserves_negative_zero_and_errors(data_factory):
+    import math
+    from justice_sim.engine import effects
+    from justice_sim.util.expr import ExprError
+
+    data = data_factory()
+    for pop in (0.0, -0.0, 0.0):
+        state = GameState(2, 10, pop, 3, 2, 0)
+        result = effects.resolve_probability(
+            {"expr": "pop", "format": "unit"}, state, data
+        )
+        assert math.copysign(1, result) == math.copysign(1, pop)
+    for expression, error in (
+        ("pop / 0", ZeroDivisionError),
+        ("pop +", ExprError),
+        ("unknown", ExprError),
+    ):
+        with pytest.raises(error):
+            effects.resolve_probability(expression, state, data)
+    assert (
+        effects.resolve_probability("pop < 1", GameState(2, 10, 10**400, 3, 2, 0), data)
+        == 0
+    )

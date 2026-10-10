@@ -1,6 +1,7 @@
 """Consumer checks with the source checkout excluded from Python's import path."""
 
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -42,10 +43,19 @@ def test_public_headless_interface():
 
 def test_installed_wheel_loads_and_plans_without_qt(tmp_path):
     repo = Path(__file__).resolve().parents[2]
+    source = tmp_path / "source"
+    source.mkdir()
+    for name in ("pyproject.toml", "README.md", "UNLICENSE"):
+        shutil.copy2(repo / name, source / name)
+    shutil.copytree(
+        repo / "src",
+        source / "src",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.egg-info"),
+    )
     wheel_dir = tmp_path / "wheels"
     subprocess.run(
         ["uv", "build", "--wheel", "--out-dir", str(wheel_dir)],
-        cwd=repo,
+        cwd=source,
         check=True,
         capture_output=True,
         text=True,

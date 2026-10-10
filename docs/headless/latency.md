@@ -1,64 +1,66 @@
-# Headless planner latency
+# Headless planner latency and CPU cost
 
-Measured on Python 3.12.3 with Kitchen Loan, seed 42, builtin suggested rules,
-`GameState(11, 50, 20, 8, 2, 0)`, 32 samples per action and a 20-case horizon.
-Adaptive sampling is disabled for this fixed-budget study. Production defaults,
-risk settings, simulation rules and full-depth policy evaluation remain unchanged.
+Python 3.12.3, Kitchen Loan, seed 42, builtin suggested rules and
+`GameState(11, 50, 20, 8, 2, 0)`. The fixed workload uses one process, three
+actions, 32 samples per action and a 20-case horizon. Adaptive sampling is disabled
+only for this study. Production defaults, risk, rules and policy depth are unchanged.
 
-## Comparison
+## CPU efficiency
 
-Three alternating runs compare unchanged reference commit `4054637`, loaded from
-a temporary source archive, with the optimized core and optional CPU workers.
-Each constructs a fresh planner. Timers include worker startup and shutdown,
-and exclude parent imports and data loading. No other sustained workloads ran
-alongside the measurements.
+Three alternating runs compare `52c6010` with ADR 0023's shared-core optimizations.
+Each run constructs a fresh planner. Imports and data loading precede the timers;
+recommendation work is included. The previous source is loaded from a disposable
+archive outside the checkout. No sustained workload runs alongside measurements.
 
-| Run | Reference | Core, one worker | Four workers | Eight workers |
+| Run | Previous elapsed | Optimized elapsed | Previous CPU | Optimized CPU |
 | --- | ---: | ---: | ---: | ---: |
-| 1 | 11.863 s | 8.538 s | 3.224 s | 2.306 s |
-| 2 | 12.053 s | 8.888 s | 3.265 s | 2.181 s |
-| 3 | 11.751 s | 8.622 s | 3.204 s | 2.294 s |
-| Median | 11.863 s | 8.622 s | 3.224 s | 2.294 s |
+| 1 | 8.357 s | 7.019 s | 8.354 s | 7.017 s |
+| 2 | 8.263 s | 7.044 s | 8.261 s | 7.043 s |
+| 3 | 8.395 s | 7.199 s | 8.391 s | 7.193 s |
+| Median | 8.357 s | 7.044 s | 8.354 s | 7.043 s |
 
-Core reuse reduces median time by 27.3%. Four workers give a 3.68-fold speedup;
-eight give 5.17-fold. All twelve complete recommendations, including every
-sampled utility, match. The earlier payment-probe optimization alone achieved
-about 5.3%; the reported 11.186-second detached run came from another environment.
-These local results are not a universal latency bound. Workers compete for CPU
-with the host game and overlay; startup can outweigh gains for small decisions.
+Median CPU work falls 15.7%; elapsed time falls 15.7%. This is a further efficiency
+gain, not a dramatic acceleration. Every complete recommendation, including each
+sampled utility, matches. Five further eight-sample, horizon-20 scenarios at seed
+77 also match: baseline, low health, loan, due event and override. Temperature,
+power and host-game contention were not
+measured; lower CPU seconds do not prove a lower peak temperature.
 
-## Profile and behavior
+The fresh initial profile identifies repeated encounter eligibility, numeric
+probability contexts, state copies and health-risk reduction. Exact predicate
+inputs and immutable uniform proposals avoid repeated scans. Resource-only
+probabilities retain typed inputs and zero signs. Health-only probes skip next-state
+bookkeeping when it cannot affect health. Identical pool safety/probability pairs
+reuse their ordered risk sum. Positional state copies still run the constructor.
+Complex cases keep the full evaluators. See [proof and limits](../adr/0023-reuse-exact-predicate-inputs.md).
 
-Profiling the reference took 31.186 recommendation seconds and identified
-repeated projected Harbinger risk as the main cost. The final core profile took
-20.827 seconds. Projected risk fell from 17.628 to 8.582 cumulative seconds;
-health-cache checks from 883,921 to 91,967; reducer health probes from 139,266 to
-76,394; encounter distribution scans from 132,080 to 49,186. Future-action choice
-still ran 40,142 times. Profiler overhead is excluded from the throughput table.
+Continuation memoization hit 28 of 1002 probes; action-transition memoization hit
+1047 of 34263 full keys, or 1194 with unreferenced counters removed. Both were
+rejected because their low reuse did not justify serialization and correctness cost.
 
-The cache reuses exact payment and eligibility regions, keeps replacement
-probabilities live and preserves ordered arithmetic. False case-only trigger
-guards permit reuse for inactive arrivals. Complex definitions and states fall
-back to the full evaluator. Workers preserve absolute sample indices, adaptive
-boundaries and aggregation order. See [core proof](../adr/0021-reuse-exact-harbinger-pool-safety.md)
-and [worker ownership](../adr/0022-opt-in-rollout-cpu-workers.md).
+## Earlier throughput measurements
 
-Additional incremental runs matched the same complete samples:
+These median elapsed times belong to the earlier `4054637` to `52c6010` study;
+worker CPU totals were not measured. They do not establish efficiency gains from
+parallelism or predict worker timings for the latest core.
 
-| Workers | Batch per action | First estimate | Complete |
+| Reference | Earlier core, one process | Four workers | Eight workers |
 | ---: | ---: | ---: | ---: |
-| 1 | 1 | 0.299 s | 8.338 s |
-| 4 | 1 | 0.314 s | 3.559 s |
-| 8 | 4 | 0.787 s | 2.440 s |
+| 11.863 s | 8.622 s | 3.224 s | 2.294 s |
 
-These are individual latency examples. The larger batch initially reports four
-observations per action, the others one. Cancellation remains between batches.
+All twelve complete recommendations matched. The earlier core reduced elapsed
+time 27.3%. Workers shorten wall time by using more CPU concurrently and separate
+caches. One process remains the default. The reported detached 11.186-second run
+came from another environment; these local timings are not universal bounds.
 
-Use the [configurable execution comparison](../adr/planner-execution-options.html)
-and [public API](api.md). Rerun the reusable workload with:
+Use the [configurable comparison](../adr/planner-execution-options.html) and
+[public API](api.md). Rerun the fixed workload with:
 
 ```sh
-uv run python scripts/benchmark_planner.py --horizons 20 --rollouts 32 --no-adaptive --workers 4
+uv run python scripts/benchmark_planner.py --horizons 20 --rollouts 32 --no-adaptive --workers 1
 ```
 
-Raw run output, temporary reference snapshots and profiles are disposable.
+The script reports parent CPU and, where available, completed-child CPU separately.
+Multi-worker total CPU is unavailable on platforms without child accounting;
+parent CPU alone is never reported as the worker total. Raw output, archives and
+profiles are disposable.

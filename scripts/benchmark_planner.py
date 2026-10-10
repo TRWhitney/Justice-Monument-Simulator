@@ -6,7 +6,12 @@ import hashlib
 import json
 from pathlib import Path
 import platform
-from time import perf_counter
+from time import perf_counter, process_time
+
+try:
+    import resource
+except ImportError:  # Windows has no portable child-process CPU accounting.
+    resource = None
 
 from justice_sim.config import load_builtin_data, load_builtin_suggested_rules
 from justice_sim.engine.reducer import apply_action
@@ -85,9 +90,34 @@ def main() -> None:
             rollouts_per_action=args.rollouts,
             adaptive_rollouts=not args.no_adaptive,
         )
+        child_start = (
+            resource.getrusage(resource.RUSAGE_CHILDREN)
+            if resource is not None
+            else None
+        )
+        cpu_start = process_time()
         start = perf_counter()
         recommendation = planner.recommend(state, offer, workers=args.workers)
         seconds = perf_counter() - start
+        parent_cpu = process_time() - cpu_start
+        child_end = (
+            resource.getrusage(resource.RUSAGE_CHILDREN)
+            if resource is not None
+            else None
+        )
+        child_cpu = (
+            (child_end.ru_utime + child_end.ru_stime)
+            - (child_start.ru_utime + child_start.ru_stime)
+            if child_start is not None and child_end is not None
+            else None
+        )
+        total_cpu = (
+            parent_cpu
+            if args.workers == 1
+            else parent_cpu + child_cpu
+            if child_cpu is not None
+            else None
+        )
         scores = json.dumps(asdict(recommendation), sort_keys=True).encode()
         result = {
             "scenario": scenario,
@@ -98,6 +128,9 @@ def main() -> None:
             "seed": args.seed,
             "config": asdict(planner.config),
             "seconds": seconds,
+            "parent_cpu_seconds": parent_cpu,
+            "child_cpu_seconds": child_cpu,
+            "total_cpu_seconds": total_cpu,
             "samples": {s.action: s.sample_count for s in recommendation.action_scores},
             "best_action": recommendation.best_action,
             "score_sha256": hashlib.sha256(scores).hexdigest(),

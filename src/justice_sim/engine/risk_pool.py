@@ -9,7 +9,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from math import isfinite
 from functools import lru_cache
-import operator
 
 from justice_sim.engine.effects import outcome_additive_resource_cost
 from justice_sim.engine.encounter import (
@@ -22,7 +21,7 @@ from justice_sim.engine.health import _probe_resources
 from justice_sim.engine.reducer import _predicate_allows
 from justice_sim.models.offer import JusticeData, OfferSpec
 from justice_sim.models.state import GameState
-from justice_sim.util.dependencies import referenced_counter_names
+from justice_sim.util.predicate_dependencies import condition_reads
 
 
 _REGION_RESOURCES = ("coins", "pop", "dismissals", "retirement_chests")
@@ -68,67 +67,16 @@ def _condition_boundaries(
     return boundaries
 
 
-_COMPARISONS = {
-    ast.Lt: operator.lt,
-    ast.LtE: operator.le,
-    ast.Eq: operator.eq,
-    ast.NotEq: operator.ne,
-    ast.Gt: operator.gt,
-    ast.GtE: operator.ge,
-}
-
-
 def _condition_reads(
     offers: tuple[OfferSpec, ...],
 ) -> tuple[set[str], dict[str, tuple | None]]:
-    predicates = tuple(
+    names, reads = condition_reads(
         p for offer in offers for p in offer.conditions if isinstance(p, str)
     )
-    counters: dict[str, list[tuple] | None] = {
-        name: [] for name in referenced_counter_names(predicates)
-    }
-    names = set()
-    for predicate in predicates:
-        tree = ast.parse(predicate, mode="eval")
-        parents = {
-            child: node
-            for node in ast.walk(tree)
-            for child in ast.iter_child_nodes(node)
-        }
-        names.update(node.id for node in ast.walk(tree) if isinstance(node, ast.Name))
-        for node in ast.walk(tree):
-            if not (
-                isinstance(node, ast.Attribute)
-                and isinstance(node.value, ast.Name)
-                and node.value.id == "counters"
-            ):
-                continue
-            comparisons = counters[node.attr]
-            if comparisons is None:
-                continue
-            parent = parents.get(node)
-            if isinstance(parent, ast.Compare) and len(parent.ops) == 1:
-                other = parent.comparators[0] if parent.left is node else parent.left
-                try:
-                    literal = ast.literal_eval(other)
-                except (ValueError, TypeError):
-                    literal = None
-                if (
-                    isinstance(literal, (int, float))
-                    and isfinite(literal)
-                    and type(parent.ops[0]) in _COMPARISONS
-                ):
-                    comparisons.append(
-                        (
-                            _COMPARISONS[type(parent.ops[0])],
-                            literal,
-                            parent.left is node,
-                        )
-                    )
-                    continue
-            counters[node.attr] = None
     return names, {
-        name: tuple(values) if values else None for name, values in counters.items()
+        name.removeprefix("counters."): comparisons
+        for name, comparisons in reads.items()
+        if name.startswith("counters.")
     }
 
 
@@ -230,6 +178,9 @@ class RiskPoolCache:
         )
         self._cache: OrderedDict[tuple, _PoolSafety] = OrderedDict()
         self._inactive_guards: OrderedDict[tuple[int, str], bool] = OrderedDict()
+        self._risks: OrderedDict[
+            tuple[int, float | None], tuple[_PoolSafety, float]
+        ] = OrderedDict()
 
     def _inactive(self, predicate: object, state: GameState) -> bool:
         if not isinstance(predicate, str) or not _case_only_predicate(predicate):
@@ -377,16 +328,26 @@ class RiskPoolCache:
             self._cache[key] = safety
         # Preserve the original mix and ordered additions bit for bit. Factoring
         # a summed risk by (1-p) would change floating-point rounding.
-        distribution = dict(safety.base)
         grateful = self.data.special_rules.gratefulbinger
+        probability = (
+            _evaluate_gratefulbinger_probability(state, self.data) if grateful else None
+        )
+        risk_key = id(safety), probability
+        cached_risk = self._risks.get(risk_key)
+        if cached_risk is not None:
+            return cached_risk[1]
+        distribution = dict(safety.base)
         if grateful:
             distribution = _mix_distribution(
-                distribution,
-                {grateful.offer_id: 1},
-                _evaluate_gratefulbinger_probability(state, self.data),
+                distribution, {grateful.offer_id: 1}, probability
             )
         risk = 0.0
         for offer_id, probability in distribution.items():
             if offer_id in safety.unsafe:
                 risk += probability
+        if len(self._risks) >= self.max_entries:
+            self._risks.popitem(last=False)
+        # Retain the safety object with its result, so identity cannot be reused
+        # after the pool cache evicts it. Both caches are independently bounded.
+        self._risks[risk_key] = safety, risk
         return risk

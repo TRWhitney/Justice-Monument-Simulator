@@ -324,3 +324,29 @@ def test_unsupported_pool_definitions_use_full_reducer(builtin_data, kind):
             state, data
         )
     assert evaluator._cache and not evaluator._pool_safety._cache
+
+
+def test_same_pool_and_probability_reuse_ordered_risk_sum(builtin_data, monkeypatch):
+    from justice_sim.engine import risk_pool
+
+    evaluator = scoring.RiskEvaluator(builtin_data)
+    state = GameState(15, 2, 20, 3, 0, 0)
+    original = risk_pool._mix_distribution
+    mixes = 0
+
+    def counted(*args):
+        nonlocal mixes
+        mixes += 1
+        return original(*args)
+
+    monkeypatch.setattr(risk_pool, "_mix_distribution", counted)
+    expected = scoring._client_harbinger_risk(state, builtin_data)
+    assert evaluator.client_risk(state) == expected
+    first_count = mixes
+    assert first_count > 0
+    assert evaluator.client_risk(replace(state, coins=3)) == expected
+    assert mixes == first_count
+    changed = replace(state, pop=21)
+    assert evaluator.client_risk(changed) == scoring._client_harbinger_risk(
+        changed, builtin_data
+    )

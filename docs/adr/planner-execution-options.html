@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Planner CPU execution choices</title>
+<style>
+:root{color-scheme:light dark}
+*{box-sizing:border-box}body{margin:0;background:var(--background,light-dark(#fff,#17181b));color:var(--foreground,light-dark(#202229,#eee));font:15px/1.5 var(--font-sans,system-ui,sans-serif)}h1{font-size:23px;margin:0 0 8px}p{margin:8px 0 16px}.muted{color:var(--muted-foreground,light-dark(#596170,#aeb5c1))}.chart{margin:20px 0}.row{display:grid;grid-template-columns:118px 1fr 64px;gap:10px;align-items:center;margin:12px 0}.track{height:24px;background:var(--secondary,light-dark(#edf3fa,#252d39));border-radius:4px}.bar{height:100%;background:var(--accent,light-dark(#2563a8,#80b6fa));border-radius:4px}.number{font-variant-numeric:tabular-nums;text-align:right}fieldset{padding:12px;border:1px solid var(--border,light-dark(#ccd1da,#434852));border-radius:6px;display:flex;gap:12px;flex-wrap:wrap}legend{padding:0 5px}label{display:flex;gap:6px;align-items:center}input,select,button{accent-color:var(--accent,light-dark(#2563a8,#80b6fa));font:inherit}select,button{background:var(--background,light-dark(#fff,#17181b));color:var(--foreground,light-dark(#202229,#eee));border:1px solid var(--border,light-dark(#ccd1da,#434852));border-radius:4px;padding:5px 8px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--secondary,light-dark(#edf3fa,#252d39));padding:12px;border-radius:6px;font:13px/1.6 var(--font-mono,ui-monospace,monospace);margin:12px 0}.controls{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:12px 0}.note{border-left:3px solid var(--accent,light-dark(#2563a8,#80b6fa));padding-left:12px}.links a{color:var(--accent,light-dark(#2563a8,#80b6fa))}@media(max-width:420px){.row{grid-template-columns:95px 1fr 57px;gap:7px;font-size:13px}h1{font-size:21px}}
+</style></head><body>
+<h1>Full-budget planner execution</h1>
+<p class="muted">Median of three alternating runs. Python 3.12.3, Kitchen Loan, seed 42, horizon 20, 32 samples per action. Adaptive sampling disabled for this measurement. Process startup and cleanup included.</p>
+<div class="chart" role="img" aria-label="Reference 11.86 seconds, optimized core 8.62 seconds, four workers 3.22 seconds, eight workers 2.29 seconds">
+<div class="row"><span>Reference</span><div class="track"><div class="bar" style="width:100%;opacity:.4"></div></div><span class="number">11.86 s</span></div>
+<div class="row"><span>Core, 1 worker</span><div class="track"><div class="bar" style="width:72.68%;opacity:.65"></div></div><span class="number">8.62 s</span></div>
+<div class="row"><span>4 workers</span><div class="track"><div class="bar" style="width:27.18%;opacity:.8"></div></div><span class="number">3.22 s</span></div>
+<div class="row"><span>8 workers</span><div class="track"><div class="bar" style="width:19.34%"></div></div><span class="number">2.29 s</span></div>
+</div>
+<p class="note">Every run produced identical results, including every sampled utility. Horizon, risk settings, policy accuracy and production sampling defaults are unchanged.</p>
+<fieldset><legend>Choose execution</legend><label><input type="radio" name="workers" value="1">1 worker, default</label><label><input type="radio" name="workers" value="4" checked>4 workers</label><label><input type="radio" name="workers" value="8">8 workers</label></fieldset>
+<div class="controls"><label>Samples per action per batch <select id="batch"><option>1</option><option>2</option><option selected>4</option><option>8</option></select></label><button id="export">Export choice</button></div>
+<p id="impact" aria-live="polite"></p>
+<pre id="code"></pre>
+<p class="muted">Local timings are not a forecast for your CPU. More workers use more CPU and separate caches. Small batches report sooner and offer earlier cancellation; large batches expose more parallel work. Spawn requires a guarded main entry point. Close an abandoned iterator to release its workers.</p>
+<p class="links"><a href="../headless/api.md">Public API</a> · <a href="../headless/latency.md">Timing details</a> · <a href="0021-reuse-exact-harbinger-pool-safety.md">Core proof</a> · <a href="0022-opt-in-rollout-cpu-workers.md">Worker ownership</a></p>
+<script>
+const medians={1:8.62233217107132,4:3.2238349629333243,8:2.2943624750478193};
+function choice(){return {workers:Number(document.querySelector('input[name=workers]:checked').value),batch_size:Number(document.querySelector('#batch').value)}}
+function update(){const c=choice();document.querySelector('#code').textContent=`updates = planner.recommend_incremental(\n    state, offer, arrival_processed=True,\n    workers=${c.workers}, batch_size=${c.batch_size},\n    cancelled=obsolete.is_set,\n)`;document.querySelector('#impact').textContent=`A three-action batch submits ${3*c.batch_size} rollouts and can occupy at most ${Math.min(c.workers,3*c.batch_size)} workers. Cancellation is checked after the current batch finishes.`}
+document.querySelectorAll('input,select').forEach(el=>el.addEventListener('change',update));
+document.querySelector('#export').addEventListener('click',()=>{const c=choice();const blob=new Blob([JSON.stringify({...c,measured_synchronous_median_seconds:medians[c.workers],horizon:20,samples_per_action:32},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='planner-execution-choice.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)});
+update();console.log('Execution choices initialized',choice(),document.querySelector('#impact').textContent);
+</script></body></html>

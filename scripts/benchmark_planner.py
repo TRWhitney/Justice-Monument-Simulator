@@ -57,6 +57,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--horizons", type=int, nargs="+", default=[12, 20])
     parser.add_argument("--rollouts", type=int, default=200)
+    parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--offer", default="Scripticus: Kitchen Loan")
     parser.add_argument("--no-adaptive", action="store_true")
@@ -67,7 +68,7 @@ def main() -> None:
         "--output", type=Path, help="Explicit optional JSON artifact path"
     )
     args = parser.parse_args()
-    if args.rollouts < 1 or any(h < 1 for h in args.horizons):
+    if args.workers < 1 or args.rollouts < 1 or any(h < 1 for h in args.horizons):
         parser.error("Horizons and rollout count must be positive")
     data = load_builtin_data()
     rules = load_builtin_suggested_rules(data)
@@ -85,11 +86,12 @@ def main() -> None:
             adaptive_rollouts=not args.no_adaptive,
         )
         start = perf_counter()
-        recommendation = planner.recommend(state, offer)
+        recommendation = planner.recommend(state, offer, workers=args.workers)
         seconds = perf_counter() - start
         scores = json.dumps(asdict(recommendation), sort_keys=True).encode()
         result = {
             "scenario": scenario,
+            "workers": args.workers,
             "python": platform.python_version(),
             "offer": offer.title,
             "state": thaw_payload(asdict(state)),

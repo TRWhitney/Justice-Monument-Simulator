@@ -1,75 +1,64 @@
 # Headless planner latency
 
-Measured on Python 3.12.3, Kitchen Loan root offer, seed 42, state
-`GameState(11, 50, 20, 8, 2, 0)`, builtin suggested rules, 32 samples for each
-of approve/reject/dismiss, and a 20-case horizon. Adaptive sampling is disabled
-for this fixed-budget workload only. Production defaults are unchanged.
-Timers cover recommendation work, excluding imports and data loading.
+Measured on Python 3.12.3 with Kitchen Loan, seed 42, builtin suggested rules,
+`GameState(11, 50, 20, 8, 2, 0)`, 32 samples per action and a 20-case horizon.
+Adaptive sampling is disabled for this fixed-budget study. Production defaults,
+risk settings, simulation rules and full-depth policy evaluation remain unchanged.
 
-## Profile
+## Comparison
 
-The initial detached reproduction took 13.268 seconds on this machine. The
-reported 11.186-second run was on a different run/environment and is not used
-as the local before/after baseline.
+Three alternating runs compare unchanged reference commit `4054637`, loaded from
+a temporary source archive, with the optimized core and optional CPU workers.
+Each constructs a fresh planner. Timers include worker startup and shutdown,
+and exclude parent imports and data loading. No other sustained workloads ran
+alongside the measurements.
 
-A cProfile run measured 32.959 seconds inside recommendation, including profiler
-overhead. Projected client risk accounted for 18.399 seconds of cumulative time,
-including 15.893 seconds in the risk loop. Health probes accounted for 10.499
-seconds and client encounter distributions for 8.661 seconds. These times overlap
-and must not be added together.
+| Run | Reference | Core, one worker | Four workers | Eight workers |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 11.863 s | 8.538 s | 3.224 s | 2.306 s |
+| 2 | 12.053 s | 8.888 s | 3.265 s | 2.181 s |
+| 3 | 11.751 s | 8.622 s | 3.204 s | 2.294 s |
+| Median | 11.863 s | 8.622 s | 3.224 s | 2.294 s |
 
-After the restricted health-cache/payment-region optimization and dismissal-first
-risk checks, the corresponding profile measured 30.546 seconds inside
-recommendation. Health-probe cumulative time fell to 8.221 seconds. Reducer health
-probe calls fell from 243,688 to 139,266. The complete recommendation hash matched.
+Core reuse reduces median time by 27.3%. Four workers give a 3.68-fold speedup;
+eight give 5.17-fold. All twelve complete recommendations, including every
+sampled utility, match. The earlier payment-probe optimization alone achieved
+about 5.3%; the reported 11.186-second detached run came from another environment.
+These local results are not a universal latency bound. Workers compete for CPU
+with the host game and overlay; startup can outweigh gains for small decisions.
 
-The optimization preserves reducer rules, full-depth policy continuations,
-probability integration, RNG streams, scoring weights and sample budgets.
-Broader continuation memoization was explored but had too little benefit to
-retain. No policy or horizon approximation was added.
+## Profile and behavior
 
-## Repeated timings
+Profiling the reference took 31.186 recommendation seconds and identified
+repeated projected Harbinger risk as the main cost. The final core profile took
+20.827 seconds. Projected risk fell from 17.628 to 8.582 cumulative seconds;
+health-cache checks from 883,921 to 91,967; reducer health probes from 139,266 to
+76,394; encounter distribution scans from 132,080 to 49,186. Future-action choice
+still ran 40,142 times. Profiler overhead is excluded from the throughput table.
 
-Three alternating before/after runs compare the original health cache and risk
-probe order from commit `adfec5317f25b6cafeaaf9c32ec4c224549e58fa` with the changed
-versions. Each run constructs a fresh planner. The current synchronous sample
-collection code is common to both sides; the initial unchanged-checkout run
-provides an additional baseline. Benchmark runs are kept separate from the
-repository gate and other sustained workloads.
+The cache reuses exact payment and eligibility regions, keeps replacement
+probabilities live and preserves ordered arithmetic. False case-only trigger
+guards permit reuse for inactive arrivals. Complex definitions and states fall
+back to the full evaluator. Workers preserve absolute sample indices, adaptive
+boundaries and aggregation order. See [core proof](../adr/0021-reuse-exact-harbinger-pool-safety.md)
+and [worker ownership](../adr/0022-opt-in-rollout-cpu-workers.md).
 
-| Run | Original cache/order | Changed cache/order |
-| --- | ---: | ---: |
-| 1 | 13.208 s | 12.201 s |
-| 2 | 12.545 s | 12.333 s |
-| 3 | 13.017 s | 12.532 s |
-| Median | 13.017 s | 12.333 s |
+Additional incremental runs matched the same complete samples:
 
-The median reduction is 0.684 seconds, about 5.3%. This is a modest local gain;
-full-depth future-policy evaluation remains expensive. It does not establish a
-universal latency bound or improved recommendation accuracy.
+| Workers | Batch per action | First estimate | Complete |
+| ---: | ---: | ---: | ---: |
+| 1 | 1 | 0.299 s | 8.338 s |
+| 4 | 1 | 0.314 s | 3.559 s |
+| 8 | 4 | 0.787 s | 2.440 s |
 
-All six runs used 32 observations per action and produced the same SHA-256 over
-the complete recommendation, including every utility sample:
+These are individual latency examples. The larger batch initially reports four
+observations per action, the others one. Cancellation remains between batches.
 
-```text
-b3ae0eb38bab53acbdac0eb8657f8bf542b7835adb78561f3b035fe1e327ade6
-```
-
-Run the current workload with:
+Use the [configurable execution comparison](../adr/planner-execution-options.html)
+and [public API](api.md). Rerun the reusable workload with:
 
 ```sh
-uv run python scripts/benchmark_planner.py --horizons 20 --rollouts 32 --no-adaptive
-uv run python -m cProfile -o /tmp/headless.prof scripts/benchmark_planner.py --horizons 20 --rollouts 32 --no-adaptive
-uv run python -c 'import pstats; pstats.Stats("/tmp/headless.prof").strip_dirs().sort_stats("cumtime").print_stats(35)'
+uv run python scripts/benchmark_planner.py --horizons 20 --rollouts 32 --no-adaptive --workers 4
 ```
 
-[Machine-readable timing evidence](benchmark.json) records individual runs,
-configuration, sample counts, hashes and incremental timing.
-
-## Incremental response
-
-The same workload with `batch_size=1` emitted its first estimate in 0.387 seconds,
-with one observation per action. It completed in 12.630 seconds with all 32
-observations per action and the same complete recommendation hash. Intermediate
-reporting improves time to first evidence without reducing the final work.
-Cancellation remains cooperative between batches, not a wall-clock guarantee.
+Raw run output, temporary reference snapshots and profiles are disposable.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
+from contextlib import closing
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from math import isfinite, sqrt
 import re
@@ -43,6 +44,7 @@ from justice_sim.models.offer import (
 from justice_sim.models.state import replace_state, GameState
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.planner.cache import ValueCache
+from justice_sim.planner.workers import sample_job, sampling_executor, validate_workers
 from justice_sim.util import expr as expr_util
 from justice_sim.util.dependencies import (
     referenced_counter_names as _referenced_counter_names,
@@ -178,12 +180,34 @@ class RolloutPlanner:
         progress: Callable[[int], None] | None = None,
         *,
         arrival_processed: bool = False,
+        workers: int = 1,
     ) -> PlannerRecommendation:
         """Recommend from a pre-arrival state, or an already processed arrival.
 
         Prepared callers have applied arrival effects and consumed the current
         encounter's overrides. Remaining contracts belong to future encounters.
+        Optional CPU workers use spawned processes and the same indexed samples.
         """
+        validate_workers(self, workers)
+        if workers > 1:
+            # Use the same phase boundaries and arithmetic as incremental sampling.
+            count = 0
+            with closing(
+                self.recommend_incremental(
+                    state,
+                    offer,
+                    batch_size=max(1, workers),
+                    arrival_processed=arrival_processed,
+                    workers=workers,
+                )
+            ) as updates:
+                for update in updates:
+                    current = sum(score.sample_count for score in update.action_scores)
+                    if progress and current > count:
+                        progress(current - count)
+                    count = current
+                    result = update.recommendation
+            return result
         root = self._root_context(state, arrival_processed)
         evaluated = self._evaluate_actions(state, offer, **root)
         eligible_actions = self._eligible_actions(
@@ -265,6 +289,7 @@ class RolloutPlanner:
         batch_size: int = 1,
         arrival_processed: bool = False,
         cancelled: Callable[[], bool] | None = None,
+        workers: int = 1,
     ) -> Iterator[PlannerUpdate]:
         """Yield estimates after at most batch_size observations per active action.
 
@@ -272,7 +297,10 @@ class RolloutPlanner:
         before preparation and between batches; a true result yields one final
         cancelled update. It cannot interrupt a rollout already in progress.
         Adaptive decisions occur only after complete configured sampling rounds.
+        workers=1 runs locally; larger values spawn decision-local CPU workers.
+        The iterator owns the workers, so close it when abandoning iteration.
         """
+        validate_workers(self, workers)
         if (
             isinstance(batch_size, bool)
             or not isinstance(batch_size, int)
@@ -305,80 +333,97 @@ class RolloutPlanner:
         start = 0
         budget = self.config.rollouts_per_action
         latest = empty
-        while True:
-            samples = {action: _SampleAccumulator() for action in actions}
-            for offset in range(0, budget, batch_size):
-                if cancelled and cancelled():
-                    yield PlannerUpdate(latest, cancelled=True)
-                    return
-                for action in actions:
-                    for index in range(
-                        start + offset, start + min(offset + batch_size, budget)
-                    ):
-                        samples[action].add(
-                            self._sample_rollout(state, offer, action, index, **root)
+        abandoned = False
+        with sampling_executor(
+            self, state, offer, root.get("encounter_start"), workers
+        ) as executor:
+            while True:
+                samples = {action: _SampleAccumulator() for action in actions}
+                for offset in range(0, budget, batch_size):
+                    if cancelled and cancelled():
+                        abandoned = True
+                        break
+                    jobs = [
+                        (action, index)
+                        for action in actions
+                        for index in range(
+                            start + offset, start + min(offset + batch_size, budget)
                         )
-                # Update moments per observation, independent of batch grouping.
-                # Recompute exact statistics only at phase boundaries, matching
-                # synchronous arithmetic without rescanning every partial batch.
+                    ]
+                    outcomes = (
+                        executor.map(sample_job, jobs)
+                        if executor is not None
+                        else (
+                            self._sample_rollout(state, offer, action, index, **root)
+                            for action, index in jobs
+                        )
+                    )
+                    for (action, _), sample in zip(jobs, outcomes, strict=True):
+                        samples[action].add(sample)
+                    # Update moments per observation, independent of batch grouping.
+                    # Recompute exact statistics only at phase boundaries, matching
+                    # synchronous arithmetic without rescanning every partial batch.
+                    additions = {
+                        action: self._summarize_samples(action, values.samples)
+                        if offset + batch_size >= budget
+                        else values.estimate(action)
+                        for action, values in samples.items()
+                    }
+                    if raw:
+                        current = [
+                            self._combine_scores(score, additions[score.action])
+                            if score.action in additions
+                            else score
+                            for score in raw
+                        ]
+                    else:
+                        current = list(additions.values())
+                    latest = self._recommendation_from_scores(
+                        state,
+                        offer,
+                        [replace(score, utility_samples=()) for score in current],
+                        eligible,
+                    )
+                    yield PlannerUpdate(latest)
+                if abandoned:
+                    break
                 additions = {
                     action: self._summarize_samples(action, values.samples)
-                    if offset + batch_size >= budget
-                    else values.estimate(action)
                     for action, values in samples.items()
                 }
-                if raw:
-                    current = [
+                raw = (
+                    [
                         self._combine_scores(score, additions[score.action])
                         if score.action in additions
                         else score
                         for score in raw
                     ]
-                else:
-                    current = list(additions.values())
-                latest = self._recommendation_from_scores(
-                    state,
-                    offer,
-                    [replace(score, utility_samples=()) for score in current],
-                    eligible,
+                    if raw
+                    else list(additions.values())
                 )
-                yield PlannerUpdate(latest)
-            additions = {
-                action: self._summarize_samples(action, values.samples)
-                for action, values in samples.items()
-            }
-            raw = (
-                [
-                    self._combine_scores(score, additions[score.action])
-                    if score.action in additions
-                    else score
-                    for score in raw
-                ]
-                if raw
-                else list(additions.values())
-            )
-            # Also preserve the synchronous result for zero configured samples.
-            latest = self._recommendation_from_scores(state, offer, raw, eligible)
-            if cancelled and cancelled():
-                yield PlannerUpdate(latest, cancelled=True)
-                return
-            if (
-                not self.config.adaptive_rollouts
-                or self.config.adaptive_rollouts_max <= self.config.rollouts_per_action
-            ):
-                break
-            scores = self._apply_action_biases(state, offer, raw)
-            counts = {score.action: score.sample_count for score in raw}
-            actions = tuple(
-                action
-                for action in self._adaptive_actions(scores, eligible)
-                if counts[action] < self.config.adaptive_rollouts_max
-            )
-            if not actions:
-                break
-            start = self.config.rollouts_per_action
-            budget = self.config.adaptive_rollouts_max - start
-        yield PlannerUpdate(latest, complete=True)
+                # Also preserve the synchronous result for zero configured samples.
+                latest = self._recommendation_from_scores(state, offer, raw, eligible)
+                if cancelled and cancelled():
+                    abandoned = True
+                    break
+                if (
+                    not self.config.adaptive_rollouts
+                    or self.config.adaptive_rollouts_max
+                    <= self.config.rollouts_per_action
+                ):
+                    break
+                scores = self._apply_action_biases(state, offer, raw)
+                counts = {score.action: score.sample_count for score in raw}
+                actions = tuple(
+                    action
+                    for action in self._adaptive_actions(scores, eligible)
+                    if counts[action] < self.config.adaptive_rollouts_max
+                )
+                if not actions:
+                    break
+                start = self.config.rollouts_per_action
+                budget = self.config.adaptive_rollouts_max - start
+        yield PlannerUpdate(latest, complete=not abandoned, cancelled=abandoned)
 
     def _recommendation_from_scores(
         self,

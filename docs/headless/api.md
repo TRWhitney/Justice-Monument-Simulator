@@ -120,3 +120,50 @@ entry points and package resource files.
 See the [latency measurements](latency.md),
 [decision record](../adr/0019-headless-prepared-and-incremental-decisions.md) and
 [configurable options](../adr/headless-options.html).
+
+## Optional CPU workers
+
+Both recommendation APIs accept `workers=1`. Larger positive integers opt into
+spawned CPU processes; existing GUI and CLI calls retain one-process behavior.
+Uniform, weighted and learned builtin encounter models support workers. Custom
+planner or model types must use one worker to preserve their dispatch.
+
+Use a guarded executable entry point, as required by Python process spawning:
+
+```python
+from justice_sim.headless import GameState, RolloutPlanner, load_builtin_data
+
+
+def main():
+    data = load_builtin_data()
+    planner = RolloutPlanner.from_defaults(data, seed=42)
+    offer = next(o for o in data.offers if o.title == "Scripticus: Kitchen Loan")
+    result = planner.recommend(GameState(11, 50, 20, 8, 2, 0), offer, workers=4)
+    print(result.best_action)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+For an overlay, pass `workers=4` to `recommend_incremental` alongside its prepared
+state and cancellation predicate. The iterator still runs on the consuming
+thread, while child processes calculate the sampled rollouts. `batch_size=1`
+submits one sample per active action, so three actions initially occupy at most
+three workers. Larger batches offer more parallel tasks but wait longer before
+reporting or checking cancellation. No future batches are submitted ahead.
+
+Workers use identical absolute sample indices and deliver observations in the
+original order. Final results and every utility sample match local execution,
+including adaptive top-ups. Worker count does not change sampling budgets or
+horizon. Each decision starts fresh processes and caches; startup can outweigh
+parallel gains for small workloads. Pick the worker count for the host's spare
+CPU capacity using the [execution comparison](../adr/planner-execution-options.html).
+
+Cancellation, completion and iterator close release all owned processes. Worker
+errors propagate to the consumer. If the consumer breaks iteration early, use
+`try/finally: updates.close()` or `contextlib.closing(updates)` to release workers
+immediately. The synchronous progress callback receives aggregate increments for
+completed samples in each parallel batch; its sum is the completed sample count.
+The temporary-install test also runs real CPU sampling with Qt imports blocked
+in the parent and spawned workers.

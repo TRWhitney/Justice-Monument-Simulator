@@ -114,25 +114,37 @@ class BlockQt(MetaPathFinder):
         if fullname.startswith(('PySide6', 'justice_sim.ui_qt')):
             raise AssertionError('Qt imported by headless API: ' + fullname)
 sys.meta_path.insert(0, BlockQt())
-assert not any(Path(p).is_relative_to(Path(sys.argv[2])) for p in sys.path if p)
-from justice_sim.headless import load_builtin_data, load_builtin_suggested_rules, RolloutPlanner, GameState
-import justice_sim
-assert Path(justice_sim.__file__).is_relative_to(Path(sys.argv[1]))
-from importlib.metadata import distribution
-entrypoints = {entry.name: entry.value for entry in distribution("justicemonumentsimulator").entry_points}
-assert entrypoints["justice-sim"] == "justice_sim.ui_cli.cli:main"
-assert entrypoints["justice-sim-gui"] == "justice_sim.ui_qt.app:main"
-data = load_builtin_data()
-rules = load_builtin_suggested_rules(data)
-planner = RolloutPlanner.from_defaults(data, rules, seed=42)
-offer = next(o for o in data.offers if o.npc_id == 'the_gratefulbinger')
-result = planner.recommend(GameState(5, 100, 20, 8, 2, 0), offer, arrival_processed=True)
-assert result.best_action == 'approve'
-assert not any(name.startswith('PySide6') for name in sys.modules)
+def main():
+    assert not any(Path(p).is_relative_to(Path(sys.argv[2])) for p in sys.path if p)
+    from justice_sim.headless import load_builtin_data, load_builtin_suggested_rules, RolloutPlanner, GameState, PlannerConfig
+    import justice_sim
+    assert Path(justice_sim.__file__).is_relative_to(Path(sys.argv[1]))
+    from importlib.metadata import distribution
+    entrypoints = {entry.name: entry.value for entry in distribution("justicemonumentsimulator").entry_points}
+    assert entrypoints["justice-sim"] == "justice_sim.ui_cli.cli:main"
+    assert entrypoints["justice-sim-gui"] == "justice_sim.ui_qt.app:main"
+    data = load_builtin_data()
+    rules = load_builtin_suggested_rules(data)
+    planner = RolloutPlanner.from_defaults(data, rules, seed=42)
+    offer = next(o for o in data.offers if o.npc_id == 'the_gratefulbinger')
+    result = planner.recommend(GameState(5, 100, 20, 8, 2, 0), offer, arrival_processed=True)
+    assert result.best_action == 'approve'
+    assert not any(name.startswith('PySide6') for name in sys.modules)
+    config = PlannerConfig(horizon_cases=2, rollouts_per_action=2, adaptive_rollouts=False)
+    planner = RolloutPlanner(data, config, suggested_rules=rules, seed=42)
+    offer = next(o for o in data.offers if o.title == 'Scripticus: Kitchen Loan')
+    expected = planner.recommend(GameState(11, 50, 20, 8, 2, 0), offer)
+    actual = planner.recommend(GameState(11, 50, 20, 8, 2, 0), offer, workers=2)
+    assert actual == expected
+    assert [s.utility_samples for s in actual.action_scores] == [s.utility_samples for s in expected.action_scores]
+if __name__ == '__main__':
+    main()
 """
+    script = tmp_path / "installed_consumer.py"
+    script.write_text(code, encoding="utf-8")
     env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
     subprocess.run(
-        [str(python), "-I", "-c", code, str(installed), str(repo)],
+        [str(python), "-I", str(script), str(installed), str(repo)],
         cwd=tmp_path,
         env=env,
         check=True,

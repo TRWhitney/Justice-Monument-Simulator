@@ -16,6 +16,12 @@ from justice_sim.models.state import (
     GameState,
 )
 from justice_sim.util import expr as expr_util
+from justice_sim.util.predicate_dependencies import (
+    RESOURCES,
+    Reads,
+    comparison_key,
+    condition_reads,
+)
 
 
 class EncounterModel:
@@ -324,6 +330,13 @@ class _EncounterIndex:
     priority: tuple[OfferSpec, ...]
     by_npc: dict[str, tuple[OfferSpec, ...]]
     row_distributions: dict[tuple[int, ...], dict[str, float]]
+    regular_dependencies: tuple[set[str], Reads] | None
+    eligibility: OrderedDict[tuple, tuple[str, ...]] = field(
+        default_factory=OrderedDict
+    )
+    proposals: OrderedDict[tuple[str, ...], tuple[tuple[str, float], ...]] = field(
+        default_factory=OrderedDict
+    )
 
 
 # Identity-scoped static data only; mutable learned/model weights stay live.
@@ -350,10 +363,19 @@ def _encounter_index(data: JusticeData) -> _EncounterIndex:
             for offer in data.offers
         }
         rows[group] = _normalize_weights({k: v for k, v in weights.items() if v})
+    regular = tuple(
+        o for o in data.offers if o.id not in excluded and o.encounter_weight > 0
+    )
+    try:
+        dependencies = condition_reads(
+            p for offer in regular for p in offer.conditions if isinstance(p, str)
+        )
+    except SyntaxError:
+        # Preserve lazy evaluation and its original error/short-circuit behavior.
+        dependencies = None
     index = _EncounterIndex(
-        regular=tuple(
-            o for o in data.offers if o.id not in excluded and o.encounter_weight > 0
-        ),
+        regular=regular,
+        regular_dependencies=dependencies,
         harbingers=tuple(
             data.offers_by_id[k]
             for k in _harbinger_offer_pool(data)
@@ -391,8 +413,64 @@ class _OfferConditions:
 def _eligible_regular_offer_ids(
     encounter_model: EncounterModel, state: GameState, data: JusticeData
 ) -> list[str]:
+    index = _encounter_index(data)
+    key = _eligibility_key(state, index.regular_dependencies)
+    if key is not None and key in index.eligibility:
+        return list(index.eligibility[key])
     conditions = _OfferConditions(state)
-    return [o.id for o in _encounter_index(data).regular if conditions.allows(o)]
+    eligible = tuple(o.id for o in index.regular if conditions.allows(o))
+    if key is not None:
+        _remember(index.eligibility, key, eligible)
+    return list(eligible)
+
+
+def _remember(cache: OrderedDict, key: tuple, value: tuple) -> None:
+    # Dataset ownership is already bounded; bound state/proposal variants too.
+    if len(cache) >= 256:
+        cache.popitem(last=False)
+    cache[key] = value
+
+
+def _eligibility_key(
+    state: GameState, dependencies: tuple[set[str], Reads] | None
+) -> tuple | None:
+    if dependencies is None:
+        return None
+    names, reads = dependencies
+    if (
+        names
+        - RESOURCES
+        - {
+            "flags",
+            "statuses",
+            "counters",
+            "has_flag",
+            "has_status",
+            "has_pending",
+            "true",
+            "false",
+        }
+    ):
+        return None
+    try:
+        values = tuple(
+            comparison_key(
+                float(state.counters.get(name.removeprefix("counters."), 0))
+                if name.startswith("counters.")
+                else getattr(state, name),
+                comparisons,
+            )
+            for name, comparisons in reads.items()
+        )
+    except (ValueError, TypeError, OverflowError):
+        # Let the evaluator handle invalid values, including unread branches.
+        return None
+    return (
+        values,
+        frozenset(state.flags) if names & {"flags", "has_flag"} else None,
+        frozenset(state.statuses) if names & {"statuses", "has_status"} else None,
+        frozenset(_pending_labels(state)) if "has_pending" in names else None,
+    )
 
 
 def _is_offer_eligible_internal(
@@ -511,21 +589,38 @@ def client_encounter_probabilities(
                 _evaluate_gratefulbinger_probability(state, data),
             )
     else:
-        weights = {}
-        for key in model.eligible_offers(state, data):
-            offer = data.offers_by_id[key]
-            weight = offer.encounter_weight
-            if isinstance(model, WeightedEncounterModel):
-                weight *= model.npc_weights.get(
-                    offer.npc_id, 1
-                ) * model.offer_weights.get(key, 1)
-                weight = _apply_modifiers(weight, offer, state.encounter_modifiers)
-            elif isinstance(model, LearnedEncounterModel):
-                weight = model.priors.get(key, 1) * weight + model.counts.get(key, 0)
-                weight = _apply_modifiers(weight, offer, state.encounter_modifiers)
-            if weight > 0:
-                weights[key] = weight
-        distribution = _normalize_weights(weights)
+        eligible = model.eligible_offers(state, data)
+        if type(model) is UniformEncounterModel:
+            index = _encounter_index(data)
+            key = tuple(eligible)
+            proposal = index.proposals.get(key)
+            if proposal is None:
+                weights = {
+                    key: data.offers_by_id[key].encounter_weight
+                    for key in eligible
+                    if data.offers_by_id[key].encounter_weight > 0
+                }
+                proposal = tuple(_normalize_weights(weights).items())
+                _remember(index.proposals, key, proposal)
+            distribution = dict(proposal)
+        else:
+            weights = {}
+            for key in eligible:
+                offer = data.offers_by_id[key]
+                weight = offer.encounter_weight
+                if isinstance(model, WeightedEncounterModel):
+                    weight *= model.npc_weights.get(
+                        offer.npc_id, 1
+                    ) * model.offer_weights.get(key, 1)
+                    weight = _apply_modifiers(weight, offer, state.encounter_modifiers)
+                elif isinstance(model, LearnedEncounterModel):
+                    weight = model.priors.get(key, 1) * weight + model.counts.get(
+                        key, 0
+                    )
+                    weight = _apply_modifiers(weight, offer, state.encounter_modifiers)
+                if weight > 0:
+                    weights[key] = weight
+            distribution = _normalize_weights(weights)
         if "bean_loan_payback" in _pending_labels(state):
             proposal = {}
             for row in (27, 28, 29):

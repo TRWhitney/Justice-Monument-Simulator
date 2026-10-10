@@ -215,3 +215,22 @@ def test_cache_remains_usable_after_worker_serialization(builtin_data, monkeypat
     assert restored.can_preserve_health(
         state, restored.data.offers_by_id[offer.id], "approve"
     )
+
+
+def test_simple_probes_reuse_payment_regions(builtin_data, monkeypatch):
+    offer = next(o for o in builtin_data.offers if o.title == "Harbinger: Heart Attack")
+    cache = HealthProbeCache(builtin_data)
+    state = GameState(15, 100, 20, 3, 2, 0)
+    calls = []
+    original = reducer.action_preserves_health
+
+    def counted(*args):
+        calls.append(args)
+        return original(*args)
+
+    monkeypatch.setattr(reducer, "action_preserves_health", counted)
+    assert cache.can_preserve_health(state, offer, "approve")
+    assert cache.can_preserve_health(replace(state, coins=1000), offer, "approve")
+    assert len(calls) == 1
+    assert not cache.can_preserve_health(replace(state, coins=0), offer, "approve")
+    assert len(calls) == 2

@@ -199,7 +199,16 @@ def _client_harbinger_risk(
     for key, probability in distribution.items():
         offer = data.offers_by_id[key]
         safe = False
-        for action in offer.actions_available:
+        # Safety is an existential test with an independent Rng(0) per action.
+        # Probe dismissal first: its narrow cached balance often establishes
+        # safety without evaluating an approval's payment and contract effects.
+        actions = offer.actions_available
+        if "dismiss" in actions:
+            actions = (
+                "dismiss",
+                *(action for action in actions if action != "dismiss"),
+            )
+        for action in actions:
             try:
                 safe = (
                     health_probe(state, offer, action)

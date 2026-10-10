@@ -2,7 +2,12 @@
 
 from collections import OrderedDict
 
-from justice_sim.engine.effects import MAIN_RESOURCES, is_case_only_value
+from justice_sim.engine.effects import (
+    MAIN_RESOURCES,
+    is_case_only_value,
+    outcome_additive_resource_cost,
+)
+from justice_sim.engine.rng import Rng
 from justice_sim.engine import reducer
 from justice_sim.models.offer import JusticeData, OfferSpec
 from justice_sim.models.state import GameState
@@ -110,15 +115,37 @@ class HealthProbeCache:
                 for t in state.action_triggers
             )
         ):
+            # For these proved case-only resource operations, non-health
+            # balances affect safety only through payment eligibility and the
+            # base Harbinger unpaid check. Use the reducer's own checks after
+            # arrival, retaining exact MH and its floor for health comparisons.
+            arrived = (
+                reducer.preview_state_after_encounter_triggers(
+                    state, offer, self.data, Rng(0)
+                )
+                if offer.arrival_effects
+                else state
+            )
+            unpaid = (
+                action == "approve"
+                and offer.id == self.data.special_rules.harbinger.offer_id
+                and arrived.coins
+                < outcome_additive_resource_cost(
+                    arrived, offer.approve, "coins", self.data
+                )
+            )
             key = (
                 offer.id,
                 action,
                 state.case_index,
-                state.ended,
-                tuple(getattr(state, resource) for resource in resources),
-                tuple(state.resource_floors.get(resource) for resource in resources),
-                f"cannot_{action}" in state.statuses,
-                "cannot_dismiss_harbinger" in state.statuses
+                state.mh,
+                arrived.mh,
+                arrived.ended,
+                arrived.resource_floors.get("mh"),
+                reducer.can_afford_action(arrived, offer, action, self.data),
+                unpaid,
+                f"cannot_{action}" in arrived.statuses,
+                "cannot_dismiss_harbinger" in arrived.statuses
                 if action == "dismiss"
                 else False,
             )

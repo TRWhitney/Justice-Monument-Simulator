@@ -1,0 +1,114 @@
+{
+  "runs": [
+    {
+      "version": "before",
+      "seconds": 13.207911096978933,
+      "hash": "b3ae0eb38bab53acbdac0eb8657f8bf542b7835adb78561f3b035fe1e327ade6",
+      "samples": {
+        "approve": 32,
+        "reject": 32,
+        "dismiss": 32
+      }
+    },
+    {
+      "version": "after",
+      "seconds": 12.200817349017598,
+      "hash": "b3ae0eb38bab53acbdac0eb8657f8bf542b7835adb78561f3b035fe1e327ade6",
+      "samples": {
+        "approve": 32,
+        "reject": 32,
+        "dismiss": 32
+      }
+    },
+    {
+      "version": "before",
+      "seconds": 12.54490700806491,
+      "hash": "b3ae0eb38bab53acbdac0eb8657f8bf542b7835adb78561f3b035fe1e327ade6",
+      "samples": {
+        "approve": 32,
+        "reject": 32,
+        "dismiss": 32
+      }
+    },
+    {
+      "version": "after",
+      "seconds": 12.33301975496579,
+      "hash": "b3ae0eb38bab53acbdac0eb8657f8bf542b7835adb78561f3b035fe1e327ade6",
+      "samples": {
+        "approve": 32,
+        "reject": 32,
+        "dismiss": 32
+      }
+    },
+    {
+      "version": "before",
+      "seconds": 13.017383746919222,
+      "hash": "b3ae0eb38bab53acbdac0eb8657f8bf542b7835adb78561f3b035fe1e327ade6",
+      "samples": {
+        "approve": 32,
+        "reject": 32,
+        "dismiss": 32
+      }
+    },
+    {
+      "version": "after",
+      "seconds": 12.532218324951828,
+      "hash": "b3ae0eb38bab53acbdac0eb8657f8bf542b7835adb78561f3b035fe1e327ade6",
+      "samples": {
+        "approve": 32,
+        "reject": 32,
+        "dismiss": 32
+      }
+    }
+  ],
+  "medians": {
+    "before": 13.017383746919222,
+    "after": 12.33301975496579
+  },
+  "reference_commit": "adfec5317f25b6cafeaaf9c32ec4c224549e58fa",
+  "python": "3.12.3",
+  "workload": {
+    "offer": "Scripticus: Kitchen Loan",
+    "state": {
+      "case_index": 11,
+      "coins": 50,
+      "pop": 20,
+      "mh": 8,
+      "dismissals": 2,
+      "retirement_chests": 0
+    },
+    "seed": 42,
+    "horizon_cases": 20,
+    "rollouts_per_action": 32,
+    "adaptive_rollouts": false,
+    "risk_preset": "balanced"
+  },
+  "incremental": {
+    "batch_size": 1,
+    "first_update_seconds": 0.3874606320168823,
+    "total_seconds": 12.630343173979782,
+    "first_sample_counts": {
+      "approve": 1,
+      "reject": 1,
+      "dismiss": 1
+    },
+    "final_sample_counts": {
+      "approve": 32,
+      "reject": 32,
+      "dismiss": 32
+    },
+    "hash": "b3ae0eb38bab53acbdac0eb8657f8bf542b7835adb78561f3b035fe1e327ade6"
+  },
+  "profile": {
+    "before": {
+      "recommendation_seconds": 32.95903977798298,
+      "health_probe_calls": 243688,
+      "health_probe_cumulative_seconds": 10.499
+    },
+    "after": {
+      "recommendation_seconds": 30.54601462301798,
+      "health_probe_calls": 139266,
+      "health_probe_cumulative_seconds": 8.221
+    }
+  }
+}

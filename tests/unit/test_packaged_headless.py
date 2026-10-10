@@ -129,6 +129,8 @@ def main():
     offer = next(o for o in data.offers if o.npc_id == 'the_gratefulbinger')
     result = planner.recommend(GameState(5, 100, 20, 8, 2, 0), offer, arrival_processed=True)
     assert result.best_action == 'approve'
+    fast = list(planner.recommend_incremental(GameState(5, 100, 20, 8, 2, 0), offer))
+    assert len(fast) == 1 and fast[0].decision_final and fast[0].complete
     assert not any(name.startswith('PySide6') for name in sys.modules)
     config = PlannerConfig(horizon_cases=2, rollouts_per_action=2, adaptive_rollouts=False)
     planner = RolloutPlanner(data, config, suggested_rules=rules, seed=42)
@@ -137,6 +139,17 @@ def main():
     actual = planner.recommend(GameState(11, 50, 20, 8, 2, 0), offer, workers=2, pacing=PacingConfig(work_ms=1))
     assert actual == expected
     assert [s.utility_samples for s in actual.action_scores] == [s.utility_samples for s in expected.action_scores]
+    from dataclasses import replace
+    from justice_sim.models.offer import EffectSpec, OutcomeSpec
+    forced = replace(offer, payment_resource='coins',
+        approve=OutcomeSpec((EffectSpec('add_resource', {'resource': 'coins', 'amount': -5}),)),
+        reject=OutcomeSpec())
+    state = GameState(11, 2, 20, 8, 0, 0)
+    updates = planner.recommend_incremental(state, forced, workers=2, pacing=PacingConfig())
+    first = next(updates)
+    assert first.best_action == 'reject' and first.decision_final
+    assert not first.complete and first.action_scores == ()
+    updates.close()
 if __name__ == '__main__':
     main()
 """

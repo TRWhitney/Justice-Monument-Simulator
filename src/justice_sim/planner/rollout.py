@@ -91,11 +91,12 @@ class PlannerRecommendation:
 
 @dataclass(frozen=True)
 class PlannerUpdate:
-    """An immutable estimate; cancelled updates are incomplete terminal updates."""
+    """A settled decision can precede its estimates; cancellation is incomplete."""
 
     recommendation: PlannerRecommendation
     complete: bool = False
     cancelled: bool = False
+    decision_final: bool = False
 
     @property
     def best_action(self) -> str | None:
@@ -309,6 +310,8 @@ class RolloutPlanner:
         workers=1 runs locally; larger values spawn decision-local CPU workers.
         The iterator owns the workers, so close it when abandoning iteration.
         Optional pacing counts sampling CPU work, excluding time between updates.
+        A sole eligible action is yielded before sampling with decision_final=True
+        and no scores. Continue iteration for estimates or close to avoid work.
         """
         validate_workers(self, workers)
         validate_pacing(pacing)
@@ -331,13 +334,14 @@ class RolloutPlanner:
                     None, tuple(self._deterministic_action_scores(state, offer, **root))
                 ),
                 complete=True,
+                decision_final=True,
             )
             return
         fast = self._fast_path_recommendation(
             state, offer, eligible_actions=eligible, evaluated=evaluated, **root
         )
         if fast is not None:
-            yield PlannerUpdate(fast, complete=True)
+            yield PlannerUpdate(fast, complete=True, decision_final=True)
             return
         raw: list[ActionScore] = []
         actions = eligible
@@ -345,6 +349,14 @@ class RolloutPlanner:
         budget = self.config.rollouts_per_action
         latest = empty
         abandoned = False
+        decision_final = len(eligible) == 1
+        if decision_final:
+            latest = PlannerRecommendation(eligible[0], ())
+            yield PlannerUpdate(latest, decision_final=True)
+            # A consumer can stop at the decision before any worker is started.
+            if cancelled and cancelled():
+                yield PlannerUpdate(latest, cancelled=True, decision_final=True)
+                return
         pacer = CpuPacer(pacing) if pacing is not None and workers == 1 else None
         with sampling_executor(
             self, state, offer, root.get("encounter_start"), workers, pacing
@@ -398,7 +410,7 @@ class RolloutPlanner:
                         [replace(score, utility_samples=()) for score in current],
                         eligible,
                     )
-                    yield PlannerUpdate(latest)
+                    yield PlannerUpdate(latest, decision_final=decision_final)
                 if abandoned:
                     break
                 additions = {
@@ -437,7 +449,12 @@ class RolloutPlanner:
                     break
                 start = self.config.rollouts_per_action
                 budget = self.config.adaptive_rollouts_max - start
-        yield PlannerUpdate(latest, complete=not abandoned, cancelled=abandoned)
+        yield PlannerUpdate(
+            latest,
+            complete=not abandoned,
+            cancelled=abandoned,
+            decision_final=decision_final or not abandoned,
+        )
 
     def _recommendation_from_scores(
         self,

@@ -81,12 +81,44 @@ for update in updates:
         final = update.recommendation
 ```
 
-Each immutable `PlannerUpdate` contains `recommendation`, `complete` and
-`cancelled`, plus convenience accessors `best_action` and `action_scores`.
+Each immutable `PlannerUpdate` contains `recommendation`, `complete`,
+`cancelled` and `decision_final`, plus convenience accessors `best_action` and
+`action_scores`.
 Each `ActionScore` contains the action, sample count, expected utility, expected
 chests, death probability and variance. Excluded actions have zero samples and
 utility `-inf`. Exact shortcuts have zero Monte Carlo samples and can complete
 in a single update.
+
+`decision_final=True` means the planner will not revise its recommended action
+for the supplied decision input. `complete=True` means the configured statistics
+calculation finished. Completion of sampled work does not prove the action is
+optimal or eliminate forecast uncertainty.
+
+When eligibility leaves one action, the first update arrives before sampling or
+worker startup, with that action, `decision_final=True`, `complete=False` and
+`action_scores=()`. The empty tuple means statistics are not available yet.
+Continue iteration to receive forecasts with the same final action and unchanged
+sampling budgets. Close the iterator immediately if only the action is needed:
+
+```python
+from contextlib import closing
+
+with closing(
+    planner.recommend_incremental(state, offer, arrival_processed=True)
+) as updates:
+    for update in updates:
+        if update.decision_final:
+            action = update.best_action
+            break
+```
+
+Competing actions remain provisional during sampling. Successful completion and
+exact shortcuts set both flags. A completed decision with no eligible action has
+`best_action=None` and both flags set. Cancellation preserves a previously final
+sole-action decision and any collected estimates; cancellation before eligibility
+or during competing-action sampling leaves `decision_final=False`. Always
+invalidate updates when the input state changes. The synchronous API continues
+to calculate its existing scores before returning.
 
 `batch_size` defaults to one sample per active action. A batch with three active
 actions can execute three samples. Larger batches reduce reporting overhead but
@@ -206,3 +238,6 @@ immediately. The synchronous progress callback receives aggregate increments for
 completed samples in each parallel batch; its sum is the completed sample count.
 The temporary-install test also runs real CPU sampling with Qt imports blocked
 in the parent and spawned workers.
+
+See [settled decisions](../adr/0025-report-settled-actions-before-forecasts.md)
+for the distinction between action finality and statistics completion.

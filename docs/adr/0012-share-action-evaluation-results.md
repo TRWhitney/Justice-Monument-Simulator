@@ -17,6 +17,10 @@ Retain ADR 0007's deterministic transition reuse guards: a single expanded
 random branch still consumes the real rollout RNG when executed. ADR 0006's
 two-continuation policy and horizon remain unchanged for competing actions.
 
+[ADR 0025](0025-report-settled-actions-before-forecasts.md) refines the root
+interface: incremental consumers can receive a settled sole action before its
+scores and close to avoid forecasting. Continuing retains configured root scores.
+
 ## Alternatives
 
 Review and export the existing

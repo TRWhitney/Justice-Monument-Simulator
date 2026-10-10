@@ -64,3 +64,33 @@ The script reports parent CPU and, where available, completed-child CPU separate
 Multi-worker total CPU is unavailable on platforms without child accounting;
 parent CPU alone is never reported as the worker total. Raw output, archives and
 profiles are disposable.
+
+## CPU pacing
+
+The bounded pacing experiment used the same fixed workload with fresh
+subprocesses, three rotated passes per setting and two-second gaps. A temporary
+action-selection hook checked thread CPU time, including continuation decisions.
+Imports and setup preceded the recommendation timers. All twelve complete
+recommendations and utility samples matched.
+
+| Pacing after about 50 ms CPU | Median elapsed | Median CPU | Median core busy | Median run-average package temperature |
+| --- | ---: | ---: | ---: | ---: |
+| None | 7.055 s | 7.053 s | 99.9% | 67.4°C |
+| Timer only | 7.039 s | 7.035 s | 99.9% | 67.5°C |
+| 2 ms | 7.505 s | 7.205 s | 96.0% | 66.2°C |
+| 5 ms | 7.999 s | 7.261 s | 90.8% | 62.2°C |
+
+CPU duty is CPU seconds divided by elapsed seconds, relative to one core.
+The 5 ms pauses added 0.944 s, or 13.4%, without reducing measured CPU work.
+Actual sleeps averaged 5.08 ms. The timer-only control stayed within timing
+variation. Whitney selected 5 ms as the configurable default duration when pacing
+is enabled. Existing calls remain unpaced.
+
+Package temperature was sampled every 200 ms across each subprocess lifetime,
+including startup. Unpaced peaks ranged from 74–79°C; 5 ms peaks ranged from
+73–75°C. Short runs, incomplete order balancing, thermal carryover, migration and
+host activity limit attribution. Lower observed averages do not prove cooling
+during sustained Idleon play. The [Linux sensor documentation](https://docs.kernel.org/hwmon/coretemp.html)
+describes the package readings.
+
+This experiment does not predict multi-worker temperature or power.

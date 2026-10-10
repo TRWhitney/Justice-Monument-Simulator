@@ -27,7 +27,11 @@ from justice_sim.engine.reducer import (
     preview_state_before_outcome,
 )
 from justice_sim.engine.rng import Rng
-from justice_sim.engine.scoring import RiskEvaluator, utility, weights_for_preset
+from justice_sim.engine.scoring import (
+    RiskEvaluator,
+    utility,
+    weights_for_preset,
+)
 from justice_sim.models.offer import (
     BernoulliSpec,
     CategoricalSpec,
@@ -125,16 +129,28 @@ class RolloutPlanner:
         state: GameState,
         offer: OfferSpec,
         progress: Callable[[int], None] | None = None,
+        *,
+        arrival_processed: bool = False,
     ) -> PlannerRecommendation:
-        evaluated = self._evaluate_actions(state, offer)
-        eligible_actions = self._eligible_actions(state, offer, results=evaluated)
+        """Recommend from a pre-arrival state, or an already processed arrival.
+
+        Prepared callers have applied arrival effects and consumed the current
+        encounter's overrides. Remaining contracts belong to future encounters.
+        """
+        root = self._root_context(state, arrival_processed)
+        evaluated = self._evaluate_actions(state, offer, **root)
+        eligible_actions = self._eligible_actions(
+            state, offer, results=evaluated, **root
+        )
         if not eligible_actions:
             return PlannerRecommendation(
                 best_action=None,
-                action_scores=tuple(self._deterministic_action_scores(state, offer)),
+                action_scores=tuple(
+                    self._deterministic_action_scores(state, offer, **root)
+                ),
             )
         fast_path = self._fast_path_recommendation(
-            state, offer, eligible_actions=eligible_actions, evaluated=evaluated
+            state, offer, eligible_actions=eligible_actions, evaluated=evaluated, **root
         )
         if fast_path is not None:
             return fast_path
@@ -144,6 +160,7 @@ class RolloutPlanner:
             self.config.rollouts_per_action,
             progress=progress,
             actions=eligible_actions,
+            **root,
         )
         scores = self._apply_action_biases(state, offer, raw_scores)
         while (
@@ -170,6 +187,7 @@ class RolloutPlanner:
                 progress=progress,
                 actions=adaptive_actions,
                 rollout_start=self.config.rollouts_per_action,
+                **root,
             )
             additions_by_action = {score.action: score for score in additional_scores}
             raw_scores = [
@@ -209,13 +227,18 @@ class RolloutPlanner:
         *,
         eligible_actions: tuple[str, ...],
         evaluated: ActionResults | None = None,
+        encounter_start: GameState | None = None,
     ) -> PlannerRecommendation | None:
         terminal = self._is_terminal_offer_state(state, offer, evaluated=evaluated)
         upside_action = (
             None
             if terminal
             else self._guaranteed_upside_action(
-                state, offer, eligible_actions=eligible_actions, evaluated=evaluated
+                state,
+                offer,
+                eligible_actions=eligible_actions,
+                evaluated=evaluated,
+                encounter_start=encounter_start,
             )
         )
         if not terminal and upside_action is None:
@@ -330,9 +353,28 @@ class RolloutPlanner:
         self.cache = ValueCache()
         self._risk_evaluator = RiskEvaluator(self.data)
 
-    def rollout_work_total(self, state: GameState, offer: OfferSpec) -> int:
+    @staticmethod
+    def _root_context(
+        state: GameState, arrival_processed: bool
+    ) -> dict[str, GameState]:
+        # An empty start set tells the reducer that remaining overrides must not
+        # be consumed at this root. The supplied state itself keeps every contract.
         return (
-            len(self._eligible_actions(state, offer)) * self.config.rollouts_per_action
+            {"encounter_start": replace_state(state, encounter_overrides=())}
+            if arrival_processed
+            else {}
+        )
+
+    def rollout_work_total(
+        self, state: GameState, offer: OfferSpec, *, arrival_processed: bool = False
+    ) -> int:
+        return (
+            len(
+                self._eligible_actions(
+                    state, offer, **self._root_context(state, arrival_processed)
+                )
+            )
+            * self.config.rollouts_per_action
         )
 
     def _score_actions(
@@ -344,6 +386,7 @@ class RolloutPlanner:
         progress: Callable[[int], None] | None = None,
         actions: tuple[str, ...] | None = None,
         rollout_start: int = 0,
+        encounter_start: GameState | None = None,
     ) -> list[ActionScore]:
         scores: list[ActionScore] = []
         selected_actions = offer.actions_available if actions is None else actions
@@ -360,6 +403,7 @@ class RolloutPlanner:
                     action_indexes[action],
                     progress=progress,
                     rollout_start=rollout_start,
+                    encounter_start=encounter_start,
                 )
             )
         return scores
@@ -374,30 +418,56 @@ class RolloutPlanner:
         *,
         progress: Callable[[int], None] | None = None,
         rollout_start: int = 0,
+        encounter_start: GameState | None = None,
     ) -> ActionScore:
-        utilities: list[float] = []
-        chests: list[float] = []
-        deaths = 0
-        for rollout_index in range(rollout_start, rollout_start + rollouts):
-            rng = self.rng.spawn(rollout_index)
-            try:
-                next_state, _ = apply_action(state, offer, action, self.data, rng)
-            except ActionNotAllowed:
-                # Do not condition the estimate on only successful random arrivals.
-                next_state = self._dead_end(
-                    preview_state_after_encounter_triggers(
-                        state, offer, self.data, self.rng.spawn(rollout_index)
-                    )
+        samples = []
+        for index in range(rollout_start, rollout_start + rollouts):
+            samples.append(
+                self._sample_rollout(
+                    state, offer, action, index, encounter_start=encounter_start
                 )
-            terminal_state = self._simulate_future(
-                next_state, rng, self.config.horizon_cases
             )
-            utilities.append(utility(terminal_state, self.data, self.weights))
-            chests.append(terminal_state.retirement_chests)
-            if terminal_state.ended or terminal_state.mh <= 0:
-                deaths += 1
             if progress:
                 progress(1)
+        return self._summarize_samples(action, samples)
+
+    def _sample_rollout(
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        action: str,
+        index: int,
+        *,
+        encounter_start: GameState | None = None,
+    ) -> tuple[float, float, bool]:
+        rng = self.rng.spawn(index)
+        try:
+            next_state, _ = apply_action(
+                state, offer, action, self.data, rng, encounter_start=encounter_start
+            )
+        except ActionNotAllowed:
+            arrived = (
+                state
+                if encounter_start is not None
+                else preview_state_after_encounter_triggers(
+                    state, offer, self.data, self.rng.spawn(index)
+                )
+            )
+            next_state = self._dead_end(arrived)
+        terminal = self._simulate_future(next_state, rng, self.config.horizon_cases)
+        return (
+            utility(terminal, self.data, self.weights),
+            terminal.retirement_chests,
+            terminal.ended or terminal.mh <= 0,
+        )
+
+    @staticmethod
+    def _summarize_samples(
+        action: str, samples: list[tuple[float, float, bool]]
+    ) -> ActionScore:
+        utilities = [sample[0] for sample in samples]
+        chests = [sample[1] for sample in samples]
+        deaths = sum(sample[2] for sample in samples)
         if not utilities:
             return ActionScore(
                 action=action,
@@ -630,11 +700,14 @@ class RolloutPlanner:
         *,
         eligible_actions: tuple[str, ...],
         evaluated: ActionResults | None = None,
+        encounter_start: GameState | None = None,
     ) -> str | None:
         profiles: dict[str, tuple[str, tuple]] = {}
         next_states = []
         for action in eligible_actions:
-            if not self._action_is_possible(state, offer, action):
+            if not self._action_is_possible(
+                state, offer, action, encounter_start=encounter_start
+            ):
                 continue
             results = (
                 self._exact_action_results(state, offer, action)
@@ -1084,11 +1157,17 @@ class RolloutPlanner:
         return True
 
     def _deterministic_action_scores(
-        self, state: GameState, offer: OfferSpec
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        *,
+        encounter_start: GameState | None = None,
     ) -> list[ActionScore]:
         scores: list[ActionScore] = []
         for action in offer.actions_available:
-            preview = self._action_preview(state, offer, action)
+            preview = self._action_preview(
+                state, offer, action, encounter_start=encounter_start
+            )
             if preview is None:
                 scores.append(
                     ActionScore(
@@ -1115,11 +1194,18 @@ class RolloutPlanner:
         return scores
 
     def _action_preview(
-        self, state: GameState, offer: OfferSpec, action: str
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        action: str,
+        *,
+        encounter_start: GameState | None = None,
     ) -> tuple[GameState, int] | None:
         rng = Rng(0)
         try:
-            next_state, _ = apply_action(state, offer, action, self.data, rng)
+            next_state, _ = apply_action(
+                state, offer, action, self.data, rng, encounter_start=encounter_start
+            )
         except ActionNotAllowed:
             return None
         return next_state, rng.state().draws

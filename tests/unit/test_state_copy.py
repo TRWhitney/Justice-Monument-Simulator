@@ -114,3 +114,12 @@ def test_all_builtin_transitions_match_general_copy(builtin_data, monkeypatch):
     for module in modules:
         monkeypatch.setattr(module, "replace_state", replace)
     assert transitions() == optimized
+
+
+def test_copy_preserves_values_after_instance_field_order_changes():
+    state = _state()
+    # Same declared fields, but a restored/extended instance need not have the
+    # constructor's dictionary insertion order.
+    coins = state.__dict__.pop("coins")
+    state.__dict__["coins"] = coins
+    assert replace_state(state, coins=30) == replace(state, coins=30)

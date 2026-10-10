@@ -287,7 +287,8 @@ class GameState:
         )
 
 
-_STATE_FIELDS = frozenset(f.name for f in fields(GameState))
+_STATE_FIELD_ORDER = tuple(f.name for f in fields(GameState))
+_STATE_FIELDS = frozenset(_STATE_FIELD_ORDER)
 
 
 def replace_state(state: GameState, /, **changes: Any) -> GameState:
@@ -297,6 +298,10 @@ def replace_state(state: GameState, /, **changes: Any) -> GameState:
     Subclasses and instances carrying extra attributes use the general path;
     derived attributes must never become constructor arguments or cached state.
     """
-    if type(state) is GameState and state.__dict__.keys() == _STATE_FIELDS:
-        return GameState(**(state.__dict__ | changes))
+    if (
+        type(state) is GameState
+        and tuple(state.__dict__) == _STATE_FIELD_ORDER
+        and changes.keys() <= _STATE_FIELDS
+    ):
+        return GameState(*(state.__dict__ | changes).values())
     return replace(state, **changes)

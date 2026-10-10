@@ -15,6 +15,9 @@ Subclasses and instances with additional or missing attributes use
 `dataclasses.replace`. Extra derived attributes must not enter the constructor or
 be copied as cached state. Field names are derived from the dataclass definition.
 Unknown replacement names continue to fail through constructor validation.
+[ADR 0023](0023-reuse-exact-predicate-inputs.md) uses positional arguments when
+stored field order matches the dataclass definition. Reordered instances retain
+general replacement.
 Other dataclass records retain their existing replacement path.
 
 ## Alternatives

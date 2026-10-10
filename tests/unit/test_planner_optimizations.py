@@ -163,3 +163,28 @@ def test_risk_cache_is_bounded_and_data_specific(builtin_data):
             state, builtin_data
         )
     assert len(evaluator._cache) + len(evaluator._pool_safety._cache) == 2
+
+
+def test_deterministic_health_effects_skip_next_state_bookkeeping(
+    builtin_data, monkeypatch
+):
+    from justice_sim.engine import reducer
+
+    state = GameState(12, 100, 20, 3, 2, 0)
+    offer = replace(
+        builtin_data.offers[0],
+        chain=None,
+        approve=OutcomeSpec(
+            effects=(EffectSpec("add_resource", {"resource": "mh", "amount": 2}),)
+        ),
+    )
+    expected = _reference_health(state, offer, "approve", builtin_data)
+
+    def unnecessary(*args, **kwargs):
+        pytest.fail("A health-only probe should not advance an event-free case")
+
+    monkeypatch.setattr(reducer, "advance_case", unnecessary)
+    assert (
+        reducer.action_preserves_health(state, offer, "approve", builtin_data)
+        == expected
+    )

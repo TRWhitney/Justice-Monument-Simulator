@@ -244,8 +244,12 @@ def action_preserves_health(
     outcome = _select_outcome(offer, action)
     rng = Rng(0)
     prepared = preview_state_before_outcome(state, offer, action, data, rng)
+    changes_health = any(
+        effect.params.get("resource") == "mh" for effect in outcome.effects
+    )
     simple = (
         outcome.random is None
+        and (not changes_health or not offer.chain)
         and all(
             effect.schedule_after_cases is None
             and (
@@ -257,7 +261,7 @@ def action_preserves_health(
                         "multiply_resource",
                         "clamp_resource",
                     }
-                    and effect.params.get("resource") in MAIN_RESOURCES - {"mh"}
+                    and effect.params.get("resource") in MAIN_RESOURCES
                 )
                 or effect.type in {"set_counter", "increment_counter", "clear_counter"}
             )
@@ -285,6 +289,11 @@ def action_preserves_health(
         )
     )
     if simple:
+        if changes_health:
+            # Preserve sequential guards, rounding and resource/counter inputs.
+            # With no chain, later triggers or due events, action history and
+            # case advancement cannot affect the health result.
+            prepared = apply_effects(prepared, outcome.effects, data, rng)
         return (
             normalized_action_resource(prepared, "mh", data) >= state.mh
             and not prepared.ended

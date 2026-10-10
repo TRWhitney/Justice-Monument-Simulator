@@ -8,6 +8,7 @@ import pytest
 
 from justice_sim.engine.encounter import LearnedEncounterModel, WeightedEncounterModel
 from justice_sim.models.state import GameState
+from justice_sim.headless import PacingConfig
 from justice_sim.planner.rollout import PlannerConfig, RolloutPlanner
 
 pytestmark = pytest.mark.unit
@@ -207,4 +208,29 @@ def test_parallel_progress_callback_failure_releases_workers(builtin_data):
 
     with pytest.raises(RuntimeError):
         planner.recommend(state, offer, workers=2, progress=fail)
+    assert not ({p.pid for p in multiprocessing.active_children()} - before)
+
+
+def test_paced_workers_preserve_adaptive_results_and_cancel(builtin_data):
+    from dataclasses import asdict
+
+    offer, state, config = worker_case(builtin_data)
+    planner = RolloutPlanner(builtin_data, config, seed=42)
+    expected = planner.recommend(state, offer, arrival_processed=True)
+    pacing = PacingConfig(pause_ms=2, work_ms=1)
+    actual = planner.recommend(
+        state, offer, workers=2, arrival_processed=True, pacing=pacing
+    )
+    assert asdict(actual) == asdict(expected)
+    before = {p.pid for p in multiprocessing.active_children()}
+    stop = Event()
+    updates = planner.recommend_incremental(
+        state, offer, workers=2, pacing=pacing, cancelled=stop.is_set
+    )
+    first = next(updates)
+    stop.set()
+    final = next(updates)
+    assert final.cancelled and not final.complete
+    assert asdict(final.recommendation) == asdict(first.recommendation)
+    assert list(updates) == []
     assert not ({p.pid for p in multiprocessing.active_children()} - before)

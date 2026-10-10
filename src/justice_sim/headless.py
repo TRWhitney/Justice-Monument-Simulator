@@ -8,6 +8,7 @@ from justice_sim.config import (
 )
 from justice_sim.models.offer import JusticeData, OfferSpec
 from justice_sim.models.state import GameState
+from justice_sim.planner.pacing import PacingConfig
 from justice_sim.planner.rollout import (
     ActionScore,
     PlannerConfig,
@@ -21,6 +22,7 @@ __all__ = [
     "GameState",
     "JusticeData",
     "OfferSpec",
+    "PacingConfig",
     "PlannerConfig",
     "PlannerRecommendation",
     "PlannerUpdate",

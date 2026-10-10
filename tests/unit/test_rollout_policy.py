@@ -123,9 +123,11 @@ def test_extra_policy_work_is_bounded_and_does_not_recurse(data_factory, monkeyp
     depths = []
     simulate = planner._simulate_future
 
-    def record(state, rng, remaining, *, improve_policy=True):
+    def record(state, rng, remaining, *, improve_policy=True, pacer=None):
         depths.append((remaining, improve_policy))
-        return simulate(state, rng, remaining, improve_policy=improve_policy)
+        return simulate(
+            state, rng, remaining, improve_policy=improve_policy, pacer=pacer
+        )
 
     monkeypatch.setattr(planner, "_simulate_future", record)
     planner._select_action(state, offer, Rng(1), remaining=2)

@@ -76,7 +76,8 @@ def test_enumerated_policy_keeps_full_depth_and_paired_independent_streams(
     branches = [(replace(state, coins=110), 0.9), (replace(state, coins=90), 0.1)]
     calls = []
 
-    def simulate(branch, rng, remaining, *, improve_policy=True):
+    def simulate(branch, rng, remaining, *, improve_policy=True, pacer=None):
+        assert pacer is None
         calls.append((branch.coins, rng.state(), remaining, improve_policy))
         rng.random()
         return branch
@@ -166,7 +167,8 @@ def test_unexpanded_random_preparation_keeps_sampled_full_continuations(
     assert planner._exact_action_results(state, offer, "approve") is None
     calls = []
 
-    def simulate(next_state, rng, remaining, *, improve_policy=True):
+    def simulate(next_state, rng, remaining, *, improve_policy=True, pacer=None):
+        assert pacer is None
         calls.append((next_state, rng.state(), remaining, improve_policy))
         return next_state
 

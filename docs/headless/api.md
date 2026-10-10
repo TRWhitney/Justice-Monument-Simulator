@@ -110,6 +110,45 @@ on its own worker thread and pass immutable updates to its display thread.
 The existing synchronous `progress` callback still receives one increment per
 completed sample.
 
+## Optional CPU pacing
+
+Both recommendation APIs accept `pacing=None`, leaving existing GUI and CLI
+calls unpaced. Enable it with the public `PacingConfig`:
+
+```python
+from justice_sim.headless import PacingConfig
+
+recommendation = planner.recommend(
+    state, offer, arrival_processed=True, pacing=PacingConfig()
+)
+updates = planner.recommend_incremental(
+    state,
+    offer,
+    arrival_processed=True,
+    pacing=PacingConfig(pause_ms=5, work_ms=50),
+    cancelled=obsolete.is_set,
+)
+```
+
+`PacingConfig()` defaults to a 5 ms pause after approximately 50 ms of sampling
+CPU work. Both durations are configurable, finite, positive milliseconds.
+Checks occur before simulated action selection, including continuation
+simulations. An individual computation can exceed the interval; this is
+cooperative pacing, not a strict maximum computation burst. Actual sleeps can
+last longer than requested under OS scheduling.
+
+Each decision owns its pacing budget. Each spawned worker independently applies
+the same configuration to its own CPU work. Time spent sleeping, waiting for
+worker jobs, or handling incremental updates does not advance the budget.
+Cancellation remains checked between batches, and iterator close still releases
+workers. Pacing does not change risk, horizon, samples, adaptive boundaries or
+seeded results. Use a consuming thread for the overlay because pauses block the
+thread calculating a rollout.
+
+Pacing spreads CPU work over more elapsed time; it does not reduce computation.
+See the [pacing experiment](latency.md#cpu-pacing) and
+[execution choices](../adr/planner-execution-options.html).
+
 ## Verification and latency
 
 The package regression test builds a wheel, installs it with locked dependencies

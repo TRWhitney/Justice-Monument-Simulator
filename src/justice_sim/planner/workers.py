@@ -17,13 +17,17 @@ from justice_sim.models.offer import JusticeData, OfferSpec
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.engine.scoring import UtilityWeights
 from justice_sim.models.state import GameState
+from justice_sim.planner.pacing import CpuPacer, PacingConfig
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from justice_sim.planner.rollout import PlannerConfig, RolloutPlanner
 
 # Each spawned process owns one immutable decision and its own planner caches.
-_decision: tuple[RolloutPlanner, GameState, OfferSpec, GameState | None] | None = None
+_decision: (
+    tuple[RolloutPlanner, GameState, OfferSpec, GameState | None, CpuPacer | None]
+    | None
+) = None
 
 
 def validate_workers(planner: RolloutPlanner, workers: int) -> None:
@@ -54,21 +58,23 @@ def _initialize(
     state: GameState,
     offer: OfferSpec,
     encounter_start: GameState | None,
+    pacing: PacingConfig | None,
 ) -> None:
     from justice_sim.planner.rollout import RolloutPlanner
 
     global _decision
     planner = RolloutPlanner(data, config, model, rules, seed)
     planner.weights = weights
-    _decision = planner, state, offer, encounter_start
+    pacer = CpuPacer(pacing) if pacing is not None else None
+    _decision = planner, state, offer, encounter_start, pacer
 
 
 def sample_job(job: tuple[str, int]) -> tuple[float, float, bool]:
     assert _decision is not None
-    planner, state, offer, encounter_start = _decision
+    planner, state, offer, encounter_start, pacer = _decision
     action, index = job
     return planner._sample_rollout(
-        state, offer, action, index, encounter_start=encounter_start
+        state, offer, action, index, encounter_start=encounter_start, pacer=pacer
     )
 
 
@@ -79,6 +85,7 @@ def sampling_executor(
     offer: OfferSpec,
     encounter_start: GameState | None,
     workers: int,
+    pacing: PacingConfig | None = None,
 ) -> Iterator[ProcessPoolExecutor | None]:
     if workers == 1:
         yield None
@@ -97,6 +104,7 @@ def sampling_executor(
             state,
             offer,
             encounter_start,
+            pacing,
         ),
     )
     try:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from contextlib import closing
+from contextlib import closing, nullcontext
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from math import isfinite, sqrt
 import re
@@ -44,6 +44,7 @@ from justice_sim.models.offer import (
 from justice_sim.models.state import replace_state, GameState
 from justice_sim.models.suggested_rules import SuggestedRules
 from justice_sim.planner.cache import ValueCache
+from justice_sim.planner.pacing import CpuPacer, PacingConfig, validate_pacing
 from justice_sim.planner.workers import sample_job, sampling_executor, validate_workers
 from justice_sim.util import expr as expr_util
 from justice_sim.util.dependencies import (
@@ -181,14 +182,17 @@ class RolloutPlanner:
         *,
         arrival_processed: bool = False,
         workers: int = 1,
+        pacing: PacingConfig | None = None,
     ) -> PlannerRecommendation:
         """Recommend from a pre-arrival state, or an already processed arrival.
 
         Prepared callers have applied arrival effects and consumed the current
         encounter's overrides. Remaining contracts belong to future encounters.
         Optional CPU workers use spawned processes and the same indexed samples.
+        pacing=None leaves CPU pacing disabled; PacingConfig() opts into pauses.
         """
         validate_workers(self, workers)
+        validate_pacing(pacing)
         if workers > 1:
             # Use the same phase boundaries and arithmetic as incremental sampling.
             count = 0
@@ -199,6 +203,7 @@ class RolloutPlanner:
                     batch_size=max(1, workers),
                     arrival_processed=arrival_processed,
                     workers=workers,
+                    pacing=pacing,
                 )
             ) as updates:
                 for update in updates:
@@ -208,6 +213,7 @@ class RolloutPlanner:
                     count = current
                     result = update.recommendation
             return result
+        pacer = CpuPacer(pacing) if pacing is not None else None
         root = self._root_context(state, arrival_processed)
         evaluated = self._evaluate_actions(state, offer, **root)
         eligible_actions = self._eligible_actions(
@@ -231,6 +237,7 @@ class RolloutPlanner:
             self.config.rollouts_per_action,
             progress=progress,
             actions=eligible_actions,
+            pacer=pacer,
             **root,
         )
         scores = self._apply_action_biases(state, offer, raw_scores)
@@ -258,6 +265,7 @@ class RolloutPlanner:
                 progress=progress,
                 actions=adaptive_actions,
                 rollout_start=self.config.rollouts_per_action,
+                pacer=pacer,
                 **root,
             )
             additions_by_action = {score.action: score for score in additional_scores}
@@ -290,6 +298,7 @@ class RolloutPlanner:
         arrival_processed: bool = False,
         cancelled: Callable[[], bool] | None = None,
         workers: int = 1,
+        pacing: PacingConfig | None = None,
     ) -> Iterator[PlannerUpdate]:
         """Yield estimates after at most batch_size observations per active action.
 
@@ -299,8 +308,10 @@ class RolloutPlanner:
         Adaptive decisions occur only after complete configured sampling rounds.
         workers=1 runs locally; larger values spawn decision-local CPU workers.
         The iterator owns the workers, so close it when abandoning iteration.
+        Optional pacing counts sampling CPU work, excluding time between updates.
         """
         validate_workers(self, workers)
+        validate_pacing(pacing)
         if (
             isinstance(batch_size, bool)
             or not isinstance(batch_size, int)
@@ -334,8 +345,9 @@ class RolloutPlanner:
         budget = self.config.rollouts_per_action
         latest = empty
         abandoned = False
+        pacer = CpuPacer(pacing) if pacing is not None and workers == 1 else None
         with sampling_executor(
-            self, state, offer, root.get("encounter_start"), workers
+            self, state, offer, root.get("encounter_start"), workers, pacing
         ) as executor:
             while True:
                 samples = {action: _SampleAccumulator() for action in actions}
@@ -354,7 +366,9 @@ class RolloutPlanner:
                         executor.map(sample_job, jobs)
                         if executor is not None
                         else (
-                            self._sample_rollout(state, offer, action, index, **root)
+                            self._sample_rollout(
+                                state, offer, action, index, pacer=pacer, **root
+                            )
                             for action, index in jobs
                         )
                     )
@@ -618,6 +632,7 @@ class RolloutPlanner:
         actions: tuple[str, ...] | None = None,
         rollout_start: int = 0,
         encounter_start: GameState | None = None,
+        pacer: CpuPacer | None = None,
     ) -> list[ActionScore]:
         scores: list[ActionScore] = []
         selected_actions = offer.actions_available if actions is None else actions
@@ -635,6 +650,7 @@ class RolloutPlanner:
                     progress=progress,
                     rollout_start=rollout_start,
                     encounter_start=encounter_start,
+                    pacer=pacer,
                 )
             )
         return scores
@@ -650,12 +666,18 @@ class RolloutPlanner:
         progress: Callable[[int], None] | None = None,
         rollout_start: int = 0,
         encounter_start: GameState | None = None,
+        pacer: CpuPacer | None = None,
     ) -> ActionScore:
         samples = []
         for index in range(rollout_start, rollout_start + rollouts):
             samples.append(
                 self._sample_rollout(
-                    state, offer, action, index, encounter_start=encounter_start
+                    state,
+                    offer,
+                    action,
+                    index,
+                    encounter_start=encounter_start,
+                    pacer=pacer,
                 )
             )
             if progress:
@@ -670,27 +692,36 @@ class RolloutPlanner:
         index: int,
         *,
         encounter_start: GameState | None = None,
+        pacer: CpuPacer | None = None,
     ) -> tuple[float, float, bool]:
-        rng = self.rng.spawn(index)
-        try:
-            next_state, _ = apply_action(
-                state, offer, action, self.data, rng, encounter_start=encounter_start
-            )
-        except ActionNotAllowed:
-            arrived = (
-                state
-                if encounter_start is not None
-                else preview_state_after_encounter_triggers(
-                    state, offer, self.data, self.rng.spawn(index)
+        with pacer.sampling() if pacer is not None else nullcontext():
+            rng = self.rng.spawn(index)
+            try:
+                next_state, _ = apply_action(
+                    state,
+                    offer,
+                    action,
+                    self.data,
+                    rng,
+                    encounter_start=encounter_start,
                 )
+            except ActionNotAllowed:
+                arrived = (
+                    state
+                    if encounter_start is not None
+                    else preview_state_after_encounter_triggers(
+                        state, offer, self.data, self.rng.spawn(index)
+                    )
+                )
+                next_state = self._dead_end(arrived)
+            terminal = self._simulate_future(
+                next_state, rng, self.config.horizon_cases, pacer=pacer
             )
-            next_state = self._dead_end(arrived)
-        terminal = self._simulate_future(next_state, rng, self.config.horizon_cases)
-        return (
-            utility(terminal, self.data, self.weights),
-            terminal.retirement_chests,
-            terminal.ended or terminal.mh <= 0,
-        )
+            return (
+                utility(terminal, self.data, self.weights),
+                terminal.retirement_chests,
+                terminal.ended or terminal.mh <= 0,
+            )
 
     @staticmethod
     def _summarize_samples(
@@ -723,7 +754,13 @@ class RolloutPlanner:
         )
 
     def _simulate_future(
-        self, state: GameState, rng: Rng, remaining: int, *, improve_policy: bool = True
+        self,
+        state: GameState,
+        rng: Rng,
+        remaining: int,
+        *,
+        improve_policy: bool = True,
+        pacer: CpuPacer | None = None,
     ) -> GameState:
         current = state
         for step in range(remaining):
@@ -744,6 +781,7 @@ class RolloutPlanner:
                 rng,
                 encounter_start=encounter_start,
                 remaining=remaining - step - 1 if improve_policy else 0,
+                pacer=pacer,
             )
             if action is None:
                 return self._dead_end(current)
@@ -790,7 +828,10 @@ class RolloutPlanner:
         *,
         encounter_start: GameState | None = None,
         remaining: int = 0,
+        pacer: CpuPacer | None = None,
     ) -> tuple[str | None, GameState | None]:
+        if pacer is not None:
+            pacer.checkpoint()
         results = self._evaluate_actions(state, offer, encounter_start=encounter_start)
         actions = self._eligible_actions(
             state, offer, results=results, encounter_start=encounter_start
@@ -829,6 +870,7 @@ class RolloutPlanner:
                     remaining,
                     encounter_start=encounter_start,
                     exact_results=results[action],
+                    pacer=pacer,
                 )
             elif results[action] is None:
                 value = self._sample_action_value(
@@ -1017,6 +1059,7 @@ class RolloutPlanner:
         *,
         encounter_start: GameState | None,
         exact_results: list[tuple[GameState, float]] | None = None,
+        pacer: CpuPacer | None = None,
     ) -> float:
         """Integrate known branches, pairing two full continuations per branch.
 
@@ -1037,6 +1080,7 @@ class RolloutPlanner:
                                 rng.spawn(sample_index),
                                 remaining,
                                 improve_policy=False,
+                                pacer=pacer,
                             )
                         )
                         for next_state, probability in exact_results
@@ -1056,7 +1100,7 @@ class RolloutPlanner:
             except ActionNotAllowed:
                 next_state = self._dead_end(state)
             terminal = self._simulate_future(
-                next_state, sample_rng, remaining, improve_policy=False
+                next_state, sample_rng, remaining, improve_policy=False, pacer=pacer
             )
             values.append(self._cached_utility(terminal))
         return mean(values)

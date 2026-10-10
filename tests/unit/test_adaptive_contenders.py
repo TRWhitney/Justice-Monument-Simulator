@@ -53,7 +53,10 @@ def test_changed_leader_rechecks_unsampled_contenders(data_factory, monkeypatch)
     additions = {"approve": (0,) * 5, "reject": (0,) * 5, "dismiss": (8,) * 5}
     calls = []
 
-    def score(state, offer, rollouts, *, progress, actions, rollout_start=0):
+    def score(
+        state, offer, rollouts, *, progress, actions, rollout_start=0, pacer=None
+    ):
+        assert pacer is None
         calls.append((actions, rollout_start, rollouts))
         samples = additions if rollout_start else initial
         return [

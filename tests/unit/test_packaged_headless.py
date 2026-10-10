@@ -116,7 +116,7 @@ class BlockQt(MetaPathFinder):
 sys.meta_path.insert(0, BlockQt())
 def main():
     assert not any(Path(p).is_relative_to(Path(sys.argv[2])) for p in sys.path if p)
-    from justice_sim.headless import load_builtin_data, load_builtin_suggested_rules, RolloutPlanner, GameState, PlannerConfig
+    from justice_sim.headless import load_builtin_data, load_builtin_suggested_rules, RolloutPlanner, GameState, PlannerConfig, PacingConfig
     import justice_sim
     assert Path(justice_sim.__file__).is_relative_to(Path(sys.argv[1]))
     from importlib.metadata import distribution
@@ -134,7 +134,7 @@ def main():
     planner = RolloutPlanner(data, config, suggested_rules=rules, seed=42)
     offer = next(o for o in data.offers if o.title == 'Scripticus: Kitchen Loan')
     expected = planner.recommend(GameState(11, 50, 20, 8, 2, 0), offer)
-    actual = planner.recommend(GameState(11, 50, 20, 8, 2, 0), offer, workers=2)
+    actual = planner.recommend(GameState(11, 50, 20, 8, 2, 0), offer, workers=2, pacing=PacingConfig(work_ms=1))
     assert actual == expected
     assert [s.utility_samples for s in actual.action_scores] == [s.utility_samples for s in expected.action_scores]
 if __name__ == '__main__':

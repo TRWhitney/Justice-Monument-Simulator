@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from math import isfinite, sqrt
 import re
@@ -84,6 +84,53 @@ class ActionScore:
 class PlannerRecommendation:
     best_action: str | None
     action_scores: tuple[ActionScore, ...]
+
+
+@dataclass(frozen=True)
+class PlannerUpdate:
+    """An immutable estimate; cancelled updates are incomplete terminal updates."""
+
+    recommendation: PlannerRecommendation
+    complete: bool = False
+    cancelled: bool = False
+
+    @property
+    def best_action(self) -> str | None:
+        return self.recommendation.best_action
+
+    @property
+    def action_scores(self) -> tuple[ActionScore, ...]:
+        return self.recommendation.action_scores
+
+
+@dataclass
+class _SampleAccumulator:
+    samples: list[tuple[float, float, bool]] = field(default_factory=list)
+    utility_mean: float = 0.0
+    utility_m2: float = 0.0
+    chest_total: float = 0.0
+    deaths: int = 0
+
+    def add(self, sample: tuple[float, float, bool]) -> None:
+        self.samples.append(sample)
+        value, chests, dead = sample
+        count = len(self.samples)
+        delta = value - self.utility_mean
+        self.utility_mean += delta / count
+        self.utility_m2 += delta * (value - self.utility_mean)
+        self.chest_total += chests
+        self.deaths += dead
+
+    def estimate(self, action: str) -> ActionScore:
+        count = len(self.samples)
+        return ActionScore(
+            action,
+            self.utility_mean,
+            self.chest_total / count,
+            self.deaths / count,
+            max(0.0, self.utility_m2 / (count - 1)) if count > 1 else 0.0,
+            count,
+        )
 
 
 class RolloutPlanner:
@@ -208,6 +255,145 @@ class RolloutPlanner:
         return PlannerRecommendation(
             best_action=best.action,
             action_scores=self._include_excluded_scores(offer, scores),
+        )
+
+    def recommend_incremental(
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        *,
+        batch_size: int = 1,
+        arrival_processed: bool = False,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> Iterator[PlannerUpdate]:
+        """Yield estimates after at most batch_size observations per active action.
+
+        Closing the iterator abandons work. A cancellation predicate is checked
+        before preparation and between batches; a true result yields one final
+        cancelled update. It cannot interrupt a rollout already in progress.
+        Adaptive decisions occur only after complete configured sampling rounds.
+        """
+        if (
+            isinstance(batch_size, bool)
+            or not isinstance(batch_size, int)
+            or batch_size < 1
+        ):
+            raise ValueError("batch_size must be a positive integer")
+        root = self._root_context(state, arrival_processed)
+        empty = PlannerRecommendation(None, self._include_excluded_scores(offer, []))
+        if cancelled and cancelled():
+            yield PlannerUpdate(empty, cancelled=True)
+            return
+        evaluated = self._evaluate_actions(state, offer, **root)
+        eligible = self._eligible_actions(state, offer, results=evaluated, **root)
+        if not eligible:
+            yield PlannerUpdate(
+                PlannerRecommendation(
+                    None, tuple(self._deterministic_action_scores(state, offer, **root))
+                ),
+                complete=True,
+            )
+            return
+        fast = self._fast_path_recommendation(
+            state, offer, eligible_actions=eligible, evaluated=evaluated, **root
+        )
+        if fast is not None:
+            yield PlannerUpdate(fast, complete=True)
+            return
+        raw: list[ActionScore] = []
+        actions = eligible
+        start = 0
+        budget = self.config.rollouts_per_action
+        latest = empty
+        while True:
+            samples = {action: _SampleAccumulator() for action in actions}
+            for offset in range(0, budget, batch_size):
+                if cancelled and cancelled():
+                    yield PlannerUpdate(latest, cancelled=True)
+                    return
+                for action in actions:
+                    for index in range(
+                        start + offset, start + min(offset + batch_size, budget)
+                    ):
+                        samples[action].add(
+                            self._sample_rollout(state, offer, action, index, **root)
+                        )
+                # Update moments per observation, independent of batch grouping.
+                # Recompute exact statistics only at phase boundaries, matching
+                # synchronous arithmetic without rescanning every partial batch.
+                additions = {
+                    action: self._summarize_samples(action, values.samples)
+                    if offset + batch_size >= budget
+                    else values.estimate(action)
+                    for action, values in samples.items()
+                }
+                if raw:
+                    current = [
+                        self._combine_scores(score, additions[score.action])
+                        if score.action in additions
+                        else score
+                        for score in raw
+                    ]
+                else:
+                    current = list(additions.values())
+                latest = self._recommendation_from_scores(
+                    state,
+                    offer,
+                    [replace(score, utility_samples=()) for score in current],
+                    eligible,
+                )
+                yield PlannerUpdate(latest)
+            additions = {
+                action: self._summarize_samples(action, values.samples)
+                for action, values in samples.items()
+            }
+            raw = (
+                [
+                    self._combine_scores(score, additions[score.action])
+                    if score.action in additions
+                    else score
+                    for score in raw
+                ]
+                if raw
+                else list(additions.values())
+            )
+            # Also preserve the synchronous result for zero configured samples.
+            latest = self._recommendation_from_scores(state, offer, raw, eligible)
+            if cancelled and cancelled():
+                yield PlannerUpdate(latest, cancelled=True)
+                return
+            if (
+                not self.config.adaptive_rollouts
+                or self.config.adaptive_rollouts_max <= self.config.rollouts_per_action
+            ):
+                break
+            scores = self._apply_action_biases(state, offer, raw)
+            counts = {score.action: score.sample_count for score in raw}
+            actions = tuple(
+                action
+                for action in self._adaptive_actions(scores, eligible)
+                if counts[action] < self.config.adaptive_rollouts_max
+            )
+            if not actions:
+                break
+            start = self.config.rollouts_per_action
+            budget = self.config.adaptive_rollouts_max - start
+        yield PlannerUpdate(latest, complete=True)
+
+    def _recommendation_from_scores(
+        self,
+        state: GameState,
+        offer: OfferSpec,
+        raw: list[ActionScore],
+        eligible: tuple[str, ...],
+    ) -> PlannerRecommendation:
+        scores = self._apply_action_biases(state, offer, raw)
+        best = max(
+            (score for score in scores if score.action in eligible),
+            key=lambda score: score.expected_utility,
+        )
+        return PlannerRecommendation(
+            best.action, self._include_excluded_scores(offer, scores)
         )
 
     @staticmethod
